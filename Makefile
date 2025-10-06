@@ -19,7 +19,7 @@ help:
 # Run all tests with race detection and coverage
 test:
 	@echo "=== Running all tests with race detection and coverage ==="
-	go test -v -race -cover ./pkg/...
+	go test -race -cover ./pkg/...
 	@echo ""
 	@echo "✓ All tests passed"
 
