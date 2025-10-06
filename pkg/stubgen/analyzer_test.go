@@ -262,9 +262,9 @@ func TestAnalyzer_RealModule(t *testing.T) {
 		t.Fatal("Expected kubernetes module to be registered")
 	}
 
-	// Should have 4 functions: parse_memory, parse_cpu, parse_time, format_time
-	if len(module.Functions) != 4 {
-		t.Errorf("Expected 4 functions, got %d", len(module.Functions))
+	// Should have 5 functions: parse_memory, parse_cpu, parse_time, format_time, init_defaults
+	if len(module.Functions) != 5 {
+		t.Errorf("Expected 5 functions, got %d", len(module.Functions))
 	}
 
 	// Verify function names
@@ -273,7 +273,7 @@ func TestAnalyzer_RealModule(t *testing.T) {
 		fnNames[fn.Name] = true
 	}
 
-	expectedFuncs := []string{"parse_memory", "parse_cpu", "parse_time", "format_time"}
+	expectedFuncs := []string{"parse_memory", "parse_cpu", "parse_time", "format_time", "init_defaults"}
 	for _, name := range expectedFuncs {
 		if !fnNames[name] {
 			t.Errorf("Expected function %q not found", name)

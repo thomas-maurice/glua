@@ -31,10 +31,11 @@ func Loader(L *lua.LState) int {
 
 // exports maps Lua function names to Go implementations
 var exports = map[string]lua.LGFunction{
-	"parse_memory": parseMemory,
-	"parse_cpu":    parseCPU,
-	"parse_time":   parseTime,
-	"format_time":  formatTime,
+	"parse_memory":  parseMemory,
+	"parse_cpu":     parseCPU,
+	"parse_time":    parseTime,
+	"format_time":   formatTime,
+	"init_defaults": initDefaults,
 }
 
 // parseMemory: parses a Kubernetes memory quantity (e.g., "1024Mi", "1Gi", "512M") and returns bytes as a number.
@@ -145,4 +146,49 @@ func formatTime(L *lua.LState) int {
 	L.Push(lua.LString(formatted))
 	L.Push(lua.LNil)
 	return 2
+}
+
+// initDefaults: initializes default empty tables for metadata.labels and metadata.annotations
+// if they are nil. This is useful for ensuring these fields are tables instead of nil,
+// making it easier to add labels/annotations in Lua without checking for nil first.
+//
+// @luafunc init_defaults
+// @luaparam obj table The Kubernetes object (must have a metadata field)
+// @luareturn table The same object with initialized defaults (modified in-place)
+//
+// Example:
+//   local k8s = require("kubernetes")
+//   k8s.init_defaults(myPod)
+//   myPod.metadata.labels.app = "myapp"  -- safe even if labels was nil before
+func initDefaults(L *lua.LState) int {
+	obj := L.CheckTable(1)
+
+	// Get metadata field
+	metadata := L.GetField(obj, "metadata")
+	if metadata == lua.LNil {
+		// If metadata doesn't exist, create it
+		metadata = L.NewTable()
+		L.SetField(obj, "metadata", metadata)
+	}
+
+	metadataTable, ok := metadata.(*lua.LTable)
+	if !ok {
+		L.Push(obj)
+		return 1
+	}
+
+	// Initialize labels if nil
+	labels := L.GetField(metadataTable, "labels")
+	if labels == lua.LNil {
+		L.SetField(metadataTable, "labels", L.NewTable())
+	}
+
+	// Initialize annotations if nil
+	annotations := L.GetField(metadataTable, "annotations")
+	if annotations == lua.LNil {
+		L.SetField(metadataTable, "annotations", L.NewTable())
+	}
+
+	L.Push(obj)
+	return 1
 }

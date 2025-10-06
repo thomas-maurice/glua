@@ -27,4 +27,9 @@ function kubernetes.parse_time(timestr) end
 ---@return string|nil Error message if formatting failed
 function kubernetes.format_time(timestamp) end
 
+--- initDefaults: initializes default empty tables for metadata.labels and metadata.annotations if they are nil. This is useful for ensuring these fields are tables instead of nil, making it easier to add labels/annotations in Lua without checking for nil first.
+---@param obj table The Kubernetes object (must have a metadata field)
+---@return table The same object with initialized defaults (modified in-place)
+function kubernetes.init_defaults(obj) end
+
 return kubernetes

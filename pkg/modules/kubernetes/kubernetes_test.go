@@ -268,6 +268,187 @@ func TestFormatParseRoundTrip(t *testing.T) {
 	}
 }
 
+func TestInitDefaults(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	L.PreloadModule("kubernetes", Loader)
+
+	tests := []struct {
+		name   string
+		script string
+	}{
+		{
+			name: "nil labels and annotations",
+			script: `
+				local k8s = require("kubernetes")
+
+				local obj = {
+					metadata = {
+						name = "test-pod"
+					}
+				}
+
+				-- Before init_defaults, labels and annotations are nil
+				assert(obj.metadata.labels == nil, "labels should be nil initially")
+				assert(obj.metadata.annotations == nil, "annotations should be nil initially")
+
+				-- Initialize defaults
+				k8s.init_defaults(obj)
+
+				-- After init_defaults, they should be empty tables
+				assert(type(obj.metadata.labels) == "table", "labels should be table")
+				assert(type(obj.metadata.annotations) == "table", "annotations should be table")
+
+				-- Should be able to add entries
+				obj.metadata.labels.app = "myapp"
+				obj.metadata.annotations["version"] = "1.0"
+
+				assert(obj.metadata.labels.app == "myapp", "should be able to add label")
+				assert(obj.metadata.annotations["version"] == "1.0", "should be able to add annotation")
+
+				return true
+			`,
+		},
+		{
+			name: "existing labels and annotations",
+			script: `
+				local k8s = require("kubernetes")
+
+				local obj = {
+					metadata = {
+						name = "test-pod",
+						labels = {
+							existing = "label"
+						},
+						annotations = {
+							existing = "annotation"
+						}
+					}
+				}
+
+				-- Initialize defaults (should not overwrite existing)
+				k8s.init_defaults(obj)
+
+				-- Existing values should be preserved
+				assert(obj.metadata.labels.existing == "label", "existing label should be preserved")
+				assert(obj.metadata.annotations.existing == "annotation", "existing annotation should be preserved")
+
+				-- Should still be able to add new entries
+				obj.metadata.labels.new = "value"
+				assert(obj.metadata.labels.new == "value", "should be able to add new label")
+
+				return true
+			`,
+		},
+		{
+			name: "no metadata",
+			script: `
+				local k8s = require("kubernetes")
+
+				local obj = {}
+
+				-- Initialize defaults (should create metadata)
+				k8s.init_defaults(obj)
+
+				-- Should have created metadata with labels and annotations
+				assert(type(obj.metadata) == "table", "metadata should be created")
+				assert(type(obj.metadata.labels) == "table", "labels should be table")
+				assert(type(obj.metadata.annotations) == "table", "annotations should be table")
+
+				return true
+			`,
+		},
+		{
+			name: "returns same object",
+			script: `
+				local k8s = require("kubernetes")
+
+				local obj = {
+					metadata = {
+						name = "test"
+					}
+				}
+
+				local result = k8s.init_defaults(obj)
+
+				-- Should return the same object (modified in-place)
+				assert(result == obj, "should return same object")
+				assert(result.metadata.name == "test", "object should be modified in-place")
+
+				return true
+			`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := L.DoString(tt.script); err != nil {
+				t.Fatalf("Test failed: %v", err)
+			}
+
+			result := L.Get(-1)
+			L.Pop(1)
+
+			if result != lua.LTrue {
+				t.Errorf("Expected true, got %v", result)
+			}
+		})
+	}
+}
+
+func TestInitDefaultsFullWorkflow(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	L.PreloadModule("kubernetes", Loader)
+
+	script := `
+		local k8s = require("kubernetes")
+
+		-- Test case 1: nil labels and annotations
+		local pod = {
+			metadata = {
+				name = "test-pod",
+				namespace = "default"
+			}
+		}
+
+		-- Before init_defaults, labels and annotations are nil
+		assert(pod.metadata.labels == nil, "labels should be nil initially")
+		assert(pod.metadata.annotations == nil, "annotations should be nil initially")
+
+		k8s.init_defaults(pod)
+
+		-- After init_defaults, they should be tables
+		assert(type(pod.metadata.labels) == "table", "labels should be table")
+		assert(type(pod.metadata.annotations) == "table", "annotations should be table")
+
+		-- Add some labels and annotations
+		pod.metadata.labels.app = "myapp"
+		pod.metadata.labels.tier = "backend"
+		pod.metadata.annotations.version = "1.0.0"
+
+		-- Verify they were added successfully
+		assert(pod.metadata.labels.app == "myapp", "label app should be set")
+		assert(pod.metadata.labels.tier == "backend", "label tier should be set")
+		assert(pod.metadata.annotations.version == "1.0.0", "annotation version should be set")
+
+		return true
+	`
+
+	if err := L.DoString(script); err != nil {
+		t.Fatalf("Test failed: %v", err)
+	}
+
+	result := L.Get(-1)
+	L.Pop(1)
+
+	if result != lua.LTrue {
+		t.Errorf("Expected true, got %v", result)
+	}
+}
+
 func TestModuleIntegration(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
@@ -297,6 +478,12 @@ func TestModuleIntegration(t *testing.T) {
 		local formatted = k8s.format_time(timestamp)
 		local parsed = k8s.parse_time(formatted)
 		assert(parsed == timestamp, "Round-trip failed")
+
+		-- Test init_defaults
+		local obj = {}
+		k8s.init_defaults(obj)
+		obj.metadata.labels.test = "value"
+		assert(obj.metadata.labels.test == "value", "init_defaults failed")
 
 		return true
 	`

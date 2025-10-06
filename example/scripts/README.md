@@ -113,7 +113,7 @@ To get autocomplete for these scripts:
    - VSCode: Create `.vscode/settings.json`
    - Neovim: Create `.luarc.json`
 
-3. **Open any script** and enjoy autocomplete! ✨
+3. **Open any script** and enjoy autocomplete
 
 ## Creating Your Own Scripts
 
