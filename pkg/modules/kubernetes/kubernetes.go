@@ -290,8 +290,8 @@ func parseIntOrString(L *lua.LState) int {
 		L.Push(v)
 		L.Push(lua.LTrue)
 	default:
-		L.Push(value)
-		L.Push(lua.LFalse)
+		L.RaiseError("parse_int_or_string expects number or string, got %s", value.Type().String())
+		return 0
 	}
 
 	return 2
@@ -316,6 +316,11 @@ func matchesSelector(L *lua.LState) int {
 
 	matches := true
 	selector.ForEach(func(key, value lua.LValue) {
+		// Skip nil values in selector
+		if value == lua.LNil {
+			return
+		}
+
 		// Get the corresponding label value
 		labelValue := L.GetField(labels, key.String())
 
@@ -409,8 +414,18 @@ func matchGVK(L *lua.LState) int {
 	// Convert Lua table to GVKMatcher
 	var matcher GVKMatcher
 	if err := translator.FromLua(L, matcherTable, &matcher); err != nil {
-		L.Push(lua.LFalse)
-		return 1
+		L.RaiseError("failed to parse GVKMatcher: %v", err)
+		return 0
+	}
+
+	// Validate required fields
+	if matcher.Kind == "" {
+		L.RaiseError("GVKMatcher requires 'kind' field")
+		return 0
+	}
+	if matcher.Version == "" {
+		L.RaiseError("GVKMatcher requires 'version' field")
+		return 0
 	}
 
 	// Get apiVersion and kind from the object

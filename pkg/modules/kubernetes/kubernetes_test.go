@@ -586,3 +586,69 @@ func TestMatchGVKIntegration(t *testing.T) {
 		t.Errorf("Expected true, got %v", result)
 	}
 }
+
+func TestMatchGVKValidation(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	L.PreloadModule("kubernetes", Loader)
+
+	tests := []struct {
+		name     string
+		filename string
+	}{
+		{"missing kind field", "testdata/test_match_gvk_validation.lua"},
+		{"missing version field", "testdata/test_match_gvk_validation_version.lua"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := L.DoFile(tt.filename); err != nil {
+				t.Fatalf("Test failed: %v", err)
+			}
+
+			result := L.Get(-1)
+			L.Pop(1)
+
+			if result != lua.LTrue {
+				t.Errorf("Expected true, got %v", result)
+			}
+		})
+	}
+}
+
+func TestParseIntOrStringValidation(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	L.PreloadModule("kubernetes", Loader)
+
+	if err := L.DoFile("testdata/test_parse_int_or_string_validation.lua"); err != nil {
+		t.Fatalf("Test failed: %v", err)
+	}
+
+	result := L.Get(-1)
+	L.Pop(1)
+
+	if result != lua.LTrue {
+		t.Errorf("Expected true, got %v", result)
+	}
+}
+
+func TestMatchesSelectorNil(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	L.PreloadModule("kubernetes", Loader)
+
+	if err := L.DoFile("testdata/test_matches_selector_nil.lua"); err != nil {
+		t.Fatalf("Test failed: %v", err)
+	}
+
+	result := L.Get(-1)
+	L.Pop(1)
+
+	if result != lua.LTrue {
+		t.Errorf("Expected true, got %v", result)
+	}
+}

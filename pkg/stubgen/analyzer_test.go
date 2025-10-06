@@ -235,7 +235,7 @@ func TestAnalyzer_GenerateStubs(t *testing.T) {
 		"---@param a number First number",
 		"---@param b number Second number",
 		"---@return number The sum",
-		"return testmod",
+		"return {}",
 	}
 
 	for _, expected := range expectedStrings {

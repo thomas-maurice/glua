@@ -315,8 +315,11 @@ func (a *Analyzer) GenerateStubs() (string, error) {
 			}
 			sb.WriteString(fmt.Sprintf("function %s.%s(%s) end\n\n", moduleName, fn.Name, strings.Join(paramNames, ", ")))
 		}
+	}
 
-		sb.WriteString(fmt.Sprintf("return %s\n", moduleName))
+	// Add single return statement at the end of the file
+	if len(moduleNames) > 0 {
+		sb.WriteString("return {}\n")
 	}
 
 	return sb.String(), nil
@@ -391,8 +394,6 @@ func (a *Analyzer) GenerateModuleStub(moduleName string) (string, error) {
 		}
 		sb.WriteString(fmt.Sprintf("function %s.%s(%s) end\n\n", moduleName, fn.Name, strings.Join(paramNames, ", ")))
 	}
-
-	sb.WriteString(fmt.Sprintf("return %s\n", moduleName))
 
 	return sb.String(), nil
 }
