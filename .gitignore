@@ -1,0 +1,27 @@
+# Claude AI
+.claude/
+.claude
+CLAUDE.md
+claude.md
+.clauderc
+**/CLAUDE.md
+**/.claude
+
+# Build artifacts
+bin/
+*.test
+*.out
+coverage.txt
+
+# Generated files
+# **/annotations.gen.lua
+# **/modules.gen.lua
+example/library/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
