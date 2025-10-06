@@ -284,6 +284,64 @@ for i, container in ipairs(pod.spec.containers) do
 end
 ```
 
+### K8s Client Module
+
+The `k8sclient` module provides a dynamic Kubernetes client for Lua, allowing full CRUD operations on any Kubernetes resource directly from Lua scripts.
+
+Load in Go:
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/k8sclient"
+
+config, _ := clientcmd.BuildConfigFromFlags("", kubeconfig)
+L.PreloadModule("k8sclient", k8sclient.Loader(config))
+```
+
+Use in Lua:
+
+```lua
+local client = require("k8sclient")
+
+-- Define GVK (Group/Version/Kind)
+local pod_gvk = {group = "", version = "v1", kind = "Pod"}
+
+-- Create a Pod
+local pod = {
+    apiVersion = "v1",
+    kind = "Pod",
+    metadata = {name = "nginx", namespace = "default"},
+    spec = {
+        containers = {{
+            name = "nginx",
+            image = "nginx:alpine"
+        }}
+    }
+}
+local created, err = client.create(pod)
+
+-- Get a resource
+local fetched, err = client.get(pod_gvk, "default", "nginx")
+
+-- Update a resource
+fetched.metadata.labels = {app = "web"}
+local updated, err = client.update(fetched)
+
+-- List resources
+local pods, err = client.list(pod_gvk, "default")
+for i, pod in ipairs(pods) do
+    print(pod.metadata.name)
+end
+
+-- Delete a resource
+local err = client.delete(pod_gvk, "default", "nginx")
+```
+
+**Complete Example:** See [example/k8sclient/](./example/k8sclient) for a full working example with nginx Pod, ConfigMaps, and Kind cluster integration.
+
+**Run the example:**
+```bash
+make test-k8sclient  # Runs with temporary Kind cluster
+```
+
 ### Error Handling
 
 Proper error handling throughout:
@@ -683,6 +741,7 @@ All functions return `(value, error)` tuples.
 - **Lua Module System**: Create type-safe Lua modules with Go functions
 - **IDE Support**: Full autocomplete and type checking in VSCode, Neovim, and other editors
 - **Kubernetes Ready**: Built-in support for K8s API types and resource quantities
+- **K8s Dynamic Client**: Full CRUD operations on any Kubernetes resource from Lua scripts
 - **Type Safety**: Preserve complex types like timestamps, quantities, maps, and nested structures
 - **Well Tested**: 79%+ code coverage with comprehensive unit and integration tests
 
@@ -745,8 +804,17 @@ translator.FromLua(L, L.GetGlobal("result"), &processedConfig)
 ## Testing
 
 ```bash
-# Run all tests (recommended)
+# Run ALL tests: unit + k8sclient integration (recommended)
 make test
+
+# Or just run make (default target runs all tests)
+make
+
+# Unit tests only
+make test-unit
+
+# K8s integration test only (requires Kind & kubectl)
+make test-k8sclient
 
 # Verbose per-package
 make test-verbose
@@ -760,6 +828,7 @@ Coverage: 79%+ overall with comprehensive unit and integration tests
 What's tested:
 - Go ↔ Lua conversions in real Lua VMs (not just Go unit tests)
 - Kubernetes module functions with actual K8s types
+- K8s client CRUD operations with real Kind cluster
 - Round-trip integrity (Go → Lua → Go preserves data)
 - Stub generation from Go code
 - Race detection enabled
