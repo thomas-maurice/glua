@@ -1,7 +1,6 @@
 package kubernetes
 
 import (
-	"fmt"
 	"testing"
 
 	lua "github.com/yuin/gopher-lua"
@@ -28,13 +27,9 @@ func TestParseMemory(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			script := `
-				local k8s = require("kubernetes")
-				local result, err = k8s.parse_memory("` + tt.input + `")
-				return result, err
-			`
+			L.SetGlobal("test_input", lua.LString(tt.input))
 
-			if err := L.DoString(script); err != nil {
+			if err := L.DoFile("testdata/test_parse_memory.lua"); err != nil {
 				t.Fatalf("Failed to execute script: %v", err)
 			}
 
@@ -84,13 +79,9 @@ func TestParseCPU(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			script := `
-				local k8s = require("kubernetes")
-				local result, err = k8s.parse_cpu("` + tt.input + `")
-				return result, err
-			`
+			L.SetGlobal("test_input", lua.LString(tt.input))
 
-			if err := L.DoString(script); err != nil {
+			if err := L.DoFile("testdata/test_parse_cpu.lua"); err != nil {
 				t.Fatalf("Failed to execute script: %v", err)
 			}
 
@@ -138,13 +129,9 @@ func TestParseTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			script := `
-				local k8s = require("kubernetes")
-				local result, err = k8s.parse_time("` + tt.input + `")
-				return result, err
-			`
+			L.SetGlobal("test_input", lua.LString(tt.input))
 
-			if err := L.DoString(script); err != nil {
+			if err := L.DoFile("testdata/test_parse_time.lua"); err != nil {
 				t.Fatalf("Failed to execute script: %v", err)
 			}
 
@@ -191,13 +178,9 @@ func TestFormatTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			script := fmt.Sprintf(`
-				local k8s = require("kubernetes")
-				local result, err = k8s.format_time(%d)
-				return result, err
-			`, tt.timestamp)
+			L.SetGlobal("test_timestamp", lua.LNumber(tt.timestamp))
 
-			if err := L.DoString(script); err != nil {
+			if err := L.DoFile("testdata/test_format_time.lua"); err != nil {
 				t.Fatalf("Failed to execute script: %v", err)
 			}
 
@@ -237,24 +220,9 @@ func TestFormatParseRoundTrip(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			script := fmt.Sprintf(`
-				local k8s = require("kubernetes")
+			L.SetGlobal("test_timestamp", lua.LNumber(tt.timestamp))
 
-				-- Format timestamp to string
-				local timestr, err1 = k8s.format_time(%d)
-				assert(err1 == nil, "format_time failed: " .. tostring(err1))
-
-				-- Parse string back to timestamp
-				local timestamp, err2 = k8s.parse_time(timestr)
-				assert(err2 == nil, "parse_time failed: " .. tostring(err2))
-
-				-- Should match original
-				assert(timestamp == %d, string.format("Round-trip failed: %%d != %d", timestamp))
-
-				return true
-			`, tt.timestamp, tt.timestamp, tt.timestamp)
-
-			if err := L.DoString(script); err != nil {
+			if err := L.DoFile("testdata/test_roundtrip_time.lua"); err != nil {
 				t.Fatalf("Round-trip test failed: %v", err)
 			}
 
@@ -275,115 +243,18 @@ func TestInitDefaults(t *testing.T) {
 	L.PreloadModule("kubernetes", Loader)
 
 	tests := []struct {
-		name   string
-		script string
+		name     string
+		filename string
 	}{
-		{
-			name: "nil labels and annotations",
-			script: `
-				local k8s = require("kubernetes")
-
-				local obj = {
-					metadata = {
-						name = "test-pod"
-					}
-				}
-
-				-- Before init_defaults, labels and annotations are nil
-				assert(obj.metadata.labels == nil, "labels should be nil initially")
-				assert(obj.metadata.annotations == nil, "annotations should be nil initially")
-
-				-- Initialize defaults
-				k8s.init_defaults(obj)
-
-				-- After init_defaults, they should be empty tables
-				assert(type(obj.metadata.labels) == "table", "labels should be table")
-				assert(type(obj.metadata.annotations) == "table", "annotations should be table")
-
-				-- Should be able to add entries
-				obj.metadata.labels.app = "myapp"
-				obj.metadata.annotations["version"] = "1.0"
-
-				assert(obj.metadata.labels.app == "myapp", "should be able to add label")
-				assert(obj.metadata.annotations["version"] == "1.0", "should be able to add annotation")
-
-				return true
-			`,
-		},
-		{
-			name: "existing labels and annotations",
-			script: `
-				local k8s = require("kubernetes")
-
-				local obj = {
-					metadata = {
-						name = "test-pod",
-						labels = {
-							existing = "label"
-						},
-						annotations = {
-							existing = "annotation"
-						}
-					}
-				}
-
-				-- Initialize defaults (should not overwrite existing)
-				k8s.init_defaults(obj)
-
-				-- Existing values should be preserved
-				assert(obj.metadata.labels.existing == "label", "existing label should be preserved")
-				assert(obj.metadata.annotations.existing == "annotation", "existing annotation should be preserved")
-
-				-- Should still be able to add new entries
-				obj.metadata.labels.new = "value"
-				assert(obj.metadata.labels.new == "value", "should be able to add new label")
-
-				return true
-			`,
-		},
-		{
-			name: "no metadata",
-			script: `
-				local k8s = require("kubernetes")
-
-				local obj = {}
-
-				-- Initialize defaults (should create metadata)
-				k8s.init_defaults(obj)
-
-				-- Should have created metadata with labels and annotations
-				assert(type(obj.metadata) == "table", "metadata should be created")
-				assert(type(obj.metadata.labels) == "table", "labels should be table")
-				assert(type(obj.metadata.annotations) == "table", "annotations should be table")
-
-				return true
-			`,
-		},
-		{
-			name: "returns same object",
-			script: `
-				local k8s = require("kubernetes")
-
-				local obj = {
-					metadata = {
-						name = "test"
-					}
-				}
-
-				local result = k8s.init_defaults(obj)
-
-				-- Should return the same object (modified in-place)
-				assert(result == obj, "should return same object")
-				assert(result.metadata.name == "test", "object should be modified in-place")
-
-				return true
-			`,
-		},
+		{"nil labels and annotations", "testdata/init_defaults_nil.lua"},
+		{"existing labels and annotations", "testdata/init_defaults_existing.lua"},
+		{"no metadata", "testdata/init_defaults_no_metadata.lua"},
+		{"returns same object", "testdata/init_defaults_returns_same.lua"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := L.DoString(tt.script); err != nil {
+			if err := L.DoFile(tt.filename); err != nil {
 				t.Fatalf("Test failed: %v", err)
 			}
 
@@ -403,41 +274,7 @@ func TestInitDefaultsFullWorkflow(t *testing.T) {
 
 	L.PreloadModule("kubernetes", Loader)
 
-	script := `
-		local k8s = require("kubernetes")
-
-		-- Test case 1: nil labels and annotations
-		local pod = {
-			metadata = {
-				name = "test-pod",
-				namespace = "default"
-			}
-		}
-
-		-- Before init_defaults, labels and annotations are nil
-		assert(pod.metadata.labels == nil, "labels should be nil initially")
-		assert(pod.metadata.annotations == nil, "annotations should be nil initially")
-
-		k8s.init_defaults(pod)
-
-		-- After init_defaults, they should be tables
-		assert(type(pod.metadata.labels) == "table", "labels should be table")
-		assert(type(pod.metadata.annotations) == "table", "annotations should be table")
-
-		-- Add some labels and annotations
-		pod.metadata.labels.app = "myapp"
-		pod.metadata.labels.tier = "backend"
-		pod.metadata.annotations.version = "1.0.0"
-
-		-- Verify they were added successfully
-		assert(pod.metadata.labels.app == "myapp", "label app should be set")
-		assert(pod.metadata.labels.tier == "backend", "label tier should be set")
-		assert(pod.metadata.annotations.version == "1.0.0", "annotation version should be set")
-
-		return true
-	`
-
-	if err := L.DoString(script); err != nil {
+	if err := L.DoFile("testdata/init_defaults_full_workflow.lua"); err != nil {
 		t.Fatalf("Test failed: %v", err)
 	}
 
@@ -455,40 +292,7 @@ func TestModuleIntegration(t *testing.T) {
 
 	L.PreloadModule("kubernetes", Loader)
 
-	script := `
-		local k8s = require("kubernetes")
-
-		-- Test parse_memory
-		local mem_bytes = k8s.parse_memory("1Gi")
-		assert(mem_bytes == 1073741824, "Memory parsing failed")
-
-		-- Test parse_cpu
-		local cpu_millis = k8s.parse_cpu("100m")
-		assert(cpu_millis == 100, "CPU parsing failed")
-
-		-- Test parse_time
-		local timestamp = k8s.parse_time("2025-10-03T16:39:00Z")
-		assert(timestamp > 0, "Time parsing failed")
-
-		-- Test format_time
-		local timestr = k8s.format_time(1759509540)
-		assert(timestr == "2025-10-03T16:39:00Z", "Time formatting failed")
-
-		-- Test round-trip
-		local formatted = k8s.format_time(timestamp)
-		local parsed = k8s.parse_time(formatted)
-		assert(parsed == timestamp, "Round-trip failed")
-
-		-- Test init_defaults
-		local obj = {}
-		k8s.init_defaults(obj)
-		obj.metadata.labels.test = "value"
-		assert(obj.metadata.labels.test == "value", "init_defaults failed")
-
-		return true
-	`
-
-	if err := L.DoString(script); err != nil {
+	if err := L.DoFile("testdata/module_integration.lua"); err != nil {
 		t.Fatalf("Integration test failed: %v", err)
 	}
 
