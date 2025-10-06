@@ -9,6 +9,7 @@ import (
 	"github.com/thomas-maurice/glua/pkg/glua"
 	jsonmodule "github.com/thomas-maurice/glua/pkg/modules/json"
 	"github.com/thomas-maurice/glua/pkg/modules/kubernetes"
+	spewmodule "github.com/thomas-maurice/glua/pkg/modules/spew"
 	lua "github.com/yuin/gopher-lua"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,6 +28,7 @@ func main() {
 		fmt.Println("  scripts/06_multi_container_analysis.lua")
 		fmt.Println("  scripts/07_json_export.lua")
 		fmt.Println("  scripts/08_json_processing.lua")
+		fmt.Println("  scripts/09_spew_debugging.lua")
 		os.Exit(1)
 	}
 
@@ -45,9 +47,10 @@ func main() {
 	L := lua.NewState()
 	defer L.Close()
 
-	// Load kubernetes and json modules
+	// Load kubernetes, json, and spew modules
 	L.PreloadModule("kubernetes", kubernetes.Loader)
 	L.PreloadModule("json", jsonmodule.Loader)
+	L.PreloadModule("spew", spewmodule.Loader)
 
 	// Create translator
 	translator := glua.NewTranslator()

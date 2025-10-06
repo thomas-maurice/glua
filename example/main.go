@@ -11,6 +11,7 @@ import (
 	"github.com/thomas-maurice/glua/pkg/glua"
 	jsonmodule "github.com/thomas-maurice/glua/pkg/modules/json"
 	"github.com/thomas-maurice/glua/pkg/modules/kubernetes"
+	spewmodule "github.com/thomas-maurice/glua/pkg/modules/spew"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -31,10 +32,10 @@ func main() {
 	L := lua.NewState()
 	defer L.Close()
 
-	// Load kubernetes module for parsing quantities and times
+	// Load kubernetes, json, and spew modules
 	L.PreloadModule("kubernetes", kubernetes.Loader)
-	// Load json module for JSON parsing and serialization
 	L.PreloadModule("json", jsonmodule.Loader)
+	L.PreloadModule("spew", spewmodule.Loader)
 
 	// ========================================================================
 	// Feature 1: Type Registry & LSP Stub Generation
@@ -124,6 +125,7 @@ func main() {
 		Lscript := lua.NewState()
 		Lscript.PreloadModule("kubernetes", kubernetes.Loader)
 		Lscript.PreloadModule("json", jsonmodule.Loader)
+		Lscript.PreloadModule("spew", spewmodule.Loader)
 		luaTable2, _ := translator.ToLua(Lscript, pod)
 		Lscript.SetGlobal("myPod", luaTable2)
 
@@ -200,16 +202,22 @@ func main() {
 	// ========================================================================
 	// Feature 7: JSON Module Demonstration
 	// ========================================================================
-	fmt.Println("\n[7/8] Demonstrating JSON module...")
+	fmt.Println("\n[7/9] Demonstrating JSON module...")
 	demonstrateJSONModule(L, pod)
 
 	// ========================================================================
-	// Feature 8: Summary of Capabilities
+	// Feature 8: Spew Module Demonstration
 	// ========================================================================
-	fmt.Println("\n[8/8] Summary of glua capabilities demonstrated:")
+	fmt.Println("\n[8/9] Demonstrating Spew module...")
+	demonstrateSpewModule(L, pod)
+
+	// ========================================================================
+	// Feature 9: Summary of Capabilities
+	// ========================================================================
+	fmt.Println("\n[9/9] Summary of glua capabilities demonstrated:")
 	fmt.Println("    ✓ Type Registry - Generate LSP stubs for IDE autocomplete")
 	fmt.Println("    ✓ Go → Lua - Convert any Go struct to Lua table")
-	fmt.Println("    ✓ Lua Modules - kubernetes & json modules")
+	fmt.Println("    ✓ Lua Modules - kubernetes, json & spew modules")
 	fmt.Println("    ✓ Lua Execution - Run complex scripts with full Pod access")
 	fmt.Println("    ✓ Lua → Go - Convert Lua tables back to Go structs")
 	fmt.Println("    ✓ Round-trip Integrity - Perfect data preservation")
@@ -309,5 +317,74 @@ func demonstrateJSONModule(L *lua.LState, pod *corev1.Pod) {
 
 	if err := L.DoString(script); err != nil {
 		fmt.Printf("    ✗ JSON module demo failed: %v\n", err)
+	}
+}
+
+// demonstrateSpewModule: showcases the spew module functionality
+func demonstrateSpewModule(L *lua.LState, pod *corev1.Pod) {
+	script := `
+		local spew = require("spew")
+
+		-- 1. Use sdump to get string representation
+		local simple = {
+			type = "demo",
+			count = 5,
+			items = {"a", "b", "c"}
+		}
+
+		local dumpStr = spew.sdump(simple)
+		-- Check that we got a non-empty string with type info
+		if #dumpStr == 0 then
+			error("Expected non-empty dump string")
+		end
+
+		if not string.find(dumpStr, "type") then
+			error("Expected dump to contain field names")
+		end
+
+		print("    ✓ Generated detailed dump with type information")
+
+		-- 2. Dump complex nested structure
+		local complex = {
+			metadata = {
+				name = "test-resource",
+				labels = {
+					env = "prod",
+					team = "platform"
+				}
+			},
+			spec = {
+				replicas = 3,
+				containers = {
+					{name = "app", image = "alpine:latest"},
+					{name = "sidecar", image = "nginx:1.21"}
+				}
+			}
+		}
+
+		local complexDump = spew.sdump(complex)
+		-- Just verify we got a non-empty dump with some nested content
+		if #complexDump == 0 then
+			error("Expected non-empty dump")
+		end
+
+		print("    ✓ Dumped nested structure successfully (length: " .. #complexDump .. " bytes)")
+
+		-- 3. Compare dumps
+		local data1 = {x = 1, y = 2}
+		local data2 = {x = 1, y = 3}
+
+		local dump1 = spew.sdump(data1)
+		local dump2 = spew.sdump(data2)
+
+		if dump1 == dump2 then
+			error("Expected different dumps for different data")
+		end
+
+		print("    ✓ Spew correctly differentiates between structures")
+	`
+
+	if err := L.DoString(script); err != nil {
+		fmt.Printf("    ✗ Spew module demo failed: %v\n", err)
 	}
 }
