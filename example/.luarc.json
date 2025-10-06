@@ -16,6 +16,7 @@
       "originalPod",
       "modifiedPod",
       "exportedReport",
+      "exportedPodData",
       "parsedCPUMillis",
       "parsedMemoryBytes",
       "parsedTimestamp"

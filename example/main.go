@@ -9,6 +9,7 @@ import (
 
 	"github.com/thomas-maurice/glua/example/sample"
 	"github.com/thomas-maurice/glua/pkg/glua"
+	jsonmodule "github.com/thomas-maurice/glua/pkg/modules/json"
 	"github.com/thomas-maurice/glua/pkg/modules/kubernetes"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,6 +33,8 @@ func main() {
 
 	// Load kubernetes module for parsing quantities and times
 	L.PreloadModule("kubernetes", kubernetes.Loader)
+	// Load json module for JSON parsing and serialization
+	L.PreloadModule("json", jsonmodule.Loader)
 
 	// ========================================================================
 	// Feature 1: Type Registry & LSP Stub Generation
@@ -120,6 +123,7 @@ func main() {
 		// Create fresh Lua state for each script
 		Lscript := lua.NewState()
 		Lscript.PreloadModule("kubernetes", kubernetes.Loader)
+		Lscript.PreloadModule("json", jsonmodule.Loader)
 		luaTable2, _ := translator.ToLua(Lscript, pod)
 		Lscript.SetGlobal("myPod", luaTable2)
 
@@ -194,12 +198,18 @@ func main() {
 	fmt.Printf("    ✓ Full JSON round-trip verified (%d bytes)\n", len(originalJSON))
 
 	// ========================================================================
-	// Feature 7: Summary of Capabilities
+	// Feature 7: JSON Module Demonstration
 	// ========================================================================
-	fmt.Println("\n[7/7] Summary of glua capabilities demonstrated:")
+	fmt.Println("\n[7/8] Demonstrating JSON module...")
+	demonstrateJSONModule(L, pod)
+
+	// ========================================================================
+	// Feature 8: Summary of Capabilities
+	// ========================================================================
+	fmt.Println("\n[8/8] Summary of glua capabilities demonstrated:")
 	fmt.Println("    ✓ Type Registry - Generate LSP stubs for IDE autocomplete")
 	fmt.Println("    ✓ Go → Lua - Convert any Go struct to Lua table")
-	fmt.Println("    ✓ Lua Modules - kubernetes module (parse_cpu, parse_memory, parse_time, format_time)")
+	fmt.Println("    ✓ Lua Modules - kubernetes & json modules")
 	fmt.Println("    ✓ Lua Execution - Run complex scripts with full Pod access")
 	fmt.Println("    ✓ Lua → Go - Convert Lua tables back to Go structs")
 	fmt.Println("    ✓ Round-trip Integrity - Perfect data preservation")
@@ -255,4 +265,49 @@ func generateStubs() error {
 	}
 
 	return nil
+}
+
+// demonstrateJSONModule: showcases the json module functionality
+func demonstrateJSONModule(L *lua.LState, pod *corev1.Pod) {
+	script := `
+		local json = require("json")
+
+		-- 1. Parse JSON string
+		local jsonStr = '{"name":"test-pod","replicas":3,"tags":["backend","api"]}'
+		local parsed, parseErr = json.parse(jsonStr)
+		if parseErr then
+			error("Parse failed: " .. parseErr)
+		end
+
+		print("    ✓ Parsed JSON object: name=" .. parsed.name .. ", replicas=" .. tostring(parsed.replicas))
+
+		-- 2. Stringify Lua table
+		local data = {
+			service = "my-service",
+			port = 8080,
+			endpoints = {"api", "health", "metrics"}
+		}
+		local stringified, stringifyErr = json.stringify(data)
+		if stringifyErr then
+			error("Stringify failed: " .. stringifyErr)
+		end
+
+		print("    ✓ Stringified table to JSON: " .. stringified)
+
+		-- 3. Round-trip test
+		local roundtrip, rtErr = json.parse(stringified)
+		if rtErr then
+			error("Round-trip parse failed: " .. rtErr)
+		end
+
+		if roundtrip.service ~= "my-service" or roundtrip.port ~= 8080 then
+			error("Round-trip data mismatch")
+		end
+
+		print("    ✓ JSON round-trip successful")
+	`
+
+	if err := L.DoString(script); err != nil {
+		fmt.Printf("    ✗ JSON module demo failed: %v\n", err)
+	}
 }
