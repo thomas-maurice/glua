@@ -410,7 +410,7 @@ func add(L *lua.LState) int {
 make stubgen
 ```
 
-This creates `library/mymodule.lua`:
+This creates `library/mymodule.gen.lua`:
 
 ```lua
 ---@meta
@@ -502,7 +502,7 @@ This section explains how to enable autocomplete for your Lua scripts.
 2. Generate stubs:
 ```bash
 # Generate module stubs (for kubernetes, custom modules)
-make stubgen  # Creates library/kubernetes.lua, etc.
+make stubgen  # Creates library/kubernetes.gen.lua, etc.
 
 # Generate type stubs (run your app that uses TypeRegistry)
 go run main.go  # Creates annotations.gen.lua
@@ -745,7 +745,7 @@ To get autocomplete in the example:
 
 1. Run `make stubgen` to generate module stubs
 2. Check `.luarc.json` or `.vscode/settings.json` includes `"library"` directory
-3. Verify `library/kubernetes.lua` exists and starts with `---@meta`
+3. Verify `library/kubernetes.gen.lua` exists and starts with `---@meta`
 4. Restart LSP: `:LspRestart` (Neovim) or reload window (VSCode)
 
 ### Module not found error

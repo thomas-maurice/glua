@@ -14,8 +14,7 @@ bin/
 coverage.txt
 
 # Generated files
-# **/annotations.gen.lua
-# **/modules.gen.lua
+example/**/*.gen.lua
 example/library/
 
 # IDE

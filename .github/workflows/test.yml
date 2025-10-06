@@ -97,5 +97,5 @@ jobs:
     - name: Generate stubs
       run: |
         go run ./cmd/stubgen -dir pkg/modules -output-dir /tmp/library
-        test -f /tmp/library/kubernetes.lua || (echo "kubernetes.lua not generated" && exit 1)
+        test -f /tmp/library/kubernetes.gen.lua || (echo "kubernetes.gen.lua not generated" && exit 1)
         echo "✓ Stub generation successful"

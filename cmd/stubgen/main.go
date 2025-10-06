@@ -38,7 +38,7 @@ func main() {
 				os.Exit(1)
 			}
 
-			outputFile := fmt.Sprintf("%s/%s.lua", *outputDir, moduleName)
+			outputFile := fmt.Sprintf("%s/%s.gen.lua", *outputDir, moduleName)
 			if err := os.WriteFile(outputFile, []byte(stub), 0644); err != nil {
 				fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", outputFile, err)
 				os.Exit(1)

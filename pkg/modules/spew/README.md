@@ -257,7 +257,7 @@ go test ./pkg/modules/spew/
 
 ## Integration
 
-The spew module is automatically included when you run `make stubgen` and will generate IDE autocomplete stubs in `library/spew.lua`.
+The spew module is automatically included when you run `make stubgen` and will generate IDE autocomplete stubs in `library/spew.gen.lua`.
 
 ## Credits
 

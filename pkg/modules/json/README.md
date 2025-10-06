@@ -165,4 +165,4 @@ go test ./pkg/modules/json/
 
 ## Integration
 
-The json module is automatically included when you run `make stubgen` and will generate IDE autocomplete stubs in `library/json.lua`.
+The json module is automatically included when you run `make stubgen` and will generate IDE autocomplete stubs in `library/json.gen.lua`.
