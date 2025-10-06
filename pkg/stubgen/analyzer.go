@@ -13,16 +13,18 @@ import (
 
 // LuaModule represents a discovered Lua module
 type LuaModule struct {
-	Name      string
-	Functions []*LuaFunction
+	Name               string
+	Functions          []*LuaFunction
+	CustomAnnotations  []string // Module-level custom annotations
 }
 
 // LuaFunction represents a Lua function exported by a module
 type LuaFunction struct {
-	Name        string
-	Description string
-	Params      []*LuaParam
-	Returns     []*LuaReturn
+	Name               string
+	Description        string
+	Params             []*LuaParam
+	Returns            []*LuaReturn
+	CustomAnnotations  []string // Function-level custom annotations
 }
 
 // LuaParam represents a function parameter
@@ -99,8 +101,9 @@ func (a *Analyzer) parseFile(filename string) error {
 		// Check if this is a module loader
 		if moduleName := a.extractModuleName(comment); moduleName != "" {
 			currentModule = &LuaModule{
-				Name:      moduleName,
-				Functions: make([]*LuaFunction, 0),
+				Name:               moduleName,
+				Functions:          make([]*LuaFunction, 0),
+				CustomAnnotations:  a.extractCustomAnnotations(comment),
 			}
 			a.modules[moduleName] = currentModule
 			continue
@@ -127,6 +130,25 @@ func (a *Analyzer) extractModuleName(comment string) string {
 	return ""
 }
 
+// extractCustomAnnotations: extracts custom Lua annotations from @luaannotation lines
+func (a *Analyzer) extractCustomAnnotations(comment string) []string {
+	lines := strings.Split(comment, "\n")
+	var annotations []string
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "@luaannotation ") {
+			// Extract everything after @luaannotation
+			annotation := strings.TrimSpace(strings.TrimPrefix(line, "@luaannotation "))
+			if annotation != "" {
+				annotations = append(annotations, annotation)
+			}
+		}
+	}
+
+	return annotations
+}
+
 // extractFunction: extracts function information from comment annotations
 func (a *Analyzer) extractFunction(comment string) *LuaFunction {
 	lines := strings.Split(comment, "\n")
@@ -141,9 +163,10 @@ func (a *Analyzer) extractFunction(comment string) *LuaFunction {
 
 		if strings.HasPrefix(line, "@luafunc ") {
 			fn = &LuaFunction{
-				Name:    strings.TrimSpace(strings.TrimPrefix(line, "@luafunc ")),
-				Params:  make([]*LuaParam, 0),
-				Returns: make([]*LuaReturn, 0),
+				Name:              strings.TrimSpace(strings.TrimPrefix(line, "@luafunc ")),
+				Params:            make([]*LuaParam, 0),
+				Returns:           make([]*LuaReturn, 0),
+				CustomAnnotations: make([]string, 0),
 			}
 			continue
 		}
@@ -168,6 +191,11 @@ func (a *Analyzer) extractFunction(comment string) *LuaFunction {
 			ret := a.parseReturn(line)
 			if ret != nil {
 				fn.Returns = append(fn.Returns, ret)
+			}
+		} else if strings.HasPrefix(line, "@luaannotation ") {
+			annotation := strings.TrimSpace(strings.TrimPrefix(line, "@luaannotation "))
+			if annotation != "" {
+				fn.CustomAnnotations = append(fn.CustomAnnotations, annotation)
 			}
 		}
 	}
@@ -241,6 +269,12 @@ func (a *Analyzer) GenerateStubs() (string, error) {
 
 		// Generate module comment
 		sb.WriteString(fmt.Sprintf("--- %s module\n", moduleName))
+
+		// Module-level custom annotations
+		for _, annotation := range module.CustomAnnotations {
+			sb.WriteString(fmt.Sprintf("---%s\n", annotation))
+		}
+
 		sb.WriteString(fmt.Sprintf("---@class %s\n", moduleName))
 		sb.WriteString(fmt.Sprintf("local %s = {}\n\n", moduleName))
 
@@ -267,6 +301,11 @@ func (a *Analyzer) GenerateStubs() (string, error) {
 				} else {
 					sb.WriteString(fmt.Sprintf("---@return %s\n", ret.Type))
 				}
+			}
+
+			// Function-level custom annotations
+			for _, annotation := range fn.CustomAnnotations {
+				sb.WriteString(fmt.Sprintf("---%s\n", annotation))
 			}
 
 			// Function signature
@@ -306,6 +345,11 @@ func (a *Analyzer) GenerateModuleStub(moduleName string) (string, error) {
 	// Add meta annotation for Lua LSP
 	sb.WriteString("---@meta\n\n")
 
+	// Module-level custom annotations
+	for _, annotation := range module.CustomAnnotations {
+		sb.WriteString(fmt.Sprintf("---%s\n", annotation))
+	}
+
 	// Generate module class
 	sb.WriteString(fmt.Sprintf("---@class %s\n", moduleName))
 	sb.WriteString(fmt.Sprintf("local %s = {}\n\n", moduleName))
@@ -333,6 +377,11 @@ func (a *Analyzer) GenerateModuleStub(moduleName string) (string, error) {
 			} else {
 				sb.WriteString(fmt.Sprintf("---@return %s\n", ret.Type))
 			}
+		}
+
+		// Function-level custom annotations
+		for _, annotation := range fn.CustomAnnotations {
+			sb.WriteString(fmt.Sprintf("---%s\n", annotation))
 		}
 
 		// Function signature
