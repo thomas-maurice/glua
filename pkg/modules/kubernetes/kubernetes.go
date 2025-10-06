@@ -4,10 +4,30 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/thomas-maurice/glua/pkg/glua"
 	lua "github.com/yuin/gopher-lua"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// GVKMatcher represents a Kubernetes Group/Version/Kind matcher.
+type GVKMatcher struct {
+	Group   string
+	Version string
+	Kind    string
+}
+
+var (
+	translator   = glua.NewTranslator()
+	typeRegistry = glua.NewTypeRegistry()
+)
+
+func init() {
+	// Register GVKMatcher with the type registry
+	if err := typeRegistry.Register(GVKMatcher{}); err != nil {
+		panic(fmt.Sprintf("failed to register GVKMatcher: %v", err))
+	}
+}
 
 // Loader: creates and returns the kubernetes module for Lua.
 // This function should be registered with L.PreloadModule("kubernetes", kubernetes.Loader)
@@ -31,11 +51,17 @@ func Loader(L *lua.LState) int {
 
 // exports maps Lua function names to Go implementations
 var exports = map[string]lua.LGFunction{
-	"parse_memory":  parseMemory,
-	"parse_cpu":     parseCPU,
-	"parse_time":    parseTime,
-	"format_time":   formatTime,
-	"init_defaults": initDefaults,
+	"parse_memory":        parseMemory,
+	"parse_cpu":           parseCPU,
+	"parse_time":          parseTime,
+	"format_time":         formatTime,
+	"init_defaults":       initDefaults,
+	"parse_duration":      parseDuration,
+	"format_duration":     formatDuration,
+	"parse_int_or_string": parseIntOrString,
+	"matches_selector":    matchesSelector,
+	"toleration_matches":  tolerationMatches,
+	"match_gvk":           matchGVK,
 }
 
 // parseMemory: parses a Kubernetes memory quantity (e.g., "1024Mi", "1Gi", "512M") and returns bytes as a number.
@@ -190,5 +216,227 @@ func initDefaults(L *lua.LState) int {
 	}
 
 	L.Push(obj)
+	return 1
+}
+
+// parseDuration: parses a Kubernetes duration string (e.g., "5s", "10m", "2h") and returns seconds as a number.
+// Returns nil and error message on failure.
+//
+// @luafunc parse_duration
+// @luaparam duration string The duration string to parse (e.g., "5s", "10m", "2h")
+// @luareturn number The duration value in seconds, or nil on error
+// @luareturn string|nil Error message if parsing failed
+//
+// Example:
+//   local seconds = k8s.parse_duration("5m")  -- returns 300
+//   local seconds = k8s.parse_duration("1h30m")  -- returns 5400
+func parseDuration(L *lua.LState) int {
+	str := L.CheckString(1)
+
+	duration, err := time.ParseDuration(str)
+	if err != nil {
+		L.Push(lua.LNil)
+		L.Push(lua.LString(fmt.Sprintf("failed to parse duration: %v", err)))
+		return 2
+	}
+
+	// Return duration in seconds
+	L.Push(lua.LNumber(duration.Seconds()))
+	L.Push(lua.LNil)
+	return 2
+}
+
+// formatDuration: converts seconds to a Kubernetes duration string.
+// Returns nil and error message on failure.
+//
+// @luafunc format_duration
+// @luaparam seconds number The duration in seconds to convert
+// @luareturn string The duration string (e.g., "5m0s", "1h30m0s"), or nil on error
+// @luareturn string|nil Error message if formatting failed
+//
+// Example:
+//   local duration_str = k8s.format_duration(300)  -- returns "5m0s"
+//   local duration_str = k8s.format_duration(5400)  -- returns "1h30m0s"
+func formatDuration(L *lua.LState) int {
+	seconds := L.CheckNumber(1)
+
+	duration := time.Duration(seconds) * time.Second
+	formatted := duration.String()
+
+	L.Push(lua.LString(formatted))
+	L.Push(lua.LNil)
+	return 2
+}
+
+// parseIntOrString: parses a Kubernetes IntOrString value and returns the value and its type.
+// Returns (number, false) for integers or (string, true) for strings.
+//
+// @luafunc parse_int_or_string
+// @luaparam value any The IntOrString value (number or string)
+// @luareturn any The parsed value (preserves type)
+// @luareturn boolean true if string, false if number
+//
+// Example:
+//   local val, is_str = k8s.parse_int_or_string(8080)  -- returns 8080, false
+//   local val, is_str = k8s.parse_int_or_string("http")  -- returns "http", true
+func parseIntOrString(L *lua.LState) int {
+	value := L.CheckAny(1)
+
+	switch v := value.(type) {
+	case lua.LNumber:
+		L.Push(v)
+		L.Push(lua.LFalse)
+	case lua.LString:
+		L.Push(v)
+		L.Push(lua.LTrue)
+	default:
+		L.Push(value)
+		L.Push(lua.LFalse)
+	}
+
+	return 2
+}
+
+// matchesSelector: checks if a set of labels matches a label selector.
+// The selector is a table with key-value pairs that must all match.
+//
+// @luafunc matches_selector
+// @luaparam labels table The labels to check (e.g., pod.metadata.labels)
+// @luaparam selector table The selector with required labels
+// @luareturn boolean true if all selector labels match
+//
+// Example:
+//   local matches = k8s.matches_selector(
+//     {app="nginx", tier="frontend"},
+//     {app="nginx"}
+//   )  -- returns true
+func matchesSelector(L *lua.LState) int {
+	labels := L.CheckTable(1)
+	selector := L.CheckTable(2)
+
+	matches := true
+	selector.ForEach(func(key, value lua.LValue) {
+		// Get the corresponding label value
+		labelValue := L.GetField(labels, key.String())
+
+		// If label doesn't exist or values don't match, selector doesn't match
+		if labelValue == lua.LNil || labelValue.String() != value.String() {
+			matches = false
+		}
+	})
+
+	L.Push(lua.LBool(matches))
+	return 1
+}
+
+// tolerationMatches: checks if a toleration matches a taint.
+// Simplified matching: checks key, operator, value, and effect.
+//
+// @luafunc toleration_matches
+// @luaparam toleration table The toleration object
+// @luaparam taint table The taint object
+// @luareturn boolean true if the toleration matches the taint
+//
+// Example:
+//   local matches = k8s.toleration_matches(
+//     {key="node-role", operator="Equal", value="master", effect="NoSchedule"},
+//     {key="node-role", value="master", effect="NoSchedule"}
+//   )  -- returns true
+func tolerationMatches(L *lua.LState) int {
+	toleration := L.CheckTable(1)
+	taint := L.CheckTable(2)
+
+	// Get toleration fields
+	tolKey := L.GetField(toleration, "key").String()
+	tolOperator := L.GetField(toleration, "operator").String()
+	tolValue := L.GetField(toleration, "value").String()
+	tolEffect := L.GetField(toleration, "effect").String()
+
+	// Get taint fields
+	taintKey := L.GetField(taint, "key").String()
+	taintValue := L.GetField(taint, "value").String()
+	taintEffect := L.GetField(taint, "effect").String()
+
+	// Default operator is "Equal"
+	if tolOperator == "" || tolOperator == "nil" {
+		tolOperator = "Equal"
+	}
+
+	// Check if keys match
+	if tolKey != taintKey {
+		L.Push(lua.LFalse)
+		return 1
+	}
+
+	// Check effect (empty effect matches all)
+	if tolEffect != "" && tolEffect != "nil" && tolEffect != taintEffect {
+		L.Push(lua.LFalse)
+		return 1
+	}
+
+	// Check operator
+	if tolOperator == "Exists" {
+		// Exists operator only checks key (and optionally effect)
+		L.Push(lua.LTrue)
+		return 1
+	}
+
+	// Equal operator checks value
+	if tolOperator == "Equal" && tolValue == taintValue {
+		L.Push(lua.LTrue)
+		return 1
+	}
+
+	L.Push(lua.LFalse)
+	return 1
+}
+
+// matchGVK: checks if a Kubernetes object matches the specified Group/Version/Kind matcher.
+// Returns true if the object's apiVersion and kind match the matcher's values.
+//
+// @luafunc match_gvk
+// @luaparam obj table The Kubernetes object to check
+// @luaparam matcher GVKMatcher The GVK matcher with group, version, and kind fields
+// @luareturn boolean true if the GVK matches
+//
+// Example:
+//   local matcher = {group = "", version = "v1", kind = "Pod"}
+//   local matches = k8s.match_gvk(pod, matcher)  -- returns true for a Pod
+func matchGVK(L *lua.LState) int {
+	obj := L.CheckTable(1)
+	matcherTable := L.CheckTable(2)
+
+	// Convert Lua table to GVKMatcher
+	var matcher GVKMatcher
+	if err := translator.FromLua(L, matcherTable, &matcher); err != nil {
+		L.Push(lua.LFalse)
+		return 1
+	}
+
+	// Get apiVersion and kind from the object
+	apiVersion := L.GetField(obj, "apiVersion").String()
+	objKind := L.GetField(obj, "kind").String()
+
+	// Check kind first
+	if objKind != matcher.Kind {
+		L.Push(lua.LFalse)
+		return 1
+	}
+
+	// Build expected apiVersion
+	var expectedAPIVersion string
+	if matcher.Group == "" {
+		expectedAPIVersion = matcher.Version
+	} else {
+		expectedAPIVersion = matcher.Group + "/" + matcher.Version
+	}
+
+	// Check apiVersion
+	if apiVersion == expectedAPIVersion {
+		L.Push(lua.LTrue)
+	} else {
+		L.Push(lua.LFalse)
+	}
+
 	return 1
 }

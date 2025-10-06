@@ -140,6 +140,201 @@ print(pod.metadata.labels.app)  -- prints "myapp"
 - Existing labels and annotations are preserved
 - Only nil values are replaced with empty tables
 
+### `kubernetes.parse_duration(duration_str)`
+
+Parses a duration string (e.g., "5m", "1h30m") and returns the value in seconds.
+
+**Parameters:**
+- `duration_str` (string): The duration string to parse (e.g., "5m", "1h", "1h30m45s")
+
+**Returns:**
+- `number`: The duration in seconds, or nil on error
+- `string|nil`: Error message if parsing failed
+
+**Example:**
+```lua
+local k8s = require("kubernetes")
+local seconds, err = k8s.parse_duration("5m")
+
+if err then
+    print("Error: " .. err)
+else
+    print(seconds)  -- prints 300
+end
+
+-- Complex durations
+local s2 = k8s.parse_duration("1h30m")  -- returns 5400
+```
+
+### `kubernetes.format_duration(seconds)`
+
+Converts a duration in seconds to a duration string.
+
+**Parameters:**
+- `seconds` (number): The duration in seconds
+
+**Returns:**
+- `string`: The formatted duration string (e.g., "5m0s"), or nil on error
+- `string|nil`: Error message if formatting failed
+
+**Example:**
+```lua
+local k8s = require("kubernetes")
+local duration_str, err = k8s.format_duration(300)
+
+if err then
+    print("Error: " .. err)
+else
+    print(duration_str)  -- prints "5m0s"
+end
+```
+
+### `kubernetes.parse_int_or_string(value)`
+
+Handles Kubernetes IntOrString type, determining if a value is a number or string.
+
+**Parameters:**
+- `value` (number|string): The value to check
+
+**Returns:**
+- `number|string`: The input value
+- `boolean`: true if the value is a string, false if it's a number
+
+**Example:**
+```lua
+local k8s = require("kubernetes")
+
+-- With a number
+local val1, is_str1 = k8s.parse_int_or_string(8080)
+print(val1)     -- prints 8080
+print(is_str1)  -- prints false
+
+-- With a string
+local val2, is_str2 = k8s.parse_int_or_string("http")
+print(val2)     -- prints "http"
+print(is_str2)  -- prints true
+```
+
+### `kubernetes.matches_selector(labels, selector)`
+
+Checks if a set of labels matches a label selector.
+
+**Parameters:**
+- `labels` (table): The label set to check
+- `selector` (table): The label selector (key-value pairs)
+
+**Returns:**
+- `boolean`: true if all selector labels match, false otherwise
+
+**Example:**
+```lua
+local k8s = require("kubernetes")
+
+local pod_labels = {
+    app = "nginx",
+    tier = "frontend",
+    version = "v1"
+}
+
+local selector = {
+    app = "nginx",
+    tier = "frontend"
+}
+
+local matches = k8s.matches_selector(pod_labels, selector)
+print(matches)  -- prints true
+```
+
+### `kubernetes.toleration_matches(toleration, taint)`
+
+Checks if a toleration matches a taint.
+
+**Parameters:**
+- `toleration` (table): The toleration with fields: key, operator, value, effect
+- `taint` (table): The taint with fields: key, value, effect
+
+**Returns:**
+- `boolean`: true if the toleration matches the taint, false otherwise
+
+**Example:**
+```lua
+local k8s = require("kubernetes")
+
+-- Equal operator
+local toleration = {
+    key = "node-role",
+    operator = "Equal",
+    value = "master",
+    effect = "NoSchedule"
+}
+
+local taint = {
+    key = "node-role",
+    value = "master",
+    effect = "NoSchedule"
+}
+
+local matches = k8s.toleration_matches(toleration, taint)
+print(matches)  -- prints true
+
+-- Exists operator (value doesn't matter)
+local tol2 = {
+    key = "node-role",
+    operator = "Exists",
+    effect = "NoSchedule"
+}
+
+local matches2 = k8s.toleration_matches(tol2, taint)
+print(matches2)  -- prints true
+```
+
+### `kubernetes.match_gvk(obj, matcher)`
+
+Checks if a Kubernetes object matches the specified Group/Version/Kind (GVK) matcher.
+
+**Parameters:**
+- `obj` (table): The Kubernetes object to check
+- `matcher` (GVKMatcher): A table with `group`, `version`, and `kind` fields
+
+**Returns:**
+- `boolean`: true if the object's apiVersion and kind match the matcher's GVK
+
+**Example:**
+```lua
+local k8s = require("kubernetes")
+
+-- Check if object is a Pod
+local pod = {
+    apiVersion = "v1",
+    kind = "Pod",
+}
+
+local pod_matcher = {group = "", version = "v1", kind = "Pod"}
+local is_pod = k8s.match_gvk(pod, pod_matcher)
+print(is_pod)  -- prints true
+
+-- Check if object is a Deployment
+local deployment = {
+    apiVersion = "apps/v1",
+    kind = "Deployment",
+}
+
+local deployment_matcher = {group = "apps", version = "v1", kind = "Deployment"}
+local is_deployment = k8s.match_gvk(deployment, deployment_matcher)
+print(is_deployment)  -- prints true
+
+-- Check for wrong type
+local service_matcher = {group = "", version = "v1", kind = "Service"}
+local is_service = k8s.match_gvk(pod, service_matcher)
+print(is_service)  -- prints false
+```
+
+**Notes:**
+- For core API resources (Pod, Service, ConfigMap, etc.), use an empty string for the group field
+- For resources in other API groups (Deployment, StatefulSet, etc.), specify the group name (e.g., "apps", "batch")
+- The apiVersion field in the object should match the group/version format (e.g., "v1" for core resources, "apps/v1" for apps group)
+- The GVKMatcher is a Go type registered with the TypeRegistry, allowing seamless conversion between Go and Lua
+
 ## Usage in Go
 
 ```go
