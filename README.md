@@ -404,13 +404,45 @@ func add(L *lua.LState) int {
 }
 ```
 
-### Step 2: Generate Stubs
+### Step 2: Generate Stubs with stubgen
+
+The stubgen tool scans your Go code for special annotations and generates Lua LSP stubs for IDE autocomplete.
+
+**Run stubgen:**
 
 ```bash
+# Scan pkg/modules directory and generate stubs in library/
 make stubgen
+
+# Or manually:
+go run ./cmd/stubgen -dir pkg/modules -output-dir library
+
+# For a single combined file:
+go run ./cmd/stubgen -dir pkg/modules -output mymodules.gen.lua
 ```
 
-This creates `library/mymodule.gen.lua`:
+**What stubgen looks for:**
+
+The tool scans for these comment annotations in your Go code:
+
+- `@luamodule <name>` - Marks the Loader function (required)
+- `@luafunc <name>` - Exported Lua function name
+- `@luaparam <name> <type> <description>` - Function parameter
+- `@luareturn <type> <description>` - Return value
+
+**Example from our code above:**
+
+```go
+// @luamodule mymodule    <- Tells stubgen this is a Lua module
+func Loader(L *lua.LState) int { ... }
+
+// @luafunc greet         <- Function name in Lua
+// @luaparam name string The name to greet    <- Parameter with type and description
+// @luareturn string The greeting message     <- Return type and description
+func greet(L *lua.LState) int { ... }
+```
+
+**Generated output** (`library/mymodule.gen.lua`):
 
 ```lua
 ---@meta
@@ -431,6 +463,26 @@ function mymodule.greet(name) end
 function mymodule.add(a, b) end
 
 return mymodule
+```
+
+**How it works:**
+
+1. Stubgen scans all `.go` files in the specified directory
+2. Finds functions with `@luamodule` annotation (these are module Loaders)
+3. Finds functions with `@luafunc` annotation (these are exported Lua functions)
+4. Extracts `@luaparam` and `@luareturn` annotations for each function
+5. Generates EmmyLua-compatible annotation files that LSP servers understand
+6. Outputs one `.gen.lua` file per module (or a single combined file)
+
+**Verification:**
+
+```bash
+# Check generated files
+ls library/
+# Output: json.gen.lua  kubernetes.gen.lua  mymodule.gen.lua  spew.gen.lua
+
+# View generated stub
+cat library/mymodule.gen.lua
 ```
 
 ### Step 3: Register and Use
