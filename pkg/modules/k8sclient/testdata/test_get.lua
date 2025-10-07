@@ -7,11 +7,11 @@ local cm = {
 	apiVersion = "v1",
 	kind = "ConfigMap",
 	metadata = {
-		name = "test-config",
-		namespace = "default"
+		name = TEST_CONFIG_NAME,
+		namespace = TEST_NAMESPACE
 	},
 	data = {
-		key1 = "value1"
+		[TEST_CONFIG_KEY] = TEST_CONFIG_VALUE
 	}
 }
 
@@ -22,18 +22,18 @@ end
 
 -- Now get it
 local gvk = {group = "", version = "v1", kind = "ConfigMap"}
-local fetched, err = client.get(gvk, "default", "test-config")
+local fetched, err = client.get(gvk, TEST_NAMESPACE, TEST_CONFIG_NAME)
 
 if err then
 	error("Failed to get: " .. err)
 end
 
-if fetched.metadata.name ~= "test-config" then
-	error("Expected name 'test-config', got " .. tostring(fetched.metadata.name))
+if fetched.metadata.name ~= TEST_CONFIG_NAME then
+	error("Expected name '" .. TEST_CONFIG_NAME .. "', got " .. tostring(fetched.metadata.name))
 end
 
-if fetched.data.key1 ~= "value1" then
-	error("Expected data.key1 'value1', got " .. tostring(fetched.data.key1))
+if fetched.data[TEST_CONFIG_KEY] ~= TEST_CONFIG_VALUE then
+	error("Expected data." .. TEST_CONFIG_KEY .. " '" .. TEST_CONFIG_VALUE .. "', got " .. tostring(fetched.data[TEST_CONFIG_KEY]))
 end
 
 return true

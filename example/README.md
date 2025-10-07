@@ -28,6 +28,7 @@ go run main.go
 ```
 
 Or from repository root:
+
 ```bash
 # Build and run
 make example
@@ -158,12 +159,14 @@ go run ./cmd/stubgen -dir pkg/modules -output-dir library
 ```
 
 **Output**:
+
 ```
 Generated library/kubernetes.lua
 Generated Lua stubs for 1 module(s) in library/
 ```
 
 **What gets generated** (`library/kubernetes.lua`):
+
 ```lua
 ---@meta
 
@@ -198,6 +201,7 @@ return kubernetes
 ```
 
 **How stubgen works**:
+
 1. Scans Go files in `pkg/modules/` for special annotations
 2. Finds `@luamodule` to identify modules
 3. Extracts `@luafunc`, `@luaparam`, `@luareturn` annotations
@@ -215,6 +219,7 @@ go run main.go
 ```
 
 Or programmatically in your code:
+
 ```go
 registry := glua.NewTypeRegistry()
 registry.Register(&corev1.Pod{})
@@ -230,6 +235,7 @@ os.WriteFile("annotations.gen.lua", []byte(stubs), 0644)
 1. **Install Lua extension**: [Lua](https://marketplace.visualstudio.com/items?itemName=sumneko.lua)
 
 2. **Generate stubs**:
+
    ```bash
    # From repo root
    make stubgen          # Generates library/kubernetes.lua
@@ -242,6 +248,7 @@ os.WriteFile("annotations.gen.lua", []byte(stubs), 0644)
 ### Neovim
 
 1. **Install lua-language-server**:
+
    ```vim
    :MasonInstall lua-language-server
    ```
@@ -270,6 +277,7 @@ k8s.parse_           -- parse_memory, parse_cpu, parse_time, format_time
 See [scripts/README.md](scripts/README.md) for quick reference, or [EXAMPLES.md](EXAMPLES.md) for comprehensive documentation.
 
 **Quick overview**:
+
 1. **Basic Pod Info** - Display metadata, labels, containers
 2. **Resource Limits** - Parse and analyze CPU/memory with kubernetes module
 3. **Policy Validation** - Enforce organizational policies (4 policies checked)

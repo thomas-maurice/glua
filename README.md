@@ -26,6 +26,7 @@ go get github.com/thomas-maurice/glua
 ```
 
 Requirements:
+
 - Go 1.21 or later
 - For Kubernetes support: `k8s.io/api` and `k8s.io/apimachinery`
 
@@ -108,6 +109,7 @@ make help
 ```
 
 Built binaries:
+
 - `bin/stubgen` - Generates Lua LSP stubs for IDE autocomplete
 - `bin/example` - Complete working example with all features
 
@@ -142,6 +144,7 @@ L.SetGlobal("myPod", luaTable)
 ```
 
 Features:
+
 - Preserves timestamps (RFC3339 strings)
 - Preserves resource quantities (CPU/memory strings like "100m", "256Mi")
 - Handles nested structures, arrays, and maps
@@ -165,6 +168,7 @@ if err != nil {
 ```
 
 Features:
+
 - Full round-trip integrity (original == reconstructed)
 - Automatic type coercion
 - Preserves all complex Kubernetes types
@@ -231,6 +235,7 @@ print(pod.spec.containers[1].image)
 The built-in Kubernetes module provides utility functions for parsing K8s resource quantities and timestamps.
 
 Load in Go:
+
 ```go
 L.PreloadModule("kubernetes", kubernetes.Loader)
 ```
@@ -289,6 +294,7 @@ end
 The `k8sclient` module provides a dynamic Kubernetes client for Lua, allowing full CRUD operations on any Kubernetes resource directly from Lua scripts.
 
 Load in Go:
+
 ```go
 import "github.com/thomas-maurice/glua/pkg/modules/k8sclient"
 
@@ -338,6 +344,7 @@ local err = client.delete(pod_gvk, "default", "nginx")
 **Complete Example:** See [example/k8sclient/](./example/k8sclient) for a full working example with nginx Pod, ConfigMaps, and Kind cluster integration.
 
 **Run the example:**
+
 ```bash
 make test-k8sclient  # Runs with temporary Kind cluster
 ```
@@ -402,6 +409,7 @@ if string(originalJSON) == string(reconstructedJSON) {
 ```
 
 This works for:
+
 - Timestamps (RFC3339 strings preserved)
 - Resource quantities ("100m", "256Mi" preserved as strings)
 - Maps and labels
@@ -587,6 +595,7 @@ go run ./cmd/stubgen -dir pkg/modules -output stubs.lua
 ```
 
 Options:
+
 - `-dir`: Directory to scan for Go modules (default: ".")
 - `-output-dir`: Generate per-module files in this directory (recommended for LSP)
 - `-output`: Generate single combined file (default: "module_stubs.gen.lua")
@@ -594,6 +603,7 @@ Options:
 What it does:
 
 Scans Go files for these annotations:
+
 - `@luamodule <name>` - Marks module Loader function
 - `@luafunc <name>` - Exported function
 - `@luaparam <name> <type> <description>` - Function parameter
@@ -610,6 +620,7 @@ This section explains how to enable autocomplete for your Lua scripts.
 1. Install Lua Language Server extension: [Lua](https://marketplace.visualstudio.com/items?itemName=sumneko.lua)
 
 2. Generate stubs:
+
 ```bash
 # Generate module stubs (for kubernetes, custom modules)
 make stubgen  # Creates library/kubernetes.gen.lua, etc.
@@ -619,6 +630,7 @@ go run main.go  # Creates annotations.gen.lua
 ```
 
 3. Create `.vscode/settings.json`:
+
 ```json
 {
   "Lua.workspace.library": [
@@ -635,17 +647,20 @@ go run main.go  # Creates annotations.gen.lua
 ### Neovim Setup
 
 1. Install lua-language-server:
+
 ```vim
 :MasonInstall lua-language-server
 ```
 
 2. Generate stubs:
+
 ```bash
 make stubgen
 go run main.go  # If using TypeRegistry
 ```
 
 3. Create `.luarc.json` in project root:
+
 ```json
 {
   "runtime": { "version": "Lua 5.1" },
@@ -826,6 +841,7 @@ make test-short
 Coverage: 79%+ overall with comprehensive unit and integration tests
 
 What's tested:
+
 - Go ↔ Lua conversions in real Lua VMs (not just Go unit tests)
 - Kubernetes module functions with actual K8s types
 - K8s client CRUD operations with real Kind cluster
@@ -847,6 +863,7 @@ cd example && go run main.go
 ```
 
 Features demonstrated:
+
 - Go → Lua conversion (Pod struct to Lua table)
 - Lua script execution with kubernetes module
 - Parsing timestamps, CPU, and memory quantities
@@ -856,6 +873,7 @@ Features demonstrated:
 - Error handling
 
 To get autocomplete in the example:
+
 1. Run `make stubgen` from repo root
 2. Run `go run main.go` from example/ directory
 3. Open `script.lua` in your IDE - autocomplete works
@@ -884,6 +902,7 @@ Ensure all struct fields are exported (capitalized) and JSON-marshallable
 ## Contributing
 
 Contributions welcome! Please:
+
 1. Ensure all tests pass (`go test -cover -race ./...`)
 2. Add tests for new functionality
 3. Follow existing code style (gofmt)

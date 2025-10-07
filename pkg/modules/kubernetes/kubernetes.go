@@ -35,11 +35,12 @@ func init() {
 // @luamodule kubernetes
 //
 // Example usage in Lua:
-//   local k8s = require("kubernetes")
-//   local bytes = k8s.parse_memory("1024Mi")
-//   local millicores = k8s.parse_cpu("100m")
-//   local timestamp = k8s.parse_time("2025-10-03T16:39:00Z")
-//   local timestr = k8s.format_time(1759509540)
+//
+//	local k8s = require("kubernetes")
+//	local bytes = k8s.parse_memory("1024Mi")
+//	local millicores = k8s.parse_cpu("100m")
+//	local timestamp = k8s.parse_time("2025-10-03T16:39:00Z")
+//	local timestr = k8s.format_time(1759509540)
 func Loader(L *lua.LState) int {
 	// Create module table
 	mod := L.SetFuncs(L.NewTable(), exports)
@@ -73,7 +74,8 @@ var exports = map[string]lua.LGFunction{
 // @luareturn string|nil Error message if parsing failed
 //
 // Example:
-//   local bytes = k8s.parse_memory("1024Mi")  -- returns 1073741824
+//
+//	local bytes = k8s.parse_memory("1024Mi")  -- returns 1073741824
 func parseMemory(L *lua.LState) int {
 	str := L.CheckString(1)
 
@@ -100,8 +102,9 @@ func parseMemory(L *lua.LState) int {
 // @luareturn string|nil Error message if parsing failed
 //
 // Example:
-//   local millicores = k8s.parse_cpu("100m")  -- returns 100
-//   local millicores = k8s.parse_cpu("1")     -- returns 1000
+//
+//	local millicores = k8s.parse_cpu("100m")  -- returns 100
+//	local millicores = k8s.parse_cpu("1")     -- returns 1000
 func parseCPU(L *lua.LState) int {
 	str := L.CheckString(1)
 
@@ -128,7 +131,8 @@ func parseCPU(L *lua.LState) int {
 // @luareturn string|nil Error message if parsing failed
 //
 // Example:
-//   local timestamp = k8s.parse_time("2025-10-03T16:39:00Z")  -- returns Unix timestamp
+//
+//	local timestamp = k8s.parse_time("2025-10-03T16:39:00Z")  -- returns Unix timestamp
 func parseTime(L *lua.LState) int {
 	str := L.CheckString(1)
 
@@ -159,7 +163,8 @@ func parseTime(L *lua.LState) int {
 // @luareturn string|nil Error message if formatting failed
 //
 // Example:
-//   local timestr = k8s.format_time(1759509540)  -- returns "2025-10-03T16:39:00Z"
+//
+//	local timestr = k8s.format_time(1759509540)  -- returns "2025-10-03T16:39:00Z"
 func formatTime(L *lua.LState) int {
 	timestamp := L.CheckNumber(1)
 
@@ -183,9 +188,10 @@ func formatTime(L *lua.LState) int {
 // @luareturn table The same object with initialized defaults (modified in-place)
 //
 // Example:
-//   local k8s = require("kubernetes")
-//   k8s.init_defaults(myPod)
-//   myPod.metadata.labels.app = "myapp"  -- safe even if labels was nil before
+//
+//	local k8s = require("kubernetes")
+//	k8s.init_defaults(myPod)
+//	myPod.metadata.labels.app = "myapp"  -- safe even if labels was nil before
 func initDefaults(L *lua.LState) int {
 	obj := L.CheckTable(1)
 
@@ -228,8 +234,9 @@ func initDefaults(L *lua.LState) int {
 // @luareturn string|nil Error message if parsing failed
 //
 // Example:
-//   local seconds = k8s.parse_duration("5m")  -- returns 300
-//   local seconds = k8s.parse_duration("1h30m")  -- returns 5400
+//
+//	local seconds = k8s.parse_duration("5m")  -- returns 300
+//	local seconds = k8s.parse_duration("1h30m")  -- returns 5400
 func parseDuration(L *lua.LState) int {
 	str := L.CheckString(1)
 
@@ -255,8 +262,9 @@ func parseDuration(L *lua.LState) int {
 // @luareturn string|nil Error message if formatting failed
 //
 // Example:
-//   local duration_str = k8s.format_duration(300)  -- returns "5m0s"
-//   local duration_str = k8s.format_duration(5400)  -- returns "1h30m0s"
+//
+//	local duration_str = k8s.format_duration(300)  -- returns "5m0s"
+//	local duration_str = k8s.format_duration(5400)  -- returns "1h30m0s"
 func formatDuration(L *lua.LState) int {
 	seconds := L.CheckNumber(1)
 
@@ -277,8 +285,9 @@ func formatDuration(L *lua.LState) int {
 // @luareturn boolean true if string, false if number
 //
 // Example:
-//   local val, is_str = k8s.parse_int_or_string(8080)  -- returns 8080, false
-//   local val, is_str = k8s.parse_int_or_string("http")  -- returns "http", true
+//
+//	local val, is_str = k8s.parse_int_or_string(8080)  -- returns 8080, false
+//	local val, is_str = k8s.parse_int_or_string("http")  -- returns "http", true
 func parseIntOrString(L *lua.LState) int {
 	value := L.CheckAny(1)
 
@@ -306,10 +315,11 @@ func parseIntOrString(L *lua.LState) int {
 // @luareturn boolean true if all selector labels match
 //
 // Example:
-//   local matches = k8s.matches_selector(
-//     {app="nginx", tier="frontend"},
-//     {app="nginx"}
-//   )  -- returns true
+//
+//	local matches = k8s.matches_selector(
+//	  {app="nginx", tier="frontend"},
+//	  {app="nginx"}
+//	)  -- returns true
 func matchesSelector(L *lua.LState) int {
 	labels := L.CheckTable(1)
 	selector := L.CheckTable(2)
@@ -343,10 +353,11 @@ func matchesSelector(L *lua.LState) int {
 // @luareturn boolean true if the toleration matches the taint
 //
 // Example:
-//   local matches = k8s.toleration_matches(
-//     {key="node-role", operator="Equal", value="master", effect="NoSchedule"},
-//     {key="node-role", value="master", effect="NoSchedule"}
-//   )  -- returns true
+//
+//	local matches = k8s.toleration_matches(
+//	  {key="node-role", operator="Equal", value="master", effect="NoSchedule"},
+//	  {key="node-role", value="master", effect="NoSchedule"}
+//	)  -- returns true
 func tolerationMatches(L *lua.LState) int {
 	toleration := L.CheckTable(1)
 	taint := L.CheckTable(2)
@@ -405,8 +416,9 @@ func tolerationMatches(L *lua.LState) int {
 // @luareturn boolean true if the GVK matches
 //
 // Example:
-//   local matcher = {group = "", version = "v1", kind = "Pod"}
-//   local matches = k8s.match_gvk(pod, matcher)  -- returns true for a Pod
+//
+//	local matcher = {group = "", version = "v1", kind = "Pod"}
+//	local matches = k8s.match_gvk(pod, matcher)  -- returns true for a Pod
 func matchGVK(L *lua.LState) int {
 	obj := L.CheckTable(1)
 	matcherTable := L.CheckTable(2)

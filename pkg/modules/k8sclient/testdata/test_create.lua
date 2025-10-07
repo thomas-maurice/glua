@@ -6,11 +6,11 @@ local cm = {
 	apiVersion = "v1",
 	kind = "ConfigMap",
 	metadata = {
-		name = "new-config",
-		namespace = "default"
+		name = TEST_NEW_CONFIG_NAME,
+		namespace = TEST_NAMESPACE
 	},
 	data = {
-		foo = "bar"
+		[TEST_DATA_KEY] = TEST_DATA_VALUE
 	}
 }
 
@@ -20,12 +20,12 @@ if err then
 	error("Failed to create: " .. err)
 end
 
-if created.metadata.name ~= "new-config" then
-	error("Expected name 'new-config', got " .. tostring(created.metadata.name))
+if created.metadata.name ~= TEST_NEW_CONFIG_NAME then
+	error("Expected name '" .. TEST_NEW_CONFIG_NAME .. "', got " .. tostring(created.metadata.name))
 end
 
-if created.data.foo ~= "bar" then
-	error("Expected data.foo 'bar', got " .. tostring(created.data.foo))
+if created.data[TEST_DATA_KEY] ~= TEST_DATA_VALUE then
+	error("Expected data." .. TEST_DATA_KEY .. " '" .. TEST_DATA_VALUE .. "', got " .. tostring(created.data[TEST_DATA_KEY]))
 end
 
 return true

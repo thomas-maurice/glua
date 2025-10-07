@@ -55,6 +55,7 @@ The easiest way to run the example is using the included shell script:
 ```
 
 This will:
+
 1. Create a temporary Kind cluster
 2. Build the example program
 3. Run the Lua test script

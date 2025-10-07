@@ -7,11 +7,11 @@ local cm = {
 	apiVersion = "v1",
 	kind = "ConfigMap",
 	metadata = {
-		name = "update-config",
-		namespace = "default"
+		name = TEST_UPDATE_CONFIG_NAME,
+		namespace = TEST_NAMESPACE
 	},
 	data = {
-		original = "value"
+		[TEST_ORIGINAL_KEY] = TEST_ORIGINAL_VALUE
 	}
 }
 
@@ -21,20 +21,20 @@ if err then
 end
 
 -- Update it
-created.data.updated = "new-value"
-created.data.original = "changed"
+created.data[TEST_UPDATE_KEY] = TEST_UPDATE_VALUE
+created.data[TEST_ORIGINAL_KEY] = "changed"
 
 local updated, err = client.update(created)
 if err then
 	error("Failed to update: " .. err)
 end
 
-if updated.data.updated ~= "new-value" then
-	error("Expected data.updated 'new-value', got " .. tostring(updated.data.updated))
+if updated.data[TEST_UPDATE_KEY] ~= TEST_UPDATE_VALUE then
+	error("Expected data." .. TEST_UPDATE_KEY .. " '" .. TEST_UPDATE_VALUE .. "', got " .. tostring(updated.data[TEST_UPDATE_KEY]))
 end
 
-if updated.data.original ~= "changed" then
-	error("Expected data.original 'changed', got " .. tostring(updated.data.original))
+if updated.data[TEST_ORIGINAL_KEY] ~= "changed" then
+	error("Expected data." .. TEST_ORIGINAL_KEY .. " 'changed', got " .. tostring(updated.data[TEST_ORIGINAL_KEY]))
 end
 
 return true

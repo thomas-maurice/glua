@@ -9,13 +9,16 @@ The `kubernetes` module provides utilities for working with Kubernetes resource 
 Parses a Kubernetes memory quantity string and returns the value in bytes.
 
 **Parameters:**
+
 - `quantity` (string): The memory quantity to parse (e.g., "1024Mi", "1Gi", "512M")
 
 **Returns:**
+
 - `number`: The memory value in bytes, or nil on error
 - `string|nil`: Error message if parsing failed
 
 **Example:**
+
 ```lua
 local k8s = require("kubernetes")
 local bytes, err = k8s.parse_memory("1024Mi")
@@ -32,13 +35,16 @@ end
 Parses a Kubernetes CPU quantity string and returns the value in millicores.
 
 **Parameters:**
+
 - `quantity` (string): The CPU quantity to parse (e.g., "100m", "1", "2000m")
 
 **Returns:**
+
 - `number`: The CPU value in millicores, or nil on error
 - `string|nil`: Error message if parsing failed
 
 **Example:**
+
 ```lua
 local k8s = require("kubernetes")
 local millicores, err = k8s.parse_cpu("100m")
@@ -58,13 +64,16 @@ local mc2 = k8s.parse_cpu("1")  -- returns 1000
 Parses a Kubernetes time string (RFC3339 format) and returns a Unix timestamp.
 
 **Parameters:**
+
 - `timestr` (string): The time string in RFC3339 format (e.g., "2025-10-03T16:39:00Z")
 
 **Returns:**
+
 - `number`: The Unix timestamp, or nil on error
 - `string|nil`: Error message if parsing failed
 
 **Example:**
+
 ```lua
 local k8s = require("kubernetes")
 local timestamp, err = k8s.parse_time("2025-10-03T16:39:00Z")
@@ -81,13 +90,16 @@ end
 Converts a Unix timestamp to a Kubernetes time string in RFC3339 format.
 
 **Parameters:**
+
 - `timestamp` (number): The Unix timestamp to convert
 
 **Returns:**
+
 - `string`: The time in RFC3339 format (e.g., "2025-10-03T16:39:00Z"), or nil on error
 - `string|nil`: Error message if formatting failed
 
 **Example:**
+
 ```lua
 local k8s = require("kubernetes")
 local timestr, err = k8s.format_time(1759509540)
@@ -104,12 +116,15 @@ end
 Initializes default empty tables for `metadata.labels` and `metadata.annotations` if they are nil. This is useful for ensuring these fields are tables instead of nil, making it easier to add labels/annotations in Lua without checking for nil first.
 
 **Parameters:**
+
 - `obj` (table): The Kubernetes object (must have a metadata field)
 
 **Returns:**
+
 - `table`: The same object with initialized defaults (modified in-place)
 
 **Example:**
+
 ```lua
 local k8s = require("kubernetes")
 
@@ -135,6 +150,7 @@ print(pod.metadata.labels.app)  -- prints "myapp"
 ```
 
 **Notes:**
+
 - The function modifies the object in-place and also returns it
 - If metadata doesn't exist, it will be created
 - Existing labels and annotations are preserved
@@ -145,13 +161,16 @@ print(pod.metadata.labels.app)  -- prints "myapp"
 Parses a duration string (e.g., "5m", "1h30m") and returns the value in seconds.
 
 **Parameters:**
+
 - `duration_str` (string): The duration string to parse (e.g., "5m", "1h", "1h30m45s")
 
 **Returns:**
+
 - `number`: The duration in seconds, or nil on error
 - `string|nil`: Error message if parsing failed
 
 **Example:**
+
 ```lua
 local k8s = require("kubernetes")
 local seconds, err = k8s.parse_duration("5m")
@@ -171,13 +190,16 @@ local s2 = k8s.parse_duration("1h30m")  -- returns 5400
 Converts a duration in seconds to a duration string.
 
 **Parameters:**
+
 - `seconds` (number): The duration in seconds
 
 **Returns:**
+
 - `string`: The formatted duration string (e.g., "5m0s"), or nil on error
 - `string|nil`: Error message if formatting failed
 
 **Example:**
+
 ```lua
 local k8s = require("kubernetes")
 local duration_str, err = k8s.format_duration(300)
@@ -194,13 +216,16 @@ end
 Handles Kubernetes IntOrString type, determining if a value is a number or string.
 
 **Parameters:**
+
 - `value` (number|string): The value to check
 
 **Returns:**
+
 - `number|string`: The input value
 - `boolean`: true if the value is a string, false if it's a number
 
 **Example:**
+
 ```lua
 local k8s = require("kubernetes")
 
@@ -220,13 +245,16 @@ print(is_str2)  -- prints true
 Checks if a set of labels matches a label selector.
 
 **Parameters:**
+
 - `labels` (table): The label set to check
 - `selector` (table): The label selector (key-value pairs)
 
 **Returns:**
+
 - `boolean`: true if all selector labels match, false otherwise
 
 **Example:**
+
 ```lua
 local k8s = require("kubernetes")
 
@@ -250,13 +278,16 @@ print(matches)  -- prints true
 Checks if a toleration matches a taint.
 
 **Parameters:**
+
 - `toleration` (table): The toleration with fields: key, operator, value, effect
 - `taint` (table): The taint with fields: key, value, effect
 
 **Returns:**
+
 - `boolean`: true if the toleration matches the taint, false otherwise
 
 **Example:**
+
 ```lua
 local k8s = require("kubernetes")
 
@@ -293,13 +324,16 @@ print(matches2)  -- prints true
 Checks if a Kubernetes object matches the specified Group/Version/Kind (GVK) matcher.
 
 **Parameters:**
+
 - `obj` (table): The Kubernetes object to check
 - `matcher` (GVKMatcher): A table with `group`, `version`, and `kind` fields
 
 **Returns:**
+
 - `boolean`: true if the object's apiVersion and kind match the matcher's GVK
 
 **Example:**
+
 ```lua
 local k8s = require("kubernetes")
 
@@ -330,6 +364,7 @@ print(is_service)  -- prints false
 ```
 
 **Notes:**
+
 - For core API resources (Pod, Service, ConfigMap, etc.), use an empty string for the group field
 - For resources in other API groups (Deployment, StatefulSet, etc.), specify the group name (e.g., "apps", "batch")
 - The apiVersion field in the object should match the group/version format (e.g., "v1" for core resources, "apps/v1" for apps group)

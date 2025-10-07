@@ -7,8 +7,8 @@ import (
 	"github.com/thomas-maurice/glua/pkg/glua"
 	lua "github.com/yuin/gopher-lua"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // TestKubernetesModuleLoading: tests that kubernetes module loads correctly

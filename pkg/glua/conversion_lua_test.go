@@ -4,11 +4,10 @@ import (
 	"testing"
 	"time"
 
-	
 	lua "github.com/yuin/gopher-lua"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // TestPrimitiveConversions: tests conversion of basic types in Lua context
@@ -426,8 +425,8 @@ func TestLuaToGoConversions(t *testing.T) {
 
 	t.Run("Lua table with nested arrays to Go", func(t *testing.T) {
 		type Item struct {
-			ID    int    `json:"id"`
-			Name  string `json:"name"`
+			ID   int    `json:"id"`
+			Name string `json:"name"`
 		}
 
 		type Container struct {
@@ -488,12 +487,12 @@ func TestRoundTripConversions(t *testing.T) {
 	}
 
 	type ComplexStruct struct {
-		StringField  string            `json:"stringField"`
-		IntField     int               `json:"intField"`
-		BoolField    bool              `json:"boolField"`
-		SliceField   []string          `json:"sliceField"`
-		MapField     map[string]int    `json:"mapField"`
-		NestedStruct *NestedStruct     `json:"nestedStruct"`
+		StringField  string         `json:"stringField"`
+		IntField     int            `json:"intField"`
+		BoolField    bool           `json:"boolField"`
+		SliceField   []string       `json:"sliceField"`
+		MapField     map[string]int `json:"mapField"`
+		NestedStruct *NestedStruct  `json:"nestedStruct"`
 	}
 
 	original := ComplexStruct{

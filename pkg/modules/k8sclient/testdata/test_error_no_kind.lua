@@ -5,11 +5,11 @@
 local obj = {
 	apiVersion = "v1",
 	metadata = {
-		name = "test-config",
-		namespace = "default"
+		name = TEST_CONFIG_NAME,
+		namespace = TEST_NAMESPACE
 	},
 	data = {
-		key = "value"
+		[TEST_CONFIG_KEY] = TEST_CONFIG_VALUE
 	}
 }
 

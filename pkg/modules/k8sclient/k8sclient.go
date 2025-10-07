@@ -36,15 +36,17 @@ func NewClient(config *rest.Config) (*Client, error) {
 
 // Loader: creates and returns the k8sclient module for Lua.
 // This function should be called with a rest.Config and then registered:
-//   loader := k8sclient.Loader(config)
-//   L.PreloadModule("k8sclient", loader)
+//
+//	loader := k8sclient.Loader(config)
+//	L.PreloadModule("k8sclient", loader)
 //
 // @luamodule k8sclient
 //
 // Example usage in Lua:
-//   local client = require("k8sclient")
-//   local gvk = {group = "", version = "v1", kind = "ConfigMap"}
-//   local cm, err = client.get(gvk, "default", "my-config")
+//
+//	local client = require("k8sclient")
+//	local gvk = {group = "", version = "v1", kind = "ConfigMap"}
+//	local cm, err = client.get(gvk, "default", "my-config")
 func Loader(config *rest.Config) lua.LGFunction {
 	client, err := NewClient(config)
 	if err != nil {
@@ -77,8 +79,9 @@ func Loader(config *rest.Config) lua.LGFunction {
 // @luareturn string|nil Error message if retrieval failed
 //
 // Example:
-//   local gvk = {group = "", version = "v1", kind = "ConfigMap"}
-//   local cm, err = client.get(gvk, "default", "my-config")
+//
+//	local gvk = {group = "", version = "v1", kind = "ConfigMap"}
+//	local cm, err = client.get(gvk, "default", "my-config")
 func (c *Client) get(L *lua.LState) int {
 	gvkTable := L.CheckTable(1)
 	namespace := L.CheckString(2)
@@ -135,13 +138,14 @@ func (c *Client) get(L *lua.LState) int {
 // @luareturn string|nil Error message if creation failed
 //
 // Example:
-//   local cm = {
-//     apiVersion = "v1",
-//     kind = "ConfigMap",
-//     metadata = {name = "my-config", namespace = "default"},
-//     data = {key = "value"}
-//   }
-//   local created, err = client.create(cm)
+//
+//	local cm = {
+//	  apiVersion = "v1",
+//	  kind = "ConfigMap",
+//	  metadata = {name = "my-config", namespace = "default"},
+//	  data = {key = "value"}
+//	}
+//	local created, err = client.create(cm)
 func (c *Client) create(L *lua.LState) int {
 	objTable := L.CheckTable(1)
 
@@ -206,8 +210,9 @@ func (c *Client) create(L *lua.LState) int {
 // @luareturn string|nil Error message if update failed
 //
 // Example:
-//   cm.data.newkey = "newvalue"
-//   local updated, err = client.update(cm)
+//
+//	cm.data.newkey = "newvalue"
+//	local updated, err = client.update(cm)
 func (c *Client) update(L *lua.LState) int {
 	objTable := L.CheckTable(1)
 
@@ -273,8 +278,9 @@ func (c *Client) update(L *lua.LState) int {
 // @luareturn string|nil Error message if deletion failed, nil on success
 //
 // Example:
-//   local gvk = {group = "", version = "v1", kind = "ConfigMap"}
-//   local err = client.delete(gvk, "default", "my-config")
+//
+//	local gvk = {group = "", version = "v1", kind = "ConfigMap"}
+//	local err = client.delete(gvk, "default", "my-config")
 func (c *Client) delete(L *lua.LState) int {
 	gvkTable := L.CheckTable(1)
 	namespace := L.CheckString(2)
@@ -320,8 +326,9 @@ func (c *Client) delete(L *lua.LState) int {
 // @luareturn string|nil Error message if listing failed
 //
 // Example:
-//   local gvk = {group = "", version = "v1", kind = "ConfigMap"}
-//   local items, err = client.list(gvk, "default")
+//
+//	local gvk = {group = "", version = "v1", kind = "ConfigMap"}
+//	local items, err = client.list(gvk, "default")
 func (c *Client) list(L *lua.LState) int {
 	gvkTable := L.CheckTable(1)
 	namespace := L.CheckString(2)

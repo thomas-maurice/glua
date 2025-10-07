@@ -13,18 +13,18 @@ import (
 
 // LuaModule represents a discovered Lua module
 type LuaModule struct {
-	Name               string
-	Functions          []*LuaFunction
-	CustomAnnotations  []string // Module-level custom annotations
+	Name              string
+	Functions         []*LuaFunction
+	CustomAnnotations []string // Module-level custom annotations
 }
 
 // LuaFunction represents a Lua function exported by a module
 type LuaFunction struct {
-	Name               string
-	Description        string
-	Params             []*LuaParam
-	Returns            []*LuaReturn
-	CustomAnnotations  []string // Function-level custom annotations
+	Name              string
+	Description       string
+	Params            []*LuaParam
+	Returns           []*LuaReturn
+	CustomAnnotations []string // Function-level custom annotations
 }
 
 // LuaParam represents a function parameter
@@ -101,9 +101,9 @@ func (a *Analyzer) parseFile(filename string) error {
 		// Check if this is a module loader
 		if moduleName := a.extractModuleName(comment); moduleName != "" {
 			currentModule = &LuaModule{
-				Name:               moduleName,
-				Functions:          make([]*LuaFunction, 0),
-				CustomAnnotations:  a.extractCustomAnnotations(comment),
+				Name:              moduleName,
+				Functions:         make([]*LuaFunction, 0),
+				CustomAnnotations: a.extractCustomAnnotations(comment),
 			}
 			a.modules[moduleName] = currentModule
 			continue

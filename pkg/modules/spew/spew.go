@@ -13,9 +13,10 @@ import (
 // @luamodule spew
 //
 // Example usage in Lua:
-//   local spew = require("spew")
-//   spew.dump({name="John", items={1,2,3}})
-//   local str = spew.sdump({key="value"})
+//
+//	local spew = require("spew")
+//	spew.dump({name="John", items={1,2,3}})
+//	local str = spew.sdump({key="value"})
 func Loader(L *lua.LState) int {
 	// Create module table
 	mod := L.SetFuncs(L.NewTable(), exports)
@@ -38,9 +39,10 @@ var exports = map[string]lua.LGFunction{
 // @luaparam value any The Lua value to dump (table, string, number, etc.)
 //
 // Example:
-//   local spew = require("spew")
-//   spew.dump({name="John", age=30, items={1,2,3}})
-//   -- Prints detailed representation to stdout
+//
+//	local spew = require("spew")
+//	spew.dump({name="John", age=30, items={1,2,3}})
+//	-- Prints detailed representation to stdout
 func dump(L *lua.LState) int {
 	value := L.CheckAny(1)
 
@@ -61,9 +63,10 @@ func dump(L *lua.LState) int {
 // @luareturn string A detailed string representation of the value
 //
 // Example:
-//   local spew = require("spew")
-//   local str = spew.sdump({name="John", age=30})
-//   print(str)  -- Prints the detailed representation
+//
+//	local spew = require("spew")
+//	local str = spew.sdump({name="John", age=30})
+//	print(str)  -- Prints the detailed representation
 func sdump(L *lua.LState) int {
 	value := L.CheckAny(1)
 

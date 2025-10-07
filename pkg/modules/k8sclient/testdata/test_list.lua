@@ -7,11 +7,11 @@ local cm1 = {
 	apiVersion = "v1",
 	kind = "ConfigMap",
 	metadata = {
-		name = "list-config-1",
-		namespace = "default"
+		name = TEST_LIST_CONFIG_1,
+		namespace = TEST_NAMESPACE
 	},
 	data = {
-		key1 = "value1"
+		[TEST_LIST_KEY_1] = TEST_LIST_VALUE_1
 	}
 }
 
@@ -19,11 +19,11 @@ local cm2 = {
 	apiVersion = "v1",
 	kind = "ConfigMap",
 	metadata = {
-		name = "list-config-2",
-		namespace = "default"
+		name = TEST_LIST_CONFIG_2,
+		namespace = TEST_NAMESPACE
 	},
 	data = {
-		key2 = "value2"
+		[TEST_LIST_KEY_2] = TEST_LIST_VALUE_2
 	}
 }
 
@@ -39,7 +39,7 @@ end
 
 -- List ConfigMaps
 local gvk = {group = "", version = "v1", kind = "ConfigMap"}
-local items, err = client.list(gvk, "default")
+local items, err = client.list(gvk, TEST_NAMESPACE)
 
 if err then
 	error("Failed to list: " .. err)

@@ -34,15 +34,18 @@ All functions use the GVKMatcher type for specifying resource types:
 Retrieves a single Kubernetes resource.
 
 **Parameters:**
+
 - `gvk` (GVKMatcher): The resource type to get
 - `namespace` (string): The namespace of the resource
 - `name` (string): The name of the resource
 
 **Returns:**
+
 - `table|nil`: The Kubernetes object as a Lua table, or nil on error
 - `string|nil`: Error message if retrieval failed
 
 **Example:**
+
 ```lua
 local client = require("k8sclient")
 local gvk = {group = "", version = "v1", kind = "Pod"}
@@ -60,13 +63,16 @@ print("Pod name: " .. pod.metadata.name)
 Creates a new Kubernetes resource.
 
 **Parameters:**
+
 - `object` (table): The Kubernetes object to create (must have `apiVersion`, `kind`, and `metadata` fields)
 
 **Returns:**
+
 - `table|nil`: The created object with server-generated fields, or nil on error
 - `string|nil`: Error message if creation failed
 
 **Example:**
+
 ```lua
 local client = require("k8sclient")
 
@@ -97,13 +103,16 @@ print("Created ConfigMap with UID: " .. created.metadata.uid)
 Updates an existing Kubernetes resource.
 
 **Parameters:**
+
 - `object` (table): The Kubernetes object to update (must include `metadata.resourceVersion`)
 
 **Returns:**
+
 - `table|nil`: The updated object, or nil on error
 - `string|nil`: Error message if update failed
 
 **Example:**
+
 ```lua
 local client = require("k8sclient")
 local gvk = {group = "", version = "v1", kind = "ConfigMap"}
@@ -127,14 +136,17 @@ end
 Deletes a Kubernetes resource.
 
 **Parameters:**
+
 - `gvk` (GVKMatcher): The resource type to delete
 - `namespace` (string): The namespace of the resource
 - `name` (string): The name of the resource
 
 **Returns:**
+
 - `string|nil`: Error message if deletion failed, or nil on success
 
 **Example:**
+
 ```lua
 local client = require("k8sclient")
 local gvk = {group = "", version = "v1", kind = "ConfigMap"}
@@ -153,14 +165,17 @@ print("ConfigMap deleted successfully")
 Lists all resources of a given type in a namespace.
 
 **Parameters:**
+
 - `gvk` (GVKMatcher): The resource type to list
 - `namespace` (string): The namespace to list resources from
 
 **Returns:**
+
 - `table|nil`: Array of Kubernetes objects, or nil on error
 - `string|nil`: Error message if listing failed
 
 **Example:**
+
 ```lua
 local client = require("k8sclient")
 local gvk = {group = "", version = "v1", kind = "Pod"}

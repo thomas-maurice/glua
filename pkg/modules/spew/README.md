@@ -9,12 +9,15 @@ The `spew` module provides deep pretty-printing and debugging functionality for 
 Prints a detailed representation of a Lua value to stdout with syntax highlighting and type information.
 
 **Parameters:**
+
 - `value` (any): The Lua value to dump (table, string, number, boolean, nil, etc.)
 
 **Returns:**
+
 - None (prints directly to stdout)
 
 **Example:**
+
 ```lua
 local spew = require("spew")
 
@@ -41,12 +44,15 @@ spew.dump(data)
 Returns a detailed string representation of a Lua value. Unlike `dump()`, this returns the string instead of printing to stdout.
 
 **Parameters:**
+
 - `value` (any): The Lua value to dump
 
 **Returns:**
+
 - `string`: A detailed string representation of the value with type information
 
 **Example:**
+
 ```lua
 local spew = require("spew")
 

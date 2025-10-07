@@ -516,8 +516,8 @@ func TestTranslator_RoundTrip_NestedArrays(t *testing.T) {
 
 // Helper types and functions for Kubernetes Pod testing
 type podStruct struct {
-	Kind       string       `json:"kind"`
-	APIVersion string       `json:"apiVersion"`
+	Kind       string         `json:"kind"`
+	APIVersion string         `json:"apiVersion"`
 	Metadata   metadataStruct `json:"metadata"`
 }
 

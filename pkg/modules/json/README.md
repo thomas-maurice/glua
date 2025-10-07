@@ -9,13 +9,16 @@ The `json` module provides JSON parsing and serialization functionality for Lua 
 Parses a JSON string and returns a Lua table.
 
 **Parameters:**
+
 - `jsonstr` (string): The JSON string to parse
 
 **Returns:**
+
 - `table`: The parsed JSON as a Lua table (or nil on error)
 - `string|nil`: Error message if parsing failed
 
 **Example:**
+
 ```lua
 local json = require("json")
 local tbl, err = json.parse('{"name":"John","age":30}')
@@ -33,13 +36,16 @@ end
 Converts a Lua table to a JSON string.
 
 **Parameters:**
+
 - `tbl` (table): The Lua table to convert to JSON
 
 **Returns:**
+
 - `string`: The JSON string (or nil on error)
 - `string|nil`: Error message if conversion failed
 
 **Example:**
+
 ```lua
 local json = require("json")
 local str, err = json.stringify({name="Jane", age=25})

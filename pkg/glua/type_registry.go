@@ -9,11 +9,11 @@ import (
 
 // TypeInfo stores information about a registered Go type for Lua stub generation
 type TypeInfo struct {
-	Name       string              // The Lua-friendly type name (e.g., "corev1.Pod")
-	GoType     reflect.Type        // The original Go type
+	Name       string                // The Lua-friendly type name (e.g., "corev1.Pod")
+	GoType     reflect.Type          // The original Go type
 	Fields     map[string]*FieldInfo // Map of field name to field information
-	IsArray    bool                // Whether this is an array type
-	ElementKey string              // For arrays, the type key of the element
+	IsArray    bool                  // Whether this is an array type
+	ElementKey string                // For arrays, the type key of the element
 }
 
 // FieldInfo stores information about a struct field for Lua stub generation
@@ -27,7 +27,7 @@ type FieldInfo struct {
 // It processes Go types recursively and generates Lua LSP annotations.
 type TypeRegistry struct {
 	types map[string]*TypeInfo // Map of type key to type information (prevents duplicates)
-	queue []interface{}         // Queue of objects to process (for discovering types)
+	queue []interface{}        // Queue of objects to process (for discovering types)
 }
 
 // NewTypeRegistry: creates a new TypeRegistry instance
@@ -238,9 +238,10 @@ func (r *TypeRegistry) Process() error {
 // Returns a string containing ---@class and ---@field annotations.
 //
 // Example output:
-//   ---@class corev1.Pod
-//   ---@field metadata corev1.ObjectMeta
-//   ---@field spec corev1.PodSpec
+//
+//	---@class corev1.Pod
+//	---@field metadata corev1.ObjectMeta
+//	---@field spec corev1.PodSpec
 func (r *TypeRegistry) GenerateStubs() (string, error) {
 	var sb strings.Builder
 

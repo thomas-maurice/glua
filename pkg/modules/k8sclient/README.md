@@ -191,6 +191,7 @@ cd example/kubernetes
 ```
 
 This will:
+
 1. Create a Kind cluster
 2. Run the Lua integration test
 3. Clean up the cluster

@@ -13,9 +13,10 @@ import (
 // @luamodule json
 //
 // Example usage in Lua:
-//   local json = require("json")
-//   local tbl = json.parse('{"name":"John","age":30}')
-//   local str = json.stringify({name="Jane", age=25})
+//
+//	local json = require("json")
+//	local tbl = json.parse('{"name":"John","age":30}')
+//	local str = json.stringify({name="Jane", age=25})
 func Loader(L *lua.LState) int {
 	// Create module table
 	mod := L.SetFuncs(L.NewTable(), exports)
@@ -40,12 +41,13 @@ var exports = map[string]lua.LGFunction{
 // @luareturn string|nil Error message if parsing failed
 //
 // Example:
-//   local tbl, err = json.parse('{"name":"John","age":30}')
-//   if err then
-//       print("Error: " .. err)
-//   else
-//       print(tbl.name)  -- prints "John"
-//   end
+//
+//	local tbl, err = json.parse('{"name":"John","age":30}')
+//	if err then
+//	    print("Error: " .. err)
+//	else
+//	    print(tbl.name)  -- prints "John"
+//	end
 func parse(L *lua.LState) int {
 	jsonStr := L.CheckString(1)
 
@@ -73,12 +75,13 @@ func parse(L *lua.LState) int {
 // @luareturn string|nil Error message if conversion failed
 //
 // Example:
-//   local str, err = json.stringify({name="Jane", age=25})
-//   if err then
-//       print("Error: " .. err)
-//   else
-//       print(str)  -- prints '{"age":25,"name":"Jane"}'
-//   end
+//
+//	local str, err = json.stringify({name="Jane", age=25})
+//	if err then
+//	    print("Error: " .. err)
+//	else
+//	    print(str)  -- prints '{"age":25,"name":"Jane"}'
+//	end
 func stringify(L *lua.LState) int {
 	luaValue := L.CheckAny(1)
 

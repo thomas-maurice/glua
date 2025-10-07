@@ -67,7 +67,35 @@ func setupFakeClient(objects ...runtime.Object) *Client {
 	}
 }
 
-// setupLuaWithClient creates a Lua state with the k8sclient module loaded
+// Test constants
+const (
+	testNamespace        = "default"
+	testConfigName       = "test-config"
+	testConfigKey        = "key1"
+	testConfigValue      = "value1"
+	testNewConfigName    = "new-config"
+	testDataKey          = "foo"
+	testDataValue        = "bar"
+	testUpdateKey        = "updated"
+	testUpdateValue      = "new-value"
+	testDeleteConfigName = "delete-config"
+	testDeleteDataKey    = "test"
+	testDeleteDataValue  = "data"
+	testUpdateConfigName = "update-config"
+	testOriginalKey      = "original"
+	testOriginalValue    = "value"
+	testIntegrationName  = "integration-config"
+	testInitialKey       = "initial"
+	testInitialValue     = "value"
+	testListConfig1      = "list-config-1"
+	testListConfig2      = "list-config-2"
+	testListKey1         = "key1"
+	testListValue1       = "value1"
+	testListKey2         = "key2"
+	testListValue2       = "value2"
+)
+
+// setupLuaWithClient creates a Lua state with the k8sclient module loaded and test constants
 func setupLuaWithClient(client *Client) *lua.LState {
 	L := lua.NewState()
 
@@ -82,6 +110,32 @@ func setupLuaWithClient(client *Client) *lua.LState {
 
 	mod := L.SetFuncs(L.NewTable(), exports)
 	L.SetGlobal("client", mod)
+
+	// Set test constants as globals
+	L.SetGlobal("TEST_NAMESPACE", lua.LString(testNamespace))
+	L.SetGlobal("TEST_CONFIG_NAME", lua.LString(testConfigName))
+	L.SetGlobal("TEST_CONFIG_KEY", lua.LString(testConfigKey))
+	L.SetGlobal("TEST_CONFIG_VALUE", lua.LString(testConfigValue))
+	L.SetGlobal("TEST_NEW_CONFIG_NAME", lua.LString(testNewConfigName))
+	L.SetGlobal("TEST_DATA_KEY", lua.LString(testDataKey))
+	L.SetGlobal("TEST_DATA_VALUE", lua.LString(testDataValue))
+	L.SetGlobal("TEST_UPDATE_KEY", lua.LString(testUpdateKey))
+	L.SetGlobal("TEST_UPDATE_VALUE", lua.LString(testUpdateValue))
+	L.SetGlobal("TEST_DELETE_CONFIG_NAME", lua.LString(testDeleteConfigName))
+	L.SetGlobal("TEST_DELETE_DATA_KEY", lua.LString(testDeleteDataKey))
+	L.SetGlobal("TEST_DELETE_DATA_VALUE", lua.LString(testDeleteDataValue))
+	L.SetGlobal("TEST_UPDATE_CONFIG_NAME", lua.LString(testUpdateConfigName))
+	L.SetGlobal("TEST_ORIGINAL_KEY", lua.LString(testOriginalKey))
+	L.SetGlobal("TEST_ORIGINAL_VALUE", lua.LString(testOriginalValue))
+	L.SetGlobal("TEST_INTEGRATION_NAME", lua.LString(testIntegrationName))
+	L.SetGlobal("TEST_INITIAL_KEY", lua.LString(testInitialKey))
+	L.SetGlobal("TEST_INITIAL_VALUE", lua.LString(testInitialValue))
+	L.SetGlobal("TEST_LIST_CONFIG_1", lua.LString(testListConfig1))
+	L.SetGlobal("TEST_LIST_CONFIG_2", lua.LString(testListConfig2))
+	L.SetGlobal("TEST_LIST_KEY_1", lua.LString(testListKey1))
+	L.SetGlobal("TEST_LIST_VALUE_1", lua.LString(testListValue1))
+	L.SetGlobal("TEST_LIST_KEY_2", lua.LString(testListKey2))
+	L.SetGlobal("TEST_LIST_VALUE_2", lua.LString(testListValue2))
 
 	return L
 }
