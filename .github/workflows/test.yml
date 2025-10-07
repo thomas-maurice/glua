@@ -91,7 +91,7 @@ jobs:
     - name: Run example
       working-directory: ./example
       run: |
-        go run main.go
+        go run .
         echo "✓ Example completed successfully"
 
     - name: Generate stubs
