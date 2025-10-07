@@ -30,7 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// GVKMatcher represents a Kubernetes Group/Version/Kind matcher.
+// GVKMatcher: represents a Kubernetes Group/Version/Kind matcher.
 type GVKMatcher struct {
 	Group   string
 	Version string
@@ -38,7 +38,9 @@ type GVKMatcher struct {
 }
 
 var (
-	translator   = glua.NewTranslator()
+	// translator: handles Go-Lua type conversion
+	translator = glua.NewTranslator()
+	// typeRegistry: manages type registration for stub generation
 	typeRegistry = glua.NewTypeRegistry()
 )
 
@@ -70,7 +72,7 @@ func Loader(L *lua.LState) int {
 	return 1
 }
 
-// exports maps Lua function names to Go implementations
+// exports: maps Lua function names to Go implementations
 var exports = map[string]lua.LGFunction{
 	"parse_memory":        parseMemory,
 	"parse_cpu":           parseCPU,

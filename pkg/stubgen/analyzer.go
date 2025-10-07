@@ -31,14 +31,14 @@ import (
 	"strings"
 )
 
-// LuaModule represents a discovered Lua module
+// LuaModule: represents a discovered Lua module
 type LuaModule struct {
 	Name              string
 	Functions         []*LuaFunction
 	CustomAnnotations []string // Module-level custom annotations
 }
 
-// LuaFunction represents a Lua function exported by a module
+// LuaFunction: represents a Lua function exported by a module
 type LuaFunction struct {
 	Name              string
 	Description       string
@@ -47,20 +47,20 @@ type LuaFunction struct {
 	CustomAnnotations []string // Function-level custom annotations
 }
 
-// LuaParam represents a function parameter
+// LuaParam: represents a function parameter
 type LuaParam struct {
 	Name        string
 	Type        string
 	Description string
 }
 
-// LuaReturn represents a function return value
+// LuaReturn: represents a function return value
 type LuaReturn struct {
 	Type        string
 	Description string
 }
 
-// Analyzer scans Go source files and extracts Lua module definitions
+// Analyzer: scans Go source files and extracts Lua module definitions
 type Analyzer struct {
 	modules map[string]*LuaModule
 }

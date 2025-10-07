@@ -46,7 +46,7 @@ func Loader(L *lua.LState) int {
 	return 1
 }
 
-// exports maps Lua function names to Go implementations
+// exports: maps Lua function names to Go implementations
 var exports = map[string]lua.LGFunction{
 	"parse":     parse,
 	"stringify": stringify,

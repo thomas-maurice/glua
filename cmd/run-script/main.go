@@ -35,6 +35,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// main: entry point for running Lua scripts with Kubernetes module support
 func main() {
 	// Check if script file is provided
 	if len(os.Args) < 2 {
@@ -133,6 +134,7 @@ func main() {
 	fmt.Println("✓ Script execution completed successfully")
 }
 
+// generateStubs: creates Lua LSP type annotations for Kubernetes types
 func generateStubs() error {
 	treg := glua.NewTypeRegistry()
 

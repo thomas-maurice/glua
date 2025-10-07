@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// GetPod: returns a sample Kubernetes Pod for testing and demonstrations
 func GetPod() *corev1.Pod {
 	var pod corev1.Pod
 
@@ -37,6 +38,7 @@ func GetPod() *corev1.Pod {
 	return &pod
 }
 
+// podJson: contains a sample Kubernetes Pod JSON representation
 var podJson = `
 {
     "apiVersion": "v1",

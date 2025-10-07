@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+// main: entry point for k8sclient example demonstrating Kubernetes API access
 func main() {
 	var (
 		kubeconfig = flag.String("kubeconfig", "", "Path to kubeconfig file (defaults to $HOME/.kube/config)")

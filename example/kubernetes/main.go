@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+// main: entry point for running Lua scripts with k8sclient module
 func main() {
 	if len(os.Args) < 2 {
 		log.Fatal("Usage: kubernetes <script.lua>")

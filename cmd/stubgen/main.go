@@ -28,6 +28,7 @@ import (
 	"github.com/thomas-maurice/glua/pkg/stubgen"
 )
 
+// main: entry point for the stubgen command-line tool
 func main() {
 	var (
 		dir       = flag.String("dir", ".", "Directory to scan for Go module files")

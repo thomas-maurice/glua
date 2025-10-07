@@ -35,9 +35,10 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// translator: handles conversion between Go and Lua values
 var translator = glua.NewTranslator()
 
-// Client holds the Kubernetes dynamic client
+// Client: holds the Kubernetes dynamic client
 type Client struct {
 	dynamic dynamic.Interface
 }

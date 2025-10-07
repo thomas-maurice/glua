@@ -28,7 +28,7 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-// Translator handles conversion between Go values and Lua values
+// Translator: handles conversion between Go values and Lua values
 type Translator struct{}
 
 // NewTranslator: creates a new Translator instance
@@ -36,7 +36,7 @@ func NewTranslator() *Translator {
 	return &Translator{}
 }
 
-// ToLua converts an arbitrary Go value to a Lua value.
+// ToLua: converts an arbitrary Go value to a Lua value.
 // It supports primitive types (string, int64, etc.) and complex structs.
 // The conversion process:
 //  1. Marshal the object to JSON
@@ -119,7 +119,7 @@ func (t *Translator) toLuaValue(L *lua.LState, v interface{}) (lua.LValue, error
 	}
 }
 
-// FromLua converts a Lua value to a Go value.
+// FromLua: converts a Lua value to a Go value.
 // Works similar to json.Unmarshal - pass a state, Lua value and output object.
 // The conversion process:
 //  1. Create Go value from Lua value (map[string]interface{} for tables, primitives for others)

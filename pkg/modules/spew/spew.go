@@ -46,7 +46,7 @@ func Loader(L *lua.LState) int {
 	return 1
 }
 
-// exports maps Lua function names to Go implementations
+// exports: maps Lua function names to Go implementations
 var exports = map[string]lua.LGFunction{
 	"dump":  dump,
 	"sdump": sdump,
@@ -122,6 +122,7 @@ func luaToGo(L *lua.LState, value lua.LValue) interface{} {
 	}
 }
 
+// convertLuaTable: converts a Lua table to either a Go slice or map based on key structure
 func convertLuaTable(L *lua.LState, table *lua.LTable) interface{} {
 	maxN, isArray, hasElements := analyzeTableStructure(table)
 
@@ -132,6 +133,7 @@ func convertLuaTable(L *lua.LState, table *lua.LTable) interface{} {
 	return convertTableToMap(L, table)
 }
 
+// analyzeTableStructure: determines if a Lua table should be treated as an array or map
 func analyzeTableStructure(table *lua.LTable) (maxN int, isArray bool, hasElements bool) {
 	isArray = true
 	table.ForEach(func(key lua.LValue, val lua.LValue) {
@@ -151,6 +153,7 @@ func analyzeTableStructure(table *lua.LTable) (maxN int, isArray bool, hasElemen
 	return
 }
 
+// convertTableToArray: converts a Lua table with numeric indices to a Go slice
 func convertTableToArray(L *lua.LState, table *lua.LTable, maxN int) []interface{} {
 	arr := make([]interface{}, maxN)
 	for i := 1; i <= maxN; i++ {
@@ -159,6 +162,7 @@ func convertTableToArray(L *lua.LState, table *lua.LTable, maxN int) []interface
 	return arr
 }
 
+// convertTableToMap: converts a Lua table with string keys to a Go map
 func convertTableToMap(L *lua.LState, table *lua.LTable) map[string]interface{} {
 	obj := make(map[string]interface{})
 	table.ForEach(func(key lua.LValue, val lua.LValue) {

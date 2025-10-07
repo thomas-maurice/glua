@@ -27,7 +27,7 @@ import (
 	"strings"
 )
 
-// TypeInfo stores information about a registered Go type for Lua stub generation
+// TypeInfo: stores information about a registered Go type for Lua stub generation
 type TypeInfo struct {
 	Name       string                // The Lua-friendly type name (e.g., "corev1.Pod")
 	GoType     reflect.Type          // The original Go type
@@ -36,14 +36,14 @@ type TypeInfo struct {
 	ElementKey string                // For arrays, the type key of the element
 }
 
-// FieldInfo stores information about a struct field for Lua stub generation
+// FieldInfo: stores information about a struct field for Lua stub generation
 type FieldInfo struct {
 	Name    string // The field name (from JSON tag)
 	TypeKey string // The Lua type annotation (e.g., "string", "number", "corev1.Container")
 	IsArray bool   // Whether this field is an array
 }
 
-// TypeRegistry manages type registration and stub generation for Lua.
+// TypeRegistry: manages type registration and stub generation for Lua.
 // It processes Go types recursively and generates Lua LSP annotations.
 type TypeRegistry struct {
 	types map[string]*TypeInfo // Map of type key to type information (prevents duplicates)

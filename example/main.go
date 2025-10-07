@@ -33,6 +33,7 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
+// main: entry point demonstrating glua features with comprehensive examples
 func main() {
 	start := time.Now()
 	defer func() {
@@ -101,6 +102,7 @@ func main() {
 	printFooter()
 }
 
+// generateStubs: registers Kubernetes types and generates Lua annotations
 func generateStubs() error {
 	treg := glua.NewTypeRegistry()
 

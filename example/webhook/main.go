@@ -39,6 +39,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+// Config: holds the webhook server configuration
 type Config struct {
 	Address        string
 	CertFile       string
@@ -48,6 +49,7 @@ type Config struct {
 	Kubeconfig     string
 }
 
+// WebhookServer: represents the mutating webhook server instance
 type WebhookServer struct {
 	config    *Config
 	logger    *slog.Logger
@@ -265,6 +267,7 @@ func (ws *WebhookServer) Serve() error {
 	return ws.engine.RunTLS(ws.config.Address, ws.config.CertFile, ws.config.KeyFile)
 }
 
+// main: entry point for the webhook server
 func main() {
 	var (
 		address        = flag.String("address", ":8443", "Address to listen on")
