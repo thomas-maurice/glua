@@ -18,16 +18,42 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
--- k8sclient example: CRUD operations with nginx pod
--- This script demonstrates creating, reading, updating, and deleting Kubernetes resources
+-- k8sclient example: Complete CRUD operations demonstration
+--
+-- This script demonstrates the full lifecycle of Kubernetes resource management from Lua:
+-- - Dynamic client operations (create, get, update, delete, list)
+-- - Working with multiple resource types (Pods, ConfigMaps, Services)
+-- - Managing resource relationships (ConfigMap → Pod, Service → Pod)
+-- - Label selectors and resource queries
+-- - Practical nginx deployment with configuration
+--
+-- Use cases:
+-- - Admission controllers that need to query cluster state
+-- - Policy engines validating resource relationships
+-- - Custom operators written in Lua
+-- - GitOps reconciliation scripts
+-- - Testing and development automation
 
-local client = require("k8sclient")
+local k8sclient = require("k8sclient")
+local client = k8sclient.new_client()
 
-print("=== K8s Client Example: nginx Pod CRUD Operations ===\n")
+print("╔═══════════════════════════════════════════════════════════════╗")
+print("║   K8s Client Example: Full Resource Lifecycle Management     ║")
+print("╚═══════════════════════════════════════════════════════════════╝")
+print("")
+print("This example demonstrates:")
+print("  • Creating ConfigMaps for application configuration")
+print("  • Deploying Pods with volume mounts and labels")
+print("  • Creating Services to expose applications")
+print("  • Querying resources with list operations")
+print("  • Updating resources with annotations")
+print("  • Deleting resources with cascading cleanup")
+print("")
 
--- Define GVK for Pod
+-- Define GVKs (Group/Version/Kind) for different resource types
 local pod_gvk = {group = "", version = "v1", kind = "Pod"}
 local configmap_gvk = {group = "", version = "v1", kind = "ConfigMap"}
+local service_gvk = {group = "", version = "v1", kind = "Service"}
 
 -- Step 1: Create a ConfigMap with nginx config
 print("1. Creating ConfigMap with nginx config...")
@@ -118,6 +144,46 @@ end
 
 print("   ✓ Pod created: " .. created_pod.metadata.name)
 print("   ✓ UID: " .. created_pod.metadata.uid)
+
+-- Step 2b: Create a Service to expose the Pod
+print("\n2b. Creating Service to expose nginx...")
+
+---@type corev1.Service
+local service = {
+	apiVersion = "v1",
+	kind = "Service",
+	metadata = {
+		name = "nginx-service",
+		namespace = "default",
+		labels = {
+			app = "nginx"
+		}
+	},
+	spec = {
+		selector = {
+			app = "nginx"
+		},
+		ports = {
+			{
+				protocol = "TCP",
+				port = 80,
+				targetPort = 8080,
+				name = "http"
+			}
+		},
+		type = "ClusterIP"
+	}
+}
+
+local created_svc, err = client.create(service)
+if err then
+	error("Failed to create Service: " .. err)
+end
+
+print("   ✓ Service created: " .. created_svc.metadata.name)
+print("   ✓ Type: " .. created_svc.spec.type)
+print("   ✓ Cluster IP: " .. (created_svc.spec.clusterIP or "pending"))
+print("   ✓ Selects pods with: app=" .. created_svc.spec.selector.app)
 
 -- Step 3: Get the Pod
 print("\n3. Retrieving Pod...")
@@ -218,8 +284,18 @@ else
 	print("   ⚠ Pod still exists but deletion was requested")
 end
 
--- Step 9: Delete the ConfigMap
-print("\n9. Deleting ConfigMap...")
+-- Step 9: Delete the Service
+print("\n9. Deleting Service...")
+
+local err = client.delete(service_gvk, "default", "nginx-service")
+if err then
+	error("Failed to delete Service: " .. err)
+end
+
+print("   ✓ Service deleted successfully")
+
+-- Step 10: Delete the ConfigMap
+print("\n10. Deleting ConfigMap...")
 
 local err = client.delete(configmap_gvk, "default", "nginx-config")
 if err then
@@ -228,8 +304,8 @@ end
 
 print("   ✓ ConfigMap deleted successfully")
 
--- Step 10: Final verification
-print("\n10. Final verification - listing all resources...")
+-- Step 11: Final verification
+print("\n11. Final verification - listing all resources...")
 
 local final_pods, err = client.list(pod_gvk, "default")
 if err then
@@ -268,4 +344,33 @@ if user_pods == 0 and user_cms == 0 then
 	print("   ✓ All user resources cleaned up successfully!")
 end
 
-print("\n=== All CRUD operations completed successfully! ===")
+print("")
+print("╔═══════════════════════════════════════════════════════════════╗")
+print("║            All Operations Completed Successfully!            ║")
+print("╚═══════════════════════════════════════════════════════════════╝")
+print("")
+print("Summary of operations performed:")
+print("  ✓ Created ConfigMap with nginx configuration")
+print("  ✓ Created Pod with volume mount from ConfigMap")
+print("  ✓ Created Service to expose Pod")
+print("  ✓ Retrieved resources with get() operations")
+print("  ✓ Updated Pod with annotations")
+print("  ✓ Listed resources with list() operations")
+print("  ✓ Deleted all resources with delete() operations")
+print("  ✓ Verified cleanup completion")
+print("")
+print("Key capabilities demonstrated:")
+print("  • Dynamic Kubernetes client from Lua")
+print("  • CRUD operations on multiple resource types")
+print("  • Resource relationships (ConfigMap → Pod, Service → Pod)")
+print("  • Label-based selectors")
+print("  • Annotation updates")
+print("  • Cascading deletion")
+print("")
+print("Use cases for k8sclient:")
+print("  • Admission controllers querying cluster state")
+print("  • Policy engines validating dependencies")
+print("  • Custom operators in Lua")
+print("  • GitOps reconciliation")
+print("  • Testing and automation")
+print("")

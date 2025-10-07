@@ -14,5 +14,3 @@ function json.parse(jsonstr) end
 ---@return string The JSON string, or nil on error
 ---@return string|nil Error message if conversion failed
 function json.stringify(tbl) end
-
-return json

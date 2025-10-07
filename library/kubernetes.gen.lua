@@ -32,4 +32,38 @@ function kubernetes.format_time(timestamp) end
 ---@return table The same object with initialized defaults (modified in-place)
 function kubernetes.init_defaults(obj) end
 
-return kubernetes
+--- parseDuration: parses a Kubernetes duration string (e.g., "5s", "10m", "2h") and returns seconds as a number. Returns nil and error message on failure.
+---@param duration string The duration string to parse (e.g., "5s", "10m", "2h")
+---@return number The duration value in seconds, or nil on error
+---@return string|nil Error message if parsing failed
+function kubernetes.parse_duration(duration) end
+
+--- formatDuration: converts seconds to a Kubernetes duration string. Returns nil and error message on failure.
+---@param seconds number The duration in seconds to convert
+---@return string The duration string (e.g., "5m0s", "1h30m0s"), or nil on error
+---@return string|nil Error message if formatting failed
+function kubernetes.format_duration(seconds) end
+
+--- parseIntOrString: parses a Kubernetes IntOrString value and returns the value and its type. Returns (number, false) for integers or (string, true) for strings.
+---@param value any The IntOrString value (number or string)
+---@return any The parsed value (preserves type)
+---@return boolean true if string, false if number
+function kubernetes.parse_int_or_string(value) end
+
+--- matchesSelector: checks if a set of labels matches a label selector. The selector is a table with key-value pairs that must all match.
+---@param labels table The labels to check (e.g., pod.metadata.labels)
+---@param selector table The selector with required labels
+---@return boolean true if all selector labels match
+function kubernetes.matches_selector(labels, selector) end
+
+--- tolerationMatches: checks if a toleration matches a taint. Simplified matching: checks key, operator, value, and effect.
+---@param toleration table The toleration object
+---@param taint table The taint object
+---@return boolean true if the toleration matches the taint
+function kubernetes.toleration_matches(toleration, taint) end
+
+--- matchGVK: checks if a Kubernetes object matches the specified Group/Version/Kind matcher. Returns true if the object's apiVersion and kind match the matcher's values.
+---@param obj table The Kubernetes object to check
+---@param matcher GVKMatcher The GVK matcher with group, version, and kind fields
+---@return boolean true if the GVK matches
+function kubernetes.match_gvk(obj, matcher) end

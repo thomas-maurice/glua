@@ -82,6 +82,9 @@ table.insert(patches, {
 
 -- Example 3: Query Kubernetes if client is available
 if k8sclient then
+	-- Create a client instance
+	local client = k8sclient.new_client()
+
 	-- Check if a ConfigMap exists in the same namespace
 	local cm_gvk = {
 		group = "",
@@ -92,8 +95,8 @@ if k8sclient then
 	local namespace = pod.metadata.namespace or "default"
 	local config_name = "webhook-config"
 
-	-- Try to get the ConfigMap
-	local config, err = k8sclient.get(cm_gvk, namespace, config_name)
+	-- Try to get the ConfigMap using the client
+	local config, err = client:get(cm_gvk, namespace, config_name)
 
 	if config and not err then
 		print(string.format("Found ConfigMap %s in namespace %s", config_name, namespace))

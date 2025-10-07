@@ -64,29 +64,66 @@ func NewClient(config *rest.Config) (*Client, error) {
 //
 // Example usage in Lua:
 //
-//	local client = require("k8sclient")
+//	local k8sclient = require("k8sclient")
+//	local client = k8sclient.new_client()
 //	local gvk = {group = "", version = "v1", kind = "ConfigMap"}
-//	local cm, err = client.get(gvk, "default", "my-config")
+//	local cm, err = client:get(gvk, "default", "my-config")
 func Loader(config *rest.Config) lua.LGFunction {
-	client, err := NewClient(config)
-	if err != nil {
-		panic(fmt.Sprintf("failed to create k8s client: %v", err))
-	}
-
 	return func(L *lua.LState) int {
-		// Create module table
-		exports := map[string]lua.LGFunction{
-			"get":    client.get,
-			"create": client.create,
-			"update": client.update,
-			"delete": client.delete,
-			"list":   client.list,
+		// Create module table with new_client factory function
+		mod := L.NewTable()
+		L.SetField(mod, "new_client", L.NewFunction(func(L *lua.LState) int {
+			return newClientLua(L, config)
+		}))
+
+		// For backwards compatibility, also export functions at module level
+		client, err := NewClient(config)
+		if err != nil {
+			L.RaiseError("failed to create k8s client: %v", err)
+			return 0
 		}
 
-		mod := L.SetFuncs(L.NewTable(), exports)
+		L.SetField(mod, "get", L.NewFunction(client.get))
+		L.SetField(mod, "create", L.NewFunction(client.create))
+		L.SetField(mod, "update", L.NewFunction(client.update))
+		L.SetField(mod, "delete", L.NewFunction(client.delete))
+		L.SetField(mod, "list", L.NewFunction(client.list))
+
 		L.Push(mod)
 		return 1
 	}
+}
+
+// newClientLua: creates a new client instance in Lua
+//
+// @luafunc new_client
+// @luareturn table The client instance with methods: get, create, update, delete, list
+// @luareturn string|nil Error message if client creation failed
+//
+// Example:
+//
+//	local k8sclient = require("k8sclient")
+//	local client = k8sclient.new_client()
+//	local pod, err = client:get({group="", version="v1", kind="Pod"}, "default", "my-pod")
+func newClientLua(L *lua.LState, config *rest.Config) int {
+	client, err := NewClient(config)
+	if err != nil {
+		L.Push(lua.LNil)
+		L.Push(lua.LString(fmt.Sprintf("failed to create client: %v", err)))
+		return 2
+	}
+
+	// Create client table with methods
+	clientTable := L.NewTable()
+	L.SetField(clientTable, "get", L.NewFunction(client.get))
+	L.SetField(clientTable, "create", L.NewFunction(client.create))
+	L.SetField(clientTable, "update", L.NewFunction(client.update))
+	L.SetField(clientTable, "delete", L.NewFunction(client.delete))
+	L.SetField(clientTable, "list", L.NewFunction(client.list))
+
+	L.Push(clientTable)
+	L.Push(lua.LNil)
+	return 2
 }
 
 // get: retrieves a Kubernetes resource by GVK, namespace, and name.
