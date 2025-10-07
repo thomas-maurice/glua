@@ -26,6 +26,12 @@ trap cleanup EXIT
 
 echo "=== Setting up Kind cluster ==="
 
+# Delete existing cluster if it exists
+if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
+	echo "Deleting existing cluster: $CLUSTER_NAME"
+	kind delete cluster --name "$CLUSTER_NAME"
+fi
+
 # Create Kind cluster
 kind create cluster --name "$CLUSTER_NAME" --wait 5m
 
