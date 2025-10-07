@@ -405,94 +405,101 @@ func TestLuaToGoConversions(t *testing.T) {
 	translator := NewTranslator()
 
 	t.Run("Lua table to Go struct", func(t *testing.T) {
-		type TestStruct struct {
-			Name  string `json:"name"`
-			Age   int    `json:"age"`
-			Email string `json:"email"`
-		}
-
-		// Create Lua table
-		luaCode := `
-			return {
-				name = "John Doe",
-				age = 42,
-				email = "john@example.com"
-			}
-		`
-
-		if err := L.DoString(luaCode); err != nil {
-			t.Fatalf("Lua code failed: %v", err)
-		}
-
-		lv := L.Get(-1)
-		L.Pop(1)
-
-		var result TestStruct
-		if err := translator.FromLua(L, lv, &result); err != nil {
-			t.Fatalf("FromLua() error = %v", err)
-		}
-
-		if result.Name != "John Doe" {
-			t.Errorf("Name = %v, want John Doe", result.Name)
-		}
-		if result.Age != 42 {
-			t.Errorf("Age = %v, want 42", result.Age)
-		}
-		if result.Email != "john@example.com" {
-			t.Errorf("Email = %v, want john@example.com", result.Email)
-		}
+		testSimpleLuaToGoConversion(t, L, translator)
 	})
 
 	t.Run("Lua table with nested arrays to Go", func(t *testing.T) {
-		type Item struct {
-			ID   int    `json:"id"`
-			Name string `json:"name"`
-		}
-
-		type Container struct {
-			Title string `json:"title"`
-			Items []Item `json:"items"`
-		}
-
-		luaCode := `
-			return {
-				title = "My Container",
-				items = {
-					{id = 1, name = "Item 1"},
-					{id = 2, name = "Item 2"},
-					{id = 3, name = "Item 3"}
-				}
-			}
-		`
-
-		if err := L.DoString(luaCode); err != nil {
-			t.Fatalf("Lua code failed: %v", err)
-		}
-
-		lv := L.Get(-1)
-		L.Pop(1)
-
-		var result Container
-		if err := translator.FromLua(L, lv, &result); err != nil {
-			t.Fatalf("FromLua() error = %v", err)
-		}
-
-		if result.Title != "My Container" {
-			t.Errorf("Title = %v, want My Container", result.Title)
-		}
-		if len(result.Items) != 3 {
-			t.Fatalf("len(Items) = %v, want 3", len(result.Items))
-		}
-		if result.Items[0].ID != 1 || result.Items[0].Name != "Item 1" {
-			t.Errorf("Items[0] = %+v, want {ID:1, Name:Item 1}", result.Items[0])
-		}
-		if result.Items[1].ID != 2 || result.Items[1].Name != "Item 2" {
-			t.Errorf("Items[1] = %+v, want {ID:2, Name:Item 2}", result.Items[1])
-		}
-		if result.Items[2].ID != 3 || result.Items[2].Name != "Item 3" {
-			t.Errorf("Items[2] = %+v, want {ID:3, Name:Item 3}", result.Items[2])
-		}
+		testNestedArrayConversion(t, L, translator)
 	})
+}
+
+func testSimpleLuaToGoConversion(t *testing.T, L *lua.LState, translator *Translator) {
+	type TestStruct struct {
+		Name  string `json:"name"`
+		Age   int    `json:"age"`
+		Email string `json:"email"`
+	}
+
+	luaCode := `
+		return {
+			name = "John Doe",
+			age = 42,
+			email = "john@example.com"
+		}
+	`
+
+	if err := L.DoString(luaCode); err != nil {
+		t.Fatalf("Lua code failed: %v", err)
+	}
+
+	lv := L.Get(-1)
+	L.Pop(1)
+
+	var result TestStruct
+	if err := translator.FromLua(L, lv, &result); err != nil {
+		t.Fatalf("FromLua() error = %v", err)
+	}
+
+	if result.Name != "John Doe" {
+		t.Errorf("Name = %v, want John Doe", result.Name)
+	}
+	if result.Age != 42 {
+		t.Errorf("Age = %v, want 42", result.Age)
+	}
+	if result.Email != "john@example.com" {
+		t.Errorf("Email = %v, want john@example.com", result.Email)
+	}
+}
+
+func testNestedArrayConversion(t *testing.T, L *lua.LState, translator *Translator) {
+	type Item struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	}
+
+	type Container struct {
+		Title string `json:"title"`
+		Items []Item `json:"items"`
+	}
+
+	luaCode := `
+		return {
+			title = "My Container",
+			items = {
+				{id = 1, name = "Item 1"},
+				{id = 2, name = "Item 2"},
+				{id = 3, name = "Item 3"}
+			}
+		}
+	`
+
+	if err := L.DoString(luaCode); err != nil {
+		t.Fatalf("Lua code failed: %v", err)
+	}
+
+	lv := L.Get(-1)
+	L.Pop(1)
+
+	var result Container
+	if err := translator.FromLua(L, lv, &result); err != nil {
+		t.Fatalf("FromLua() error = %v", err)
+	}
+
+	if result.Title != "My Container" {
+		t.Errorf("Title = %v, want My Container", result.Title)
+	}
+	if len(result.Items) != 3 {
+		t.Fatalf("len(Items) = %v, want 3", len(result.Items))
+	}
+	if result.Items[0].ID != 1 || result.Items[0].Name != "Item 1" {
+		t.Errorf("Items[0] = %+v, want {ID:1, Name:Item 1}", result.Items[0])
+	}
+	if result.Items[1].ID != 2 || result.Items[1].Name != "Item 2" {
+		t.Errorf("Items[1] = %+v, want {ID:2, Name:Item 2}", result.Items[1])
+	}
+	if result.Items[2].ID != 3 || result.Items[2].Name != "Item 3" {
+		t.Errorf("Items[2] = %+v, want {ID:3, Name:Item 3}", result.Items[2])
+	}
 }
 
 // TestRoundTripConversions: tests complete round-trip conversions

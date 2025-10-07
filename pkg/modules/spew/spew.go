@@ -112,47 +112,7 @@ func luaToGo(L *lua.LState, value lua.LValue) interface{} {
 	case lua.LString:
 		return string(v)
 	case *lua.LTable:
-		// Determine if table is an array or object
-		maxN := 0
-		isArray := true
-		hasElements := false
-
-		v.ForEach(func(key lua.LValue, val lua.LValue) {
-			hasElements = true
-			if keyNum, ok := key.(lua.LNumber); ok {
-				if n := int(keyNum); n > 0 && float64(n) == float64(keyNum) {
-					if n > maxN {
-						maxN = n
-					}
-				} else {
-					isArray = false
-				}
-			} else {
-				isArray = false
-			}
-		})
-
-		// If it's an array (consecutive integer keys starting from 1)
-		if isArray && maxN > 0 && hasElements {
-			arr := make([]interface{}, maxN)
-			for i := 1; i <= maxN; i++ {
-				arr[i-1] = luaToGo(L, v.RawGetInt(i))
-			}
-			return arr
-		}
-
-		// Otherwise, treat as object/map
-		obj := make(map[string]interface{})
-		v.ForEach(func(key lua.LValue, val lua.LValue) {
-			var keyStr string
-			if ks, ok := key.(lua.LString); ok {
-				keyStr = string(ks)
-			} else {
-				keyStr = fmt.Sprintf("%v", luaToGo(L, key))
-			}
-			obj[keyStr] = luaToGo(L, val)
-		})
-		return obj
+		return convertLuaTable(L, v)
 	case *lua.LFunction:
 		return "<function>"
 	case *lua.LUserData:
@@ -160,4 +120,55 @@ func luaToGo(L *lua.LState, value lua.LValue) interface{} {
 	default:
 		return fmt.Sprintf("<%v>", v.Type().String())
 	}
+}
+
+func convertLuaTable(L *lua.LState, table *lua.LTable) interface{} {
+	maxN, isArray, hasElements := analyzeTableStructure(table)
+
+	if isArray && maxN > 0 && hasElements {
+		return convertTableToArray(L, table, maxN)
+	}
+
+	return convertTableToMap(L, table)
+}
+
+func analyzeTableStructure(table *lua.LTable) (maxN int, isArray bool, hasElements bool) {
+	isArray = true
+	table.ForEach(func(key lua.LValue, val lua.LValue) {
+		hasElements = true
+		if keyNum, ok := key.(lua.LNumber); ok {
+			if n := int(keyNum); n > 0 && float64(n) == float64(keyNum) {
+				if n > maxN {
+					maxN = n
+				}
+			} else {
+				isArray = false
+			}
+		} else {
+			isArray = false
+		}
+	})
+	return
+}
+
+func convertTableToArray(L *lua.LState, table *lua.LTable, maxN int) []interface{} {
+	arr := make([]interface{}, maxN)
+	for i := 1; i <= maxN; i++ {
+		arr[i-1] = luaToGo(L, table.RawGetInt(i))
+	}
+	return arr
+}
+
+func convertTableToMap(L *lua.LState, table *lua.LTable) map[string]interface{} {
+	obj := make(map[string]interface{})
+	table.ForEach(func(key lua.LValue, val lua.LValue) {
+		var keyStr string
+		if ks, ok := key.(lua.LString); ok {
+			keyStr = string(ks)
+		} else {
+			keyStr = fmt.Sprintf("%v", luaToGo(L, key))
+		}
+		obj[keyStr] = luaToGo(L, val)
+	})
+	return obj
 }

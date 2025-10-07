@@ -323,7 +323,6 @@ func TestAnalyzer_RealModule(t *testing.T) {
 func TestAnalyzer_CustomAnnotations(t *testing.T) {
 	a := NewAnalyzer()
 
-	// Test with the custom_annotations testdata
 	if err := a.ScanDirectory("testdata"); err != nil {
 		t.Fatalf("ScanDirectory failed: %v", err)
 	}
@@ -333,7 +332,12 @@ func TestAnalyzer_CustomAnnotations(t *testing.T) {
 		t.Fatal("Expected custom_annotations module to be registered")
 	}
 
-	// Check module-level custom annotations
+	verifyModuleAnnotations(t, module)
+	verifyFunctionAnnotations(t, module)
+	verifyGeneratedStubs(t, a)
+}
+
+func verifyModuleAnnotations(t *testing.T, module *LuaModule) {
 	if len(module.CustomAnnotations) != 2 {
 		t.Errorf("Expected 2 module-level annotations, got %d", len(module.CustomAnnotations))
 	}
@@ -352,13 +356,13 @@ func TestAnalyzer_CustomAnnotations(t *testing.T) {
 			t.Errorf("Expected module annotation %q, got %q", expected, module.CustomAnnotations[i])
 		}
 	}
+}
 
-	// Check function-level custom annotations
+func verifyFunctionAnnotations(t *testing.T, module *LuaModule) {
 	if len(module.Functions) != 2 {
 		t.Fatalf("Expected 2 functions, got %d", len(module.Functions))
 	}
 
-	// First function should have deprecation and nodiscard annotations
 	fn1 := module.Functions[0]
 	if len(fn1.CustomAnnotations) != 2 {
 		t.Errorf("Expected 2 annotations on %s, got %d", fn1.Name, len(fn1.CustomAnnotations))
@@ -379,37 +383,29 @@ func TestAnalyzer_CustomAnnotations(t *testing.T) {
 		}
 	}
 
-	// Second function should have generic annotations
 	fn2 := module.Functions[1]
 	if len(fn2.CustomAnnotations) != 3 {
 		t.Errorf("Expected 3 annotations on %s, got %d", fn2.Name, len(fn2.CustomAnnotations))
 	}
+}
 
-	// Generate stubs and verify they contain custom annotations
+func verifyGeneratedStubs(t *testing.T, a *Analyzer) {
 	stubs, err := a.GenerateModuleStub("custom_annotations")
 	if err != nil {
 		t.Fatalf("GenerateModuleStub failed: %v", err)
 	}
 
-	// Check that module-level annotations are present
-	if !strings.Contains(stubs, "---@alias ID string|number") {
-		t.Error("Expected module-level @alias annotation for ID")
+	expectedAnnotations := []string{
+		"---@alias ID string|number",
+		"---@alias Handler fun(id: ID): boolean",
+		"---@deprecated Use process_typed_id instead",
+		"---@nodiscard",
+		"---@generic T",
 	}
 
-	if !strings.Contains(stubs, "---@alias Handler fun(id: ID): boolean") {
-		t.Error("Expected module-level @alias annotation for Handler")
-	}
-
-	// Check that function-level annotations are present
-	if !strings.Contains(stubs, "---@deprecated Use process_typed_id instead") {
-		t.Error("Expected @deprecated annotation")
-	}
-
-	if !strings.Contains(stubs, "---@nodiscard") {
-		t.Error("Expected @nodiscard annotation")
-	}
-
-	if !strings.Contains(stubs, "---@generic T") {
-		t.Error("Expected @generic annotation")
+	for _, expected := range expectedAnnotations {
+		if !strings.Contains(stubs, expected) {
+			t.Errorf("Expected annotation: %q", expected)
+		}
 	}
 }
