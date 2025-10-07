@@ -21,14 +21,35 @@ A comprehensive toolkit for embedding Lua in Go applications with full type safe
 
 ## Installation
 
+### Using in Your Project
+
+Add glua to your `go.mod`:
+
 ```bash
-go get github.com/thomas-maurice/glua
+go get github.com/thomas-maurice/glua@latest
 ```
 
-Requirements:
+Or manually add to `go.mod` and run `go mod tidy`:
 
-- Go 1.21 or later
-- For Kubernetes support: `k8s.io/api` and `k8s.io/apimachinery`
+```go
+require github.com/thomas-maurice/glua v0.1.0 // or latest version
+```
+
+### Cloning the Repository
+
+To work on glua or run the examples:
+
+```bash
+git clone https://github.com/thomas-maurice/glua.git
+cd glua
+go mod download
+```
+
+### Requirements
+
+- Go 1.24 or later
+- For Kubernetes support: `k8s.io/client-go`, `k8s.io/api`, `k8s.io/apimachinery`
+- For integration tests: `kind` and `kubectl`
 
 ## Quick Start
 

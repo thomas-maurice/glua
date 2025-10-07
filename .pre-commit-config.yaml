@@ -56,3 +56,13 @@ repos:
     hooks:
       - id: shellcheck
         args: ['--severity=warning']
+
+  # MIT license header check
+  - repo: local
+    hooks:
+      - id: check-license-headers
+        name: Check MIT license headers
+        entry: .pre-commit-hooks/check-license-headers.sh
+        language: script
+        files: \.(go|lua)$
+        exclude: \.gen\.lua$

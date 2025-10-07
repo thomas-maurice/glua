@@ -1,3 +1,23 @@
+// Copyright (c) 2024-2025 Thomas Maurice
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 package main
 
 import (
@@ -10,26 +30,34 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/thomas-maurice/glua/pkg/glua"
+	"github.com/thomas-maurice/glua/pkg/modules/k8sclient"
 	lua "github.com/yuin/gopher-lua"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 type Config struct {
-	Address    string
-	CertFile   string
-	KeyFile    string
-	ScriptPath string
+	Address        string
+	CertFile       string
+	KeyFile        string
+	ScriptPath     string
+	EnableK8sQuery bool
+	Kubeconfig     string
 }
 
 type WebhookServer struct {
-	config *Config
-	logger *slog.Logger
-	engine *gin.Engine
+	config    *Config
+	logger    *slog.Logger
+	engine    *gin.Engine
+	k8sClient *kubernetes.Clientset
+	k8sConfig *rest.Config
 }
 
 // NewWebhookServer: creates a new webhook server instance
-func NewWebhookServer(cfg *Config) *WebhookServer {
+func NewWebhookServer(cfg *Config) (*WebhookServer, error) {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
@@ -44,11 +72,41 @@ func NewWebhookServer(cfg *Config) *WebhookServer {
 		engine: engine,
 	}
 
+	// Initialize Kubernetes client if enabled
+	if cfg.EnableK8sQuery {
+		var config *rest.Config
+		var err error
+
+		if cfg.Kubeconfig != "" {
+			// Out-of-cluster config (dev mode)
+			config, err = clientcmd.BuildConfigFromFlags("", cfg.Kubeconfig)
+		} else {
+			// In-cluster config (production mode)
+			config, err = rest.InClusterConfig()
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to create k8s config: %w", err)
+		}
+
+		clientset, err := kubernetes.NewForConfig(config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create k8s client: %w", err)
+		}
+
+		ws.k8sClient = clientset
+		ws.k8sConfig = config
+
+		logger.Info("Kubernetes client enabled",
+			"in_cluster", cfg.Kubeconfig == "",
+		)
+	}
+
 	// Register routes
 	engine.POST("/mutate", ws.handleMutate)
 	engine.GET("/healthz", ws.handleHealth)
 
-	return ws
+	return ws, nil
 }
 
 // handleHealth: health check endpoint
@@ -155,6 +213,16 @@ func (ws *WebhookServer) runLuaMutation(pod *corev1.Pod) ([]map[string]interface
 
 	translator := glua.NewTranslator()
 
+	// Load k8sclient module if Kubernetes client is available
+	if ws.k8sConfig != nil {
+		L.PreloadModule("k8sclient", k8sclient.Loader(ws.k8sConfig))
+
+		// Load and set k8sclient module as global
+		if err := L.DoString(`k8sclient = require("k8sclient")`); err != nil {
+			return nil, fmt.Errorf("failed to load k8sclient module: %w", err)
+		}
+	}
+
 	// Convert pod to Lua table
 	podTable, err := translator.ToLua(L, pod)
 	if err != nil {
@@ -199,10 +267,12 @@ func (ws *WebhookServer) Serve() error {
 
 func main() {
 	var (
-		address    = flag.String("address", ":8443", "Address to listen on")
-		certFile   = flag.String("cert", "/etc/webhook/certs/tls.crt", "TLS certificate file")
-		keyFile    = flag.String("key", "/etc/webhook/certs/tls.key", "TLS key file")
-		scriptPath = flag.String("script", "/etc/webhook/scripts/mutate.lua", "Lua mutation script path")
+		address        = flag.String("address", ":8443", "Address to listen on")
+		certFile       = flag.String("cert", "/etc/webhook/certs/tls.crt", "TLS certificate file")
+		keyFile        = flag.String("key", "/etc/webhook/certs/tls.key", "TLS key file")
+		scriptPath     = flag.String("script", "/etc/webhook/scripts/mutate.lua", "Lua mutation script path")
+		enableK8s      = flag.Bool("enable-k8s", false, "Enable Kubernetes client for Lua scripts")
+		kubeconfigPath = flag.String("kubeconfig", "", "Path to kubeconfig (empty = in-cluster config)")
 	)
 	flag.Parse()
 
@@ -213,13 +283,20 @@ func main() {
 	}
 
 	cfg := &Config{
-		Address:    *address,
-		CertFile:   *certFile,
-		KeyFile:    *keyFile,
-		ScriptPath: *scriptPath,
+		Address:        *address,
+		CertFile:       *certFile,
+		KeyFile:        *keyFile,
+		ScriptPath:     *scriptPath,
+		EnableK8sQuery: *enableK8s,
+		Kubeconfig:     *kubeconfigPath,
 	}
 
-	server := NewWebhookServer(cfg)
+	server, err := NewWebhookServer(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create webhook server: %v\n", err)
+		os.Exit(1)
+	}
+
 	if err := server.Serve(); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to start server: %v\n", err)
 		os.Exit(1)

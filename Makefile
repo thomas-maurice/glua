@@ -1,4 +1,4 @@
-.PHONY: all build test test-unit test-verbose test-short test-k8sclient clean help stubgen example
+.PHONY: all build test test-unit test-verbose test-short test-k8sclient bench bench-update clean help stubgen example
 .PHONY: act-test act-test-unit act-lint act-build act-list act-check
 
 # Default target - runs ALL tests (unit + integration)
@@ -13,6 +13,8 @@ help:
 	@echo "  test-verbose     - Run unit tests with verbose output (shows every test)"
 	@echo "  test-short       - Run unit tests without race detection (faster)"
 	@echo "  test-k8sclient   - Run k8sclient example with Kind cluster (requires kind & kubectl)"
+	@echo "  bench            - Run all benchmarks"
+	@echo "  bench-update     - Run benchmarks and update benchmarks/README.md with results"
 	@echo "  build            - Build all binaries"
 	@echo "  stubgen          - Build stubgen code generator"
 	@echo "  example          - Build example application"
@@ -71,6 +73,35 @@ test-k8sclient:
 		exit 1; \
 	fi
 	@cd example/k8sclient && ./run-test.sh
+
+# Run benchmarks
+bench:
+	@echo "=== Running benchmarks ==="
+	@go test -bench=. -benchmem ./benchmarks/
+	@echo ""
+	@echo "✓ Benchmarks complete"
+	@echo ""
+	@echo "To update benchmarks/README.md with these results, run: make bench-update"
+
+# Run benchmarks and update README
+bench-update:
+	@echo "=== Running benchmarks and updating README ==="
+	@go test -bench=. -benchmem ./benchmarks/ > /tmp/glua-bench-results.txt 2>&1
+	@echo "=== Updating benchmarks/README.md ==="
+	@awk '/^## Latest Benchmark Results/{print; print ""; print "```"; while(getline < "/tmp/glua-bench-results.txt"){if(/^goos:/){p=1}if(p)print; if(/^PASS/)exit}; print "```"; print ""; print "### Key Takeaways"; next}1' benchmarks/README.md > /tmp/glua-readme-new.md
+	@if grep -q "BenchmarkGoToLuaSimple" /tmp/glua-readme-new.md; then \
+		mv /tmp/glua-readme-new.md benchmarks/README.md; \
+		echo "✓ Updated benchmarks/README.md with latest results"; \
+	else \
+		echo "✗ Failed to update README - benchmark output not found"; \
+		echo ""; \
+		echo "Benchmark output:"; \
+		cat /tmp/glua-bench-results.txt; \
+		exit 1; \
+	fi
+	@rm -f /tmp/glua-bench-results.txt
+	@echo ""
+	@echo "IMPORTANT: Review the updated benchmarks/README.md and update Key Takeaways if needed"
 
 # Build all binaries
 build: stubgen example

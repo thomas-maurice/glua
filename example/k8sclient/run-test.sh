@@ -42,12 +42,12 @@ kubectl wait --for=condition=Ready nodes --all --timeout=300s
 # Build the example program
 echo ""
 echo "=== Building example program ==="
-go build -o k8sclient-example .
+go build -o ../../bin/k8sclient-example .
 
 # Run the test script
 echo ""
 echo "=== Running k8sclient test script ==="
-./k8sclient-example -script test.lua
+../../bin/k8sclient-example -script test.lua
 
 echo ""
 echo "=== Test completed successfully! ==="
