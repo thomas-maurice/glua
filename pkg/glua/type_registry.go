@@ -131,12 +131,37 @@ func (r *TypeRegistry) getTypeKey(t reflect.Type) string {
 // Returns the Lua type annotation string for the type.
 // Handles circular dependencies by checking if a type is already registered.
 func (r *TypeRegistry) processType(t reflect.Type) string {
-	// Handle pointers
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
+	t = r.unwrapPointer(t)
+
+	if primType := r.getPrimitiveType(t); primType != "" {
+		return primType
 	}
 
-	// For primitive types, return Lua type name
+	if t.Kind() == reflect.Slice || t.Kind() == reflect.Array {
+		return r.processArrayType(t)
+	}
+
+	if t.Kind() == reflect.Map {
+		return r.processMapType(t)
+	}
+
+	if t.Kind() == reflect.Struct {
+		return r.processStructType(t)
+	}
+
+	return "any"
+}
+
+// unwrapPointer: unwraps pointer types
+func (r *TypeRegistry) unwrapPointer(t reflect.Type) reflect.Type {
+	if t.Kind() == reflect.Ptr {
+		return t.Elem()
+	}
+	return t
+}
+
+// getPrimitiveType: returns Lua type name for primitive Go types
+func (r *TypeRegistry) getPrimitiveType(t reflect.Type) string {
 	switch t.Kind() {
 	case reflect.String:
 		return "string"
@@ -149,75 +174,67 @@ func (r *TypeRegistry) processType(t reflect.Type) string {
 	case reflect.Interface:
 		return "any"
 	}
+	return ""
+}
 
-	// Handle slices/arrays
-	if t.Kind() == reflect.Slice || t.Kind() == reflect.Array {
-		elemType := t.Elem()
-		elemKey := r.processType(elemType)
-		// Return array notation
-		return elemKey + "[]"
+// processArrayType: processes slice and array types
+func (r *TypeRegistry) processArrayType(t reflect.Type) string {
+	elemType := t.Elem()
+	elemKey := r.processType(elemType)
+	return elemKey + "[]"
+}
+
+// processMapType: processes map types
+func (r *TypeRegistry) processMapType(t reflect.Type) string {
+	valueType := t.Elem()
+	valueKey := r.processType(valueType)
+	return "table<string, " + valueKey + ">"
+}
+
+// processStructType: processes struct types and registers them
+func (r *TypeRegistry) processStructType(t reflect.Type) string {
+	typeKey := r.getTypeKey(t)
+
+	if _, exists := r.types[typeKey]; exists {
+		return r.getTypeName(t)
 	}
 
-	// Handle maps
-	if t.Kind() == reflect.Map {
-		valueType := t.Elem()
-		valueKey := r.processType(valueType)
-		return "table<string, " + valueKey + ">"
+	typeName := r.getTypeName(t)
+	typeInfo := &TypeInfo{
+		Name:   typeName,
+		GoType: t,
+		Fields: make(map[string]*FieldInfo),
 	}
+	r.types[typeKey] = typeInfo
 
-	// For structs, register the type
-	if t.Kind() == reflect.Struct {
-		typeKey := r.getTypeKey(t)
+	r.processStructFields(t, typeInfo)
+	return typeName
+}
 
-		// Check if already registered to break circular dependencies
-		if _, exists := r.types[typeKey]; exists {
-			return r.getTypeName(t)
+// processStructFields: processes all fields in a struct
+func (r *TypeRegistry) processStructFields(t reflect.Type, typeInfo *TypeInfo) {
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if !field.IsExported() {
+			continue
 		}
 
-		// Register the type first to break circular references
-		typeName := r.getTypeName(t)
-		typeInfo := &TypeInfo{
-			Name:   typeName,
-			GoType: t,
-			Fields: make(map[string]*FieldInfo),
-		}
-		r.types[typeKey] = typeInfo
-
-		// Process all fields
-		for i := 0; i < t.NumField(); i++ {
-			field := t.Field(i)
-
-			// Skip unexported fields
-			if !field.IsExported() {
-				continue
-			}
-
-			// Get JSON tag name
-			jsonTag := field.Tag.Get("json")
-			if jsonTag == "" || jsonTag == "-" {
-				continue
-			}
-
-			// Extract field name from JSON tag
-			fieldName := strings.Split(jsonTag, ",")[0]
-			if fieldName == "" {
-				fieldName = field.Name
-			}
-
-			// Process the field type
-			fieldTypeKey := r.processType(field.Type)
-
-			typeInfo.Fields[fieldName] = &FieldInfo{
-				Name:    fieldName,
-				TypeKey: fieldTypeKey,
-			}
+		jsonTag := field.Tag.Get("json")
+		if jsonTag == "" || jsonTag == "-" {
+			continue
 		}
 
-		return typeName
+		fieldName := strings.Split(jsonTag, ",")[0]
+		if fieldName == "" {
+			fieldName = field.Name
+		}
+
+		fieldTypeKey := r.processType(field.Type)
+		typeInfo.Fields[fieldName] = &FieldInfo{
+			Name:    fieldName,
+			TypeKey: fieldTypeKey,
+		}
 	}
-
-	// Default case
-	return "any"
 }
 
 // Process: processes all registered types and discovers dependencies.
