@@ -1,42 +1,34 @@
 # Default values for glua-webhook
 
 replicaCount: 1
-
 image:
   repository: glua-webhook
   pullPolicy: IfNotPresent
   tag: latest
-
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
-
 serviceAccount:
   create: true
   automount: true
   annotations: {}
   name: ""
-
 podAnnotations: {}
 podLabels: {}
-
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 65532
   fsGroup: 65532
-
 securityContext:
   allowPrivilegeEscalation: false
   capabilities:
     drop:
-    - ALL
+      - ALL
   readOnlyRootFilesystem: true
-
 service:
   type: ClusterIP
   port: 443
   targetPort: 8443
-
 resources:
   limits:
     cpu: 200m
@@ -44,7 +36,6 @@ resources:
   requests:
     cpu: 100m
     memory: 64Mi
-
 livenessProbe:
   httpGet:
     path: /healthz
@@ -52,7 +43,6 @@ livenessProbe:
     scheme: HTTPS
   initialDelaySeconds: 10
   periodSeconds: 10
-
 readinessProbe:
   httpGet:
     path: /healthz
@@ -60,13 +50,9 @@ readinessProbe:
     scheme: HTTPS
   initialDelaySeconds: 5
   periodSeconds: 5
-
 nodeSelector: {}
-
 tolerations: []
-
 affinity: {}
-
 # Webhook configuration
 webhook:
   # failurePolicy: Fail or Ignore
@@ -76,12 +62,11 @@ webhook:
   # objectSelector for webhook scope
   objectSelector:
     matchLabels:
-      thomas.maurice/mutate: "true"
+      glua-webhook/mutate: "true"
   # sideEffects: None, NoneOnDryRun
   sideEffects: None
   # timeoutSeconds for webhook calls
   timeoutSeconds: 10
-
 # Certificate configuration (uses cert-manager)
 certificate:
   enabled: true

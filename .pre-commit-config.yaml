@@ -11,58 +11,51 @@ repos:
       - id: check-yaml
         exclude: ^example/webhook/charts/.*/templates/.*\.yaml$
       - id: check-added-large-files
-        args: ['--maxkb=1000']
+        args:
+          - --maxkb=1000
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: mixed-line-ending
-        args: ['--fix=lf']
-
+        args:
+          - --fix=lf
   # Go specific hooks
   - repo: https://github.com/tekwizely/pre-commit-golang
     rev: v1.0.0-rc.1
     hooks:
       # Format Go code
       - id: go-fmt
-        args: ['-w']
-
+        args:
+          - -w
       # Run go mod tidy
       - id: go-mod-tidy
-
       # Lint with golangci-lint (if available)
       - id: golangci-lint-repo-mod
-        args: ['--timeout=5m']
-
+        args:
+          - --timeout=5m
       # Run go vet
       - id: go-vet-repo-mod
-
       # Build the project
       - id: go-build-repo-mod
-        args: ['-o', 'bin/']
-
+        args:
+          - -o
+          - bin/
       # Run tests
       - id: go-test-repo-mod
-        args: ['-race', '-cover', './pkg/...']
-
+        args:
+          - -race
+          - -cover
+          - ./pkg/...
   # Markdown linting
   - repo: https://github.com/igorshubovych/markdownlint-cli
     rev: v0.43.0
     hooks:
       - id: markdownlint
-        args: ['--fix']
-
+        args:
+          - --fix
   # Shell script linting
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.10.0.1
     hooks:
       - id: shellcheck
-        args: ['--severity=warning']
-
-  # MIT license header check
-  - repo: local
-    hooks:
-      - id: check-license-headers
-        name: Check MIT license headers
-        entry: .pre-commit-hooks/check-license-headers.sh
-        language: script
-        files: \.(go|lua)$
-        exclude: \.gen\.lua$
+        args:
+          - --severity=warning

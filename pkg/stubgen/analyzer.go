@@ -300,11 +300,6 @@ func (a *Analyzer) GenerateStubs() (string, error) {
 
 		// Generate function stubs
 		for _, fn := range module.Functions {
-			// Function description
-			if fn.Description != "" {
-				sb.WriteString(fmt.Sprintf("--- %s\n", fn.Description))
-			}
-
 			// Parameter annotations
 			for _, param := range fn.Params {
 				if param.Description != "" {
@@ -365,8 +360,8 @@ func (a *Analyzer) GenerateModuleStub(moduleName string) (string, error) {
 
 	var sb strings.Builder
 
-	// Add meta annotation for Lua LSP
-	sb.WriteString("---@meta\n\n")
+	// Add meta annotation for Lua LSP with module name
+	sb.WriteString(fmt.Sprintf("---@meta %s\n\n", moduleName))
 
 	// Module-level custom annotations
 	for _, annotation := range module.CustomAnnotations {
@@ -379,11 +374,6 @@ func (a *Analyzer) GenerateModuleStub(moduleName string) (string, error) {
 
 	// Generate function stubs
 	for _, fn := range module.Functions {
-		// Function description
-		if fn.Description != "" {
-			sb.WriteString(fmt.Sprintf("--- %s\n", fn.Description))
-		}
-
 		// Parameter annotations
 		for _, param := range fn.Params {
 			if param.Description != "" {
@@ -414,6 +404,9 @@ func (a *Analyzer) GenerateModuleStub(moduleName string) (string, error) {
 		}
 		sb.WriteString(fmt.Sprintf("function %s.%s(%s) end\n\n", moduleName, fn.Name, strings.Join(paramNames, ", ")))
 	}
+
+	// Return the module
+	sb.WriteString(fmt.Sprintf("return %s\n", moduleName))
 
 	return sb.String(), nil
 }

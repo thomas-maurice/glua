@@ -164,15 +164,6 @@ func (ws *WebhookServer) mutate(req *admissionv1.AdmissionRequest) *admissionv1.
 		return response
 	}
 
-	// Check if pod should be mutated
-	if pod.Labels["thomas.maurice/mutate"] != "true" {
-		ws.logger.Info("pod doesn't have mutation label, skipping",
-			"namespace", pod.Namespace,
-			"name", pod.Name,
-		)
-		return response
-	}
-
 	ws.logger.Info("mutating pod",
 		"namespace", pod.Namespace,
 		"name", pod.Name,
@@ -270,12 +261,20 @@ func (ws *WebhookServer) Serve() error {
 // main: entry point for the webhook server
 func main() {
 	var (
-		address        = flag.String("address", ":8443", "Address to listen on")
-		certFile       = flag.String("cert", "/etc/webhook/certs/tls.crt", "TLS certificate file")
-		keyFile        = flag.String("key", "/etc/webhook/certs/tls.key", "TLS key file")
-		scriptPath     = flag.String("script", "/etc/webhook/scripts/mutate.lua", "Lua mutation script path")
+		address    = flag.String("address", ":8443", "Address to listen on")
+		certFile   = flag.String("cert", "/etc/webhook/certs/tls.crt", "TLS certificate file")
+		keyFile    = flag.String("key", "/etc/webhook/certs/tls.key", "TLS key file")
+		scriptPath = flag.String(
+			"script",
+			"/etc/webhook/scripts/mutate.lua",
+			"Lua mutation script path",
+		)
 		enableK8s      = flag.Bool("enable-k8s", false, "Enable Kubernetes client for Lua scripts")
-		kubeconfigPath = flag.String("kubeconfig", "", "Path to kubeconfig (empty = in-cluster config)")
+		kubeconfigPath = flag.String(
+			"kubeconfig",
+			"",
+			"Path to kubeconfig (empty = in-cluster config)",
+		)
 	)
 	flag.Parse()
 

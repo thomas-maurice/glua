@@ -74,17 +74,14 @@ func Loader(L *lua.LState) int {
 
 // exports: maps Lua function names to Go implementations
 var exports = map[string]lua.LGFunction{
-	"parse_memory":        parseMemory,
-	"parse_cpu":           parseCPU,
-	"parse_time":          parseTime,
-	"format_time":         formatTime,
-	"init_defaults":       initDefaults,
-	"parse_duration":      parseDuration,
-	"format_duration":     formatDuration,
-	"parse_int_or_string": parseIntOrString,
-	"matches_selector":    matchesSelector,
-	"toleration_matches":  tolerationMatches,
-	"match_gvk":           matchGVK,
+	"parse_memory":    parseMemory,
+	"parse_cpu":       parseCPU,
+	"parse_time":      parseTime,
+	"format_time":     formatTime,
+	"init_defaults":   initDefaults,
+	"parse_duration":  parseDuration,
+	"format_duration": formatDuration,
+	"match_gvk":       matchGVK,
 }
 
 // parseMemory: parses a Kubernetes memory quantity (e.g., "1024Mi", "1Gi", "512M") and returns bytes as a number.
@@ -296,137 +293,6 @@ func formatDuration(L *lua.LState) int {
 	L.Push(lua.LString(formatted))
 	L.Push(lua.LNil)
 	return 2
-}
-
-// parseIntOrString: parses a Kubernetes IntOrString value and returns the value and its type.
-// Returns (number, false) for integers or (string, true) for strings.
-//
-// @luafunc parse_int_or_string
-// @luaparam value any The IntOrString value (number or string)
-// @luareturn any The parsed value (preserves type)
-// @luareturn boolean true if string, false if number
-//
-// Example:
-//
-//	local val, is_str = k8s.parse_int_or_string(8080)  -- returns 8080, false
-//	local val, is_str = k8s.parse_int_or_string("http")  -- returns "http", true
-func parseIntOrString(L *lua.LState) int {
-	value := L.CheckAny(1)
-
-	switch v := value.(type) {
-	case lua.LNumber:
-		L.Push(v)
-		L.Push(lua.LFalse)
-	case lua.LString:
-		L.Push(v)
-		L.Push(lua.LTrue)
-	default:
-		L.RaiseError("parse_int_or_string expects number or string, got %s", value.Type().String())
-		return 0
-	}
-
-	return 2
-}
-
-// matchesSelector: checks if a set of labels matches a label selector.
-// The selector is a table with key-value pairs that must all match.
-//
-// @luafunc matches_selector
-// @luaparam labels table The labels to check (e.g., pod.metadata.labels)
-// @luaparam selector table The selector with required labels
-// @luareturn boolean true if all selector labels match
-//
-// Example:
-//
-//	local matches = k8s.matches_selector(
-//	  {app="nginx", tier="frontend"},
-//	  {app="nginx"}
-//	)  -- returns true
-func matchesSelector(L *lua.LState) int {
-	labels := L.CheckTable(1)
-	selector := L.CheckTable(2)
-
-	matches := true
-	selector.ForEach(func(key, value lua.LValue) {
-		// Skip nil values in selector
-		if value == lua.LNil {
-			return
-		}
-
-		// Get the corresponding label value
-		labelValue := L.GetField(labels, key.String())
-
-		// If label doesn't exist or values don't match, selector doesn't match
-		if labelValue == lua.LNil || labelValue.String() != value.String() {
-			matches = false
-		}
-	})
-
-	L.Push(lua.LBool(matches))
-	return 1
-}
-
-// tolerationMatches: checks if a toleration matches a taint.
-// Simplified matching: checks key, operator, value, and effect.
-//
-// @luafunc toleration_matches
-// @luaparam toleration table The toleration object
-// @luaparam taint table The taint object
-// @luareturn boolean true if the toleration matches the taint
-//
-// Example:
-//
-//	local matches = k8s.toleration_matches(
-//	  {key="node-role", operator="Equal", value="master", effect="NoSchedule"},
-//	  {key="node-role", value="master", effect="NoSchedule"}
-//	)  -- returns true
-func tolerationMatches(L *lua.LState) int {
-	toleration := L.CheckTable(1)
-	taint := L.CheckTable(2)
-
-	// Get toleration fields
-	tolKey := L.GetField(toleration, "key").String()
-	tolOperator := L.GetField(toleration, "operator").String()
-	tolValue := L.GetField(toleration, "value").String()
-	tolEffect := L.GetField(toleration, "effect").String()
-
-	// Get taint fields
-	taintKey := L.GetField(taint, "key").String()
-	taintValue := L.GetField(taint, "value").String()
-	taintEffect := L.GetField(taint, "effect").String()
-
-	// Default operator is "Equal"
-	if tolOperator == "" || tolOperator == "nil" {
-		tolOperator = "Equal"
-	}
-
-	// Check if keys match
-	if tolKey != taintKey {
-		L.Push(lua.LFalse)
-		return 1
-	}
-
-	// Check effect (empty effect matches all)
-	if tolEffect != "" && tolEffect != "nil" && tolEffect != taintEffect {
-		L.Push(lua.LFalse)
-		return 1
-	}
-
-	// Check operator
-	if tolOperator == "Exists" {
-		// Exists operator only checks key (and optionally effect)
-		L.Push(lua.LTrue)
-		return 1
-	}
-
-	// Equal operator checks value
-	if tolOperator == "Equal" && tolValue == taintValue {
-		L.Push(lua.LTrue)
-		return 1
-	}
-
-	L.Push(lua.LFalse)
-	return 1
 }
 
 // matchGVK: checks if a Kubernetes object matches the specified Group/Version/Kind matcher.

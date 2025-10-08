@@ -1,27 +1,7 @@
--- Copyright (c) 2024-2025 Thomas Maurice
---
--- Permission is hereby granted, free of charge, to any person obtaining a copy
--- of this software and associated documentation files (the "Software"), to deal
--- in the Software without restriction, including without limitation the rights
--- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
--- copies of the Software, and to permit persons to whom the Software is
--- furnished to do so, subject to the following conditions:
---
--- The above copyright notice and this permission notice shall be included in all
--- copies or substantial portions of the Software.
---
--- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
--- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
--- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
--- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
--- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
--- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
--- SOFTWARE.
-
 -- mutate.lua: Lua mutation script for Kubernetes pods
 --
 -- This script adds the annotation "coucou.lil: hello" to any pod
--- that has the label "thomas.maurice/mutate=true"
+-- that has the label "glua-webhook/mutate=true"
 --
 -- Global variables available:
 --   pod: the Kubernetes Pod object as a Lua table
@@ -42,7 +22,7 @@ local function ensure_annotations_path()
 		table.insert(patches, {
 			op = "add",
 			path = "/metadata/annotations",
-			value = {}
+			value = {},
 		})
 		return true
 	end
@@ -63,8 +43,12 @@ local annotation_value = "hello"
 
 -- Escape special characters in the annotation key for JSON path
 local escaped_key = annotation_key:gsub("([%.%/~])", function(c)
-	if c == "~" then return "~0" end
-	if c == "/" then return "~1" end
+	if c == "~" then
+		return "~0"
+	end
+	if c == "/" then
+		return "~1"
+	end
 	return c
 end)
 
@@ -74,15 +58,15 @@ if annotations_created then
 		op = "add",
 		path = "/metadata/annotations",
 		value = {
-			[annotation_key] = annotation_value
-		}
+			[annotation_key] = annotation_value,
+		},
 	})
 else
 	-- Annotations exist, just add the new field
 	table.insert(patches, {
 		op = "add",
 		path = "/metadata/annotations/" .. escaped_key,
-		value = annotation_value
+		value = annotation_value,
 	})
 end
 
@@ -91,7 +75,7 @@ local timestamp = os.date("%Y-%m-%dT%H:%M:%SZ")
 table.insert(patches, {
 	op = "add",
 	path = "/metadata/annotations/glua.mutated-at",
-	value = timestamp
+	value = timestamp,
 })
 
 print(string.format("Generated %d patches", #patches))

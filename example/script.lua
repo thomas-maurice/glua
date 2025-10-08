@@ -1,36 +1,12 @@
--- Copyright (c) 2024-2025 Thomas Maurice
---
--- Permission is hereby granted, free of charge, to any person obtaining a copy
--- of this software and associated documentation files (the "Software"), to deal
--- in the Software without restriction, including without limitation the rights
--- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
--- copies of the Software, and to permit persons to whom the Software is
--- furnished to do so, subject to the following conditions:
---
--- The above copyright notice and this permission notice shall be included in all
--- copies or substantial portions of the Software.
---
--- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
--- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
--- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
--- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
--- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
--- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
--- SOFTWARE.
-
--- Comprehensive Lua script demonstrating all glua features
--- This script showcases:
--- 1. Type-safe operations with LSP annotations
--- 2. Kubernetes module usage (parse_time, parse_cpu, parse_memory)
--- 3. Table manipulation and iteration
--- 4. Error handling
--- 5. Data verification and validation
-
 local k8s = require("kubernetes")
 
-print("╔════════════════════════════════════════════════════════════╗")
+print(
+	"╔════════════════════════════════════════════════════════════╗"
+)
 print("║              Lua Script: Pod Processing                    ║")
-print("╚════════════════════════════════════════════════════════════╝")
+print(
+	"╚════════════════════════════════════════════════════════════╝"
+)
 
 -- ============================================================================
 -- Helper Functions
@@ -181,12 +157,12 @@ end
 -- ============================================================================
 print("\n[Lua] Validating data...")
 local validations = {
-	{name = "Pod name not empty", check = pod.metadata.name ~= ""},
-	{name = "Container name not empty", check = container.name ~= ""},
-	{name = "Container image not empty", check = container.image ~= ""},
-	{name = "CPU limit > 0", check = cpuMillis > 0},
-	{name = "Memory limit > 0", check = memBytes > 0},
-	{name = "Timestamp > 0", check = timestamp > 0},
+	{ name = "Pod name not empty", check = pod.metadata.name ~= "" },
+	{ name = "Container name not empty", check = container.name ~= "" },
+	{ name = "Container image not empty", check = container.image ~= "" },
+	{ name = "CPU limit > 0", check = cpuMillis > 0 },
+	{ name = "Memory limit > 0", check = memBytes > 0 },
+	{ name = "Timestamp > 0", check = timestamp > 0 },
 }
 
 local passed = 0
@@ -222,6 +198,10 @@ print("  ✓ Pod ready for Go conversion")
 -- ============================================================================
 -- Summary
 -- ============================================================================
-print("\n╔════════════════════════════════════════════════════════════╗")
+print(
+	"\n╔════════════════════════════════════════════════════════════╗"
+)
 print("║         Lua Script Completed Successfully ✓                ║")
-print("╚════════════════════════════════════════════════════════════╝")
+print(
+	"╚════════════════════════════════════════════════════════════╝"
+)

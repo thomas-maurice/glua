@@ -4,9 +4,7 @@
   },
   "workspace": {
     "library": [
-      ".",
-      "../library",
-      "annotations.gen.lua"
+      "../library"
     ],
     "checkThirdParty": false
   },

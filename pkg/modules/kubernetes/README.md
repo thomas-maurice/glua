@@ -273,52 +273,6 @@ local matches = k8s.matches_selector(pod_labels, selector)
 print(matches)  -- prints true
 ```
 
-### `kubernetes.toleration_matches(toleration, taint)`
-
-Checks if a toleration matches a taint.
-
-**Parameters:**
-
-- `toleration` (table): The toleration with fields: key, operator, value, effect
-- `taint` (table): The taint with fields: key, value, effect
-
-**Returns:**
-
-- `boolean`: true if the toleration matches the taint, false otherwise
-
-**Example:**
-
-```lua
-local k8s = require("kubernetes")
-
--- Equal operator
-local toleration = {
-    key = "node-role",
-    operator = "Equal",
-    value = "master",
-    effect = "NoSchedule"
-}
-
-local taint = {
-    key = "node-role",
-    value = "master",
-    effect = "NoSchedule"
-}
-
-local matches = k8s.toleration_matches(toleration, taint)
-print(matches)  -- prints true
-
--- Exists operator (value doesn't matter)
-local tol2 = {
-    key = "node-role",
-    operator = "Exists",
-    effect = "NoSchedule"
-}
-
-local matches2 = k8s.toleration_matches(tol2, taint)
-print(matches2)  -- prints true
-```
-
 ### `kubernetes.match_gvk(obj, matcher)`
 
 Checks if a Kubernetes object matches the specified Group/Version/Kind (GVK) matcher.
