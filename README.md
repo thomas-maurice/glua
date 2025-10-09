@@ -36,6 +36,45 @@ Or manually add to `go.mod` and run `go mod tidy`:
 require github.com/thomas-maurice/glua v0.1.0 // or latest version
 ```
 
+### Installing Lua Stubs for IDE Autocomplete
+
+Download the latest Lua stubs for IDE autocomplete support:
+
+```bash
+# Download and extract to your project
+VERSION=v0.1.0  # Replace with the latest version
+curl -sL https://github.com/thomas-maurice/glua/releases/download/${VERSION}/glua-stubs_${VERSION}.tar.gz | tar xz
+
+# This extracts to library/*.gen.lua
+# Configure your IDE to recognize the library/ directory
+```
+
+**VS Code Setup** (with Lua extension):
+
+Create or update `.vscode/settings.json`:
+
+```json
+{
+  "Lua.workspace.library": ["library"]
+}
+```
+
+Now you'll get autocomplete for all glua modules in your Lua scripts!
+
+### Installing stubgen Binary (Optional)
+
+If you want to generate stubs for your own modules:
+
+```bash
+# Linux/macOS
+VERSION=v0.1.0  # Replace with the latest version
+curl -sL https://github.com/thomas-maurice/glua/releases/download/${VERSION}/stubgen_${VERSION}_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/').tar.gz | tar xz
+sudo mv stubgen /usr/local/bin/
+
+# Verify installation
+stubgen --help
+```
+
 ### Cloning the Repository
 
 To work on glua or run the examples:
