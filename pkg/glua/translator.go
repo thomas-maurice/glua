@@ -1,3 +1,23 @@
+// Copyright (c) 2024-2025 Thomas Maurice
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 package glua
 
 import (
@@ -8,7 +28,7 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-// Translator handles conversion between Go values and Lua values
+// Translator: handles conversion between Go values and Lua values
 type Translator struct{}
 
 // NewTranslator: creates a new Translator instance
@@ -16,7 +36,7 @@ func NewTranslator() *Translator {
 	return &Translator{}
 }
 
-// ToLua converts an arbitrary Go value to a Lua value.
+// ToLua: converts an arbitrary Go value to a Lua value.
 // It supports primitive types (string, int64, etc.) and complex structs.
 // The conversion process:
 //  1. Marshal the object to JSON
@@ -99,7 +119,7 @@ func (t *Translator) toLuaValue(L *lua.LState, v interface{}) (lua.LValue, error
 	}
 }
 
-// FromLua converts a Lua value to a Go value.
+// FromLua: converts a Lua value to a Go value.
 // Works similar to json.Unmarshal - pass a state, Lua value and output object.
 // The conversion process:
 //  1. Create Go value from Lua value (map[string]interface{} for tables, primitives for others)

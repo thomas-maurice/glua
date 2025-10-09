@@ -1,0 +1,42 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "glua-webhook.fullname" . }}
+  labels:
+    {{- include "glua-webhook.labels" . | nindent 4 }}
+  {{- if .Values.certificate.enabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "glua-webhook.fullname" . }}-tls
+  {{- end }}
+webhooks:
+- name: mutate.pods.glua.thomas.maurice
+  admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ include "glua-webhook.fullname" . }}
+      namespace: {{ .Release.Namespace }}
+      path: /mutate
+      port: {{ .Values.service.port }}
+  failurePolicy: {{ .Values.webhook.failurePolicy }}
+  {{- with .Values.webhook.namespaceSelector }}
+  namespaceSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.webhook.objectSelector }}
+  objectSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - pods
+    scope: "*"
+  sideEffects: {{ .Values.webhook.sideEffects }}
+  timeoutSeconds: {{ .Values.webhook.timeoutSeconds }}

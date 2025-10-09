@@ -1,7 +1,26 @@
+// Copyright (c) 2024-2025 Thomas Maurice
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 package kubernetes
 
 import (
-	"fmt"
 	"testing"
 
 	lua "github.com/yuin/gopher-lua"
@@ -28,13 +47,9 @@ func TestParseMemory(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			script := `
-				local k8s = require("kubernetes")
-				local result, err = k8s.parse_memory("` + tt.input + `")
-				return result, err
-			`
+			L.SetGlobal("test_input", lua.LString(tt.input))
 
-			if err := L.DoString(script); err != nil {
+			if err := L.DoFile("testdata/test_parse_memory.lua"); err != nil {
 				t.Fatalf("Failed to execute script: %v", err)
 			}
 
@@ -84,13 +99,9 @@ func TestParseCPU(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			script := `
-				local k8s = require("kubernetes")
-				local result, err = k8s.parse_cpu("` + tt.input + `")
-				return result, err
-			`
+			L.SetGlobal("test_input", lua.LString(tt.input))
 
-			if err := L.DoString(script); err != nil {
+			if err := L.DoFile("testdata/test_parse_cpu.lua"); err != nil {
 				t.Fatalf("Failed to execute script: %v", err)
 			}
 
@@ -138,13 +149,9 @@ func TestParseTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			script := `
-				local k8s = require("kubernetes")
-				local result, err = k8s.parse_time("` + tt.input + `")
-				return result, err
-			`
+			L.SetGlobal("test_input", lua.LString(tt.input))
 
-			if err := L.DoString(script); err != nil {
+			if err := L.DoFile("testdata/test_parse_time.lua"); err != nil {
 				t.Fatalf("Failed to execute script: %v", err)
 			}
 
@@ -191,13 +198,9 @@ func TestFormatTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			script := fmt.Sprintf(`
-				local k8s = require("kubernetes")
-				local result, err = k8s.format_time(%d)
-				return result, err
-			`, tt.timestamp)
+			L.SetGlobal("test_timestamp", lua.LNumber(tt.timestamp))
 
-			if err := L.DoString(script); err != nil {
+			if err := L.DoFile("testdata/test_format_time.lua"); err != nil {
 				t.Fatalf("Failed to execute script: %v", err)
 			}
 
@@ -237,24 +240,9 @@ func TestFormatParseRoundTrip(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			script := fmt.Sprintf(`
-				local k8s = require("kubernetes")
+			L.SetGlobal("test_timestamp", lua.LNumber(tt.timestamp))
 
-				-- Format timestamp to string
-				local timestr, err1 = k8s.format_time(%d)
-				assert(err1 == nil, "format_time failed: " .. tostring(err1))
-
-				-- Parse string back to timestamp
-				local timestamp, err2 = k8s.parse_time(timestr)
-				assert(err2 == nil, "parse_time failed: " .. tostring(err2))
-
-				-- Should match original
-				assert(timestamp == %d, string.format("Round-trip failed: %%d != %d", timestamp))
-
-				return true
-			`, tt.timestamp, tt.timestamp, tt.timestamp)
-
-			if err := L.DoString(script); err != nil {
+			if err := L.DoFile("testdata/test_roundtrip_time.lua"); err != nil {
 				t.Fatalf("Round-trip test failed: %v", err)
 			}
 
@@ -268,40 +256,63 @@ func TestFormatParseRoundTrip(t *testing.T) {
 	}
 }
 
+func TestInitDefaults(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	L.PreloadModule("kubernetes", Loader)
+
+	tests := []struct {
+		name     string
+		filename string
+	}{
+		{"nil labels and annotations", "testdata/init_defaults_nil.lua"},
+		{"existing labels and annotations", "testdata/init_defaults_existing.lua"},
+		{"no metadata", "testdata/init_defaults_no_metadata.lua"},
+		{"returns same object", "testdata/init_defaults_returns_same.lua"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := L.DoFile(tt.filename); err != nil {
+				t.Fatalf("Test failed: %v", err)
+			}
+
+			result := L.Get(-1)
+			L.Pop(1)
+
+			if result != lua.LTrue {
+				t.Errorf("Expected true, got %v", result)
+			}
+		})
+	}
+}
+
+func TestInitDefaultsFullWorkflow(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	L.PreloadModule("kubernetes", Loader)
+
+	if err := L.DoFile("testdata/init_defaults_full_workflow.lua"); err != nil {
+		t.Fatalf("Test failed: %v", err)
+	}
+
+	result := L.Get(-1)
+	L.Pop(1)
+
+	if result != lua.LTrue {
+		t.Errorf("Expected true, got %v", result)
+	}
+}
+
 func TestModuleIntegration(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
 	L.PreloadModule("kubernetes", Loader)
 
-	script := `
-		local k8s = require("kubernetes")
-
-		-- Test parse_memory
-		local mem_bytes = k8s.parse_memory("1Gi")
-		assert(mem_bytes == 1073741824, "Memory parsing failed")
-
-		-- Test parse_cpu
-		local cpu_millis = k8s.parse_cpu("100m")
-		assert(cpu_millis == 100, "CPU parsing failed")
-
-		-- Test parse_time
-		local timestamp = k8s.parse_time("2025-10-03T16:39:00Z")
-		assert(timestamp > 0, "Time parsing failed")
-
-		-- Test format_time
-		local timestr = k8s.format_time(1759509540)
-		assert(timestr == "2025-10-03T16:39:00Z", "Time formatting failed")
-
-		-- Test round-trip
-		local formatted = k8s.format_time(timestamp)
-		local parsed = k8s.parse_time(formatted)
-		assert(parsed == timestamp, "Round-trip failed")
-
-		return true
-	`
-
-	if err := L.DoString(script); err != nil {
+	if err := L.DoFile("testdata/module_integration.lua"); err != nil {
 		t.Fatalf("Integration test failed: %v", err)
 	}
 
@@ -310,5 +321,200 @@ func TestModuleIntegration(t *testing.T) {
 
 	if result != lua.LTrue {
 		t.Errorf("Expected true, got %v", result)
+	}
+}
+
+func TestParseDuration(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	L.PreloadModule("kubernetes", Loader)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected float64
+		wantErr  bool
+	}{
+		{"5 minutes", "5m", 300, false},
+		{"1 hour", "1h", 3600, false},
+		{"1h30m", "1h30m", 5400, false},
+		{"10 seconds", "10s", 10, false},
+		{"invalid", "invalid", 0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			L.SetGlobal("test_input", lua.LString(tt.input))
+
+			if err := L.DoFile("testdata/test_parse_duration.lua"); err != nil {
+				t.Fatalf("Failed to execute script: %v", err)
+			}
+
+			result := L.Get(-2)
+			errVal := L.Get(-1)
+			L.Pop(2)
+
+			if tt.wantErr {
+				if errVal == lua.LNil {
+					t.Errorf("Expected error for input %s, got nil", tt.input)
+				}
+			} else {
+				if errVal != lua.LNil {
+					t.Errorf("Unexpected error for input %s: %v", tt.input, errVal)
+				}
+
+				if num, ok := result.(lua.LNumber); ok {
+					if float64(num) != tt.expected {
+						t.Errorf("Expected %f, got %f", tt.expected, float64(num))
+					}
+				} else {
+					t.Errorf("Expected LNumber, got %T", result)
+				}
+			}
+		})
+	}
+}
+
+func TestFormatDuration(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	L.PreloadModule("kubernetes", Loader)
+
+	tests := []struct {
+		name     string
+		seconds  float64
+		expected string
+	}{
+		{"5 minutes", 300, "5m0s"},
+		{"1 hour", 3600, "1h0m0s"},
+		{"90 seconds", 90, "1m30s"},
+		{"10 seconds", 10, "10s"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			L.SetGlobal("test_seconds", lua.LNumber(tt.seconds))
+
+			if err := L.DoFile("testdata/test_format_duration.lua"); err != nil {
+				t.Fatalf("Failed to execute script: %v", err)
+			}
+
+			result := L.Get(-2)
+			errVal := L.Get(-1)
+			L.Pop(2)
+
+			if errVal != lua.LNil {
+				t.Errorf("Unexpected error: %v", errVal)
+			}
+
+			if str, ok := result.(lua.LString); ok {
+				if string(str) != tt.expected {
+					t.Errorf("Expected %s, got %s", tt.expected, string(str))
+				}
+			} else {
+				t.Errorf("Expected LString, got %T", result)
+			}
+		})
+	}
+}
+
+func TestNewFunctionsIntegration(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	L.PreloadModule("kubernetes", Loader)
+
+	if err := L.DoFile("testdata/integration_new_functions.lua"); err != nil {
+		t.Fatalf("Integration test failed: %v", err)
+	}
+
+	result := L.Get(-1)
+	L.Pop(1)
+
+	if result != lua.LTrue {
+		t.Errorf("Expected true, got %v", result)
+	}
+}
+
+func TestMatchGVK(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	L.PreloadModule("kubernetes", Loader)
+
+	tests := []struct {
+		name     string
+		filename string
+	}{
+		{"pod matches v1/Pod", "testdata/test_match_gvk_pod.lua"},
+		{"deployment matches apps/v1/Deployment", "testdata/test_match_gvk_deployment.lua"},
+		{"wrong kind does not match", "testdata/test_match_gvk_wrong_kind.lua"},
+		{"wrong version does not match", "testdata/test_match_gvk_wrong_version.lua"},
+		{"configmap matches v1/ConfigMap", "testdata/test_match_gvk_configmap.lua"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := L.DoFile(tt.filename); err != nil {
+				t.Fatalf("Test failed: %v", err)
+			}
+
+			result := L.Get(-1)
+			L.Pop(1)
+
+			if result != lua.LTrue {
+				t.Errorf("Expected true, got %v", result)
+			}
+		})
+	}
+}
+
+func TestMatchGVKIntegration(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	L.PreloadModule("kubernetes", Loader)
+
+	if err := L.DoFile("testdata/integration_match_gvk.lua"); err != nil {
+		t.Fatalf("Integration test failed: %v", err)
+	}
+
+	result := L.Get(-1)
+	L.Pop(1)
+
+	if result != lua.LTrue {
+		t.Errorf("Expected true, got %v", result)
+	}
+}
+
+func TestMatchGVKValidation(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	L.PreloadModule("kubernetes", Loader)
+
+	tests := []struct {
+		name     string
+		filename string
+	}{
+		{"missing kind field", "testdata/test_match_gvk_validation.lua"},
+		{"missing version field", "testdata/test_match_gvk_validation_version.lua"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := L.DoFile(tt.filename); err != nil {
+				t.Fatalf("Test failed: %v", err)
+			}
+
+			result := L.Get(-1)
+			L.Pop(1)
+
+			if result != lua.LTrue {
+				t.Errorf("Expected true, got %v", result)
+			}
+		})
 	}
 }

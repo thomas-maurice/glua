@@ -1,0 +1,17 @@
+# Markdown linting configuration
+# See: https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+
+# MD013: Line length - disabled (too restrictive for documentation)
+MD013: false
+
+# MD029: Ordered list item prefix - disabled
+MD029: false
+
+# MD036: Emphasis used instead of heading
+MD036: false
+
+# MD040: Fenced code blocks should have a language
+MD040: false
+
+# MD041: First line in file should be a top level heading
+MD041: false

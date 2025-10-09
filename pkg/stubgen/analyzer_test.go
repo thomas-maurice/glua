@@ -1,3 +1,23 @@
+// Copyright (c) 2024-2025 Thomas Maurice
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 package stubgen
 
 import (
@@ -235,7 +255,7 @@ func TestAnalyzer_GenerateStubs(t *testing.T) {
 		"---@param a number First number",
 		"---@param b number Second number",
 		"---@return number The sum",
-		"return testmod",
+		"return {}",
 	}
 
 	for _, expected := range expectedStrings {
@@ -262,9 +282,9 @@ func TestAnalyzer_RealModule(t *testing.T) {
 		t.Fatal("Expected kubernetes module to be registered")
 	}
 
-	// Should have 4 functions: parse_memory, parse_cpu, parse_time, format_time
-	if len(module.Functions) != 4 {
-		t.Errorf("Expected 4 functions, got %d", len(module.Functions))
+	// Should have 8 functions
+	if len(module.Functions) != 8 {
+		t.Errorf("Expected 8 functions, got %d", len(module.Functions))
 	}
 
 	// Verify function names
@@ -273,7 +293,10 @@ func TestAnalyzer_RealModule(t *testing.T) {
 		fnNames[fn.Name] = true
 	}
 
-	expectedFuncs := []string{"parse_memory", "parse_cpu", "parse_time", "format_time"}
+	expectedFuncs := []string{
+		"parse_memory", "parse_cpu", "parse_time", "format_time", "init_defaults",
+		"parse_duration", "format_duration", "match_gvk",
+	}
 	for _, name := range expectedFuncs {
 		if !fnNames[name] {
 			t.Errorf("Expected function %q not found", name)
@@ -293,5 +316,95 @@ func TestAnalyzer_RealModule(t *testing.T) {
 
 	if !strings.Contains(stubs, "function kubernetes.parse_memory(quantity) end") {
 		t.Error("Expected parse_memory function")
+	}
+}
+
+func TestAnalyzer_CustomAnnotations(t *testing.T) {
+	a := NewAnalyzer()
+
+	if err := a.ScanDirectory("testdata"); err != nil {
+		t.Fatalf("ScanDirectory failed: %v", err)
+	}
+
+	module, exists := a.modules["custom_annotations"]
+	if !exists {
+		t.Fatal("Expected custom_annotations module to be registered")
+	}
+
+	verifyModuleAnnotations(t, module)
+	verifyFunctionAnnotations(t, module)
+	verifyGeneratedStubs(t, a)
+}
+
+func verifyModuleAnnotations(t *testing.T, module *LuaModule) {
+	if len(module.CustomAnnotations) != 2 {
+		t.Errorf("Expected 2 module-level annotations, got %d", len(module.CustomAnnotations))
+	}
+
+	expectedModuleAnnotations := []string{
+		"@alias ID string|number",
+		"@alias Handler fun(id: ID): boolean",
+	}
+
+	for i, expected := range expectedModuleAnnotations {
+		if i >= len(module.CustomAnnotations) {
+			t.Errorf("Missing module annotation: %q", expected)
+			continue
+		}
+		if module.CustomAnnotations[i] != expected {
+			t.Errorf("Expected module annotation %q, got %q", expected, module.CustomAnnotations[i])
+		}
+	}
+}
+
+func verifyFunctionAnnotations(t *testing.T, module *LuaModule) {
+	if len(module.Functions) != 2 {
+		t.Fatalf("Expected 2 functions, got %d", len(module.Functions))
+	}
+
+	fn1 := module.Functions[0]
+	if len(fn1.CustomAnnotations) != 2 {
+		t.Errorf("Expected 2 annotations on %s, got %d", fn1.Name, len(fn1.CustomAnnotations))
+	}
+
+	expectedFn1Annotations := []string{
+		"@deprecated Use process_typed_id instead",
+		"@nodiscard",
+	}
+
+	for i, expected := range expectedFn1Annotations {
+		if i >= len(fn1.CustomAnnotations) {
+			t.Errorf("Missing function annotation: %q", expected)
+			continue
+		}
+		if fn1.CustomAnnotations[i] != expected {
+			t.Errorf("Expected function annotation %q, got %q", expected, fn1.CustomAnnotations[i])
+		}
+	}
+
+	fn2 := module.Functions[1]
+	if len(fn2.CustomAnnotations) != 3 {
+		t.Errorf("Expected 3 annotations on %s, got %d", fn2.Name, len(fn2.CustomAnnotations))
+	}
+}
+
+func verifyGeneratedStubs(t *testing.T, a *Analyzer) {
+	stubs, err := a.GenerateModuleStub("custom_annotations")
+	if err != nil {
+		t.Fatalf("GenerateModuleStub failed: %v", err)
+	}
+
+	expectedAnnotations := []string{
+		"---@alias ID string|number",
+		"---@alias Handler fun(id: ID): boolean",
+		"---@deprecated Use process_typed_id instead",
+		"---@nodiscard",
+		"---@generic T",
+	}
+
+	for _, expected := range expectedAnnotations {
+		if !strings.Contains(stubs, expected) {
+			t.Errorf("Expected annotation: %q", expected)
+		}
 	}
 }

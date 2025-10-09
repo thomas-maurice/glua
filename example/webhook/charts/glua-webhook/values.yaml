@@ -1,0 +1,76 @@
+# Default values for glua-webhook
+
+replicaCount: 1
+image:
+  repository: glua-webhook
+  pullPolicy: IfNotPresent
+  tag: latest
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+podAnnotations: {}
+podLabels: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  fsGroup: 65532
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+service:
+  type: ClusterIP
+  port: 443
+  targetPort: 8443
+resources:
+  limits:
+    cpu: 200m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 64Mi
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8443
+    scheme: HTTPS
+  initialDelaySeconds: 10
+  periodSeconds: 10
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8443
+    scheme: HTTPS
+  initialDelaySeconds: 5
+  periodSeconds: 5
+nodeSelector: {}
+tolerations: []
+affinity: {}
+# Webhook configuration
+webhook:
+  # failurePolicy: Fail or Ignore
+  failurePolicy: Fail
+  # namespaceSelector for webhook scope
+  namespaceSelector: {}
+  # objectSelector for webhook scope
+  objectSelector:
+    matchLabels:
+      glua-webhook/mutate: "true"
+  # sideEffects: None, NoneOnDryRun
+  sideEffects: None
+  # timeoutSeconds for webhook calls
+  timeoutSeconds: 10
+# Certificate configuration (uses cert-manager)
+certificate:
+  enabled: true
+  issuerRef:
+    name: selfsigned-issuer
+    kind: Issuer
+  dnsNames: []

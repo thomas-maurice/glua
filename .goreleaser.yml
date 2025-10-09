@@ -1,0 +1,98 @@
+# goreleaser configuration for glua
+version: 2
+
+before:
+  hooks:
+    # Generate all Lua stubs before building
+    - make gen-stubs
+
+builds:
+  - id: stubgen
+    main: ./cmd/stubgen
+    binary: stubgen
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: stubgen-archive
+    name_template: "stubgen_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    builds:
+      - stubgen
+    files:
+      - README.md
+      - LICENSE
+
+  - id: lua-stubs
+    name_template: "glua-stubs_{{ .Version }}"
+    meta: true
+    files:
+      - src: library/*.lua
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: thomas-maurice
+    name: glua
+  draft: false
+  prerelease: auto
+  name_template: "{{.ProjectName}} {{.Version}}"
+  header: |
+    ## glua {{.Version}}
+
+    ### Downloads
+
+    - **stubgen binary**: Download the appropriate binary for your platform below
+    - **Lua stubs**: Download `glua-stubs_{{.Version}}.tar.gz` for IDE autocomplete support
+
+  footer: |
+    ## Installation
+
+    ### Install stubgen binary
+
+    ```bash
+    # Linux/macOS
+    tar -xzf stubgen_{{.Version}}_<os>_<arch>.tar.gz
+    sudo mv stubgen /usr/local/bin/
+
+    # Windows
+    unzip stubgen_{{.Version}}_windows_<arch>.zip
+    # Move stubgen.exe to your PATH
+    ```
+
+    ### Install Lua stubs for IDE autocomplete
+
+    ```bash
+    # Extract to your project
+    tar -xzf glua-stubs_{{.Version}}.tar.gz -C .
+
+    # Or extract to a specific directory
+    mkdir -p lua-stubs
+    tar -xzf glua-stubs_{{.Version}}.tar.gz -C lua-stubs --strip-components=1
+    ```

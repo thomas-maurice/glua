@@ -1,3 +1,23 @@
+// Copyright (c) 2024-2025 Thomas Maurice
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 package stubgen
 
 import (
@@ -11,34 +31,36 @@ import (
 	"strings"
 )
 
-// LuaModule represents a discovered Lua module
+// LuaModule: represents a discovered Lua module
 type LuaModule struct {
-	Name      string
-	Functions []*LuaFunction
+	Name              string
+	Functions         []*LuaFunction
+	CustomAnnotations []string // Module-level custom annotations
 }
 
-// LuaFunction represents a Lua function exported by a module
+// LuaFunction: represents a Lua function exported by a module
 type LuaFunction struct {
-	Name        string
-	Description string
-	Params      []*LuaParam
-	Returns     []*LuaReturn
+	Name              string
+	Description       string
+	Params            []*LuaParam
+	Returns           []*LuaReturn
+	CustomAnnotations []string // Function-level custom annotations
 }
 
-// LuaParam represents a function parameter
+// LuaParam: represents a function parameter
 type LuaParam struct {
 	Name        string
 	Type        string
 	Description string
 }
 
-// LuaReturn represents a function return value
+// LuaReturn: represents a function return value
 type LuaReturn struct {
 	Type        string
 	Description string
 }
 
-// Analyzer scans Go source files and extracts Lua module definitions
+// Analyzer: scans Go source files and extracts Lua module definitions
 type Analyzer struct {
 	modules map[string]*LuaModule
 }
@@ -99,8 +121,9 @@ func (a *Analyzer) parseFile(filename string) error {
 		// Check if this is a module loader
 		if moduleName := a.extractModuleName(comment); moduleName != "" {
 			currentModule = &LuaModule{
-				Name:      moduleName,
-				Functions: make([]*LuaFunction, 0),
+				Name:              moduleName,
+				Functions:         make([]*LuaFunction, 0),
+				CustomAnnotations: a.extractCustomAnnotations(comment),
 			}
 			a.modules[moduleName] = currentModule
 			continue
@@ -127,6 +150,25 @@ func (a *Analyzer) extractModuleName(comment string) string {
 	return ""
 }
 
+// extractCustomAnnotations: extracts custom Lua annotations from @luaannotation lines
+func (a *Analyzer) extractCustomAnnotations(comment string) []string {
+	lines := strings.Split(comment, "\n")
+	var annotations []string
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "@luaannotation ") {
+			// Extract everything after @luaannotation
+			annotation := strings.TrimSpace(strings.TrimPrefix(line, "@luaannotation "))
+			if annotation != "" {
+				annotations = append(annotations, annotation)
+			}
+		}
+	}
+
+	return annotations
+}
+
 // extractFunction: extracts function information from comment annotations
 func (a *Analyzer) extractFunction(comment string) *LuaFunction {
 	lines := strings.Split(comment, "\n")
@@ -141,9 +183,10 @@ func (a *Analyzer) extractFunction(comment string) *LuaFunction {
 
 		if strings.HasPrefix(line, "@luafunc ") {
 			fn = &LuaFunction{
-				Name:    strings.TrimSpace(strings.TrimPrefix(line, "@luafunc ")),
-				Params:  make([]*LuaParam, 0),
-				Returns: make([]*LuaReturn, 0),
+				Name:              strings.TrimSpace(strings.TrimPrefix(line, "@luafunc ")),
+				Params:            make([]*LuaParam, 0),
+				Returns:           make([]*LuaReturn, 0),
+				CustomAnnotations: make([]string, 0),
 			}
 			continue
 		}
@@ -168,6 +211,11 @@ func (a *Analyzer) extractFunction(comment string) *LuaFunction {
 			ret := a.parseReturn(line)
 			if ret != nil {
 				fn.Returns = append(fn.Returns, ret)
+			}
+		} else if strings.HasPrefix(line, "@luaannotation ") {
+			annotation := strings.TrimSpace(strings.TrimPrefix(line, "@luaannotation "))
+			if annotation != "" {
+				fn.CustomAnnotations = append(fn.CustomAnnotations, annotation)
 			}
 		}
 	}
@@ -241,16 +289,17 @@ func (a *Analyzer) GenerateStubs() (string, error) {
 
 		// Generate module comment
 		sb.WriteString(fmt.Sprintf("--- %s module\n", moduleName))
+
+		// Module-level custom annotations
+		for _, annotation := range module.CustomAnnotations {
+			sb.WriteString(fmt.Sprintf("---%s\n", annotation))
+		}
+
 		sb.WriteString(fmt.Sprintf("---@class %s\n", moduleName))
 		sb.WriteString(fmt.Sprintf("local %s = {}\n\n", moduleName))
 
 		// Generate function stubs
 		for _, fn := range module.Functions {
-			// Function description
-			if fn.Description != "" {
-				sb.WriteString(fmt.Sprintf("--- %s\n", fn.Description))
-			}
-
 			// Parameter annotations
 			for _, param := range fn.Params {
 				if param.Description != "" {
@@ -269,6 +318,11 @@ func (a *Analyzer) GenerateStubs() (string, error) {
 				}
 			}
 
+			// Function-level custom annotations
+			for _, annotation := range fn.CustomAnnotations {
+				sb.WriteString(fmt.Sprintf("---%s\n", annotation))
+			}
+
 			// Function signature
 			paramNames := make([]string, len(fn.Params))
 			for i, param := range fn.Params {
@@ -276,8 +330,11 @@ func (a *Analyzer) GenerateStubs() (string, error) {
 			}
 			sb.WriteString(fmt.Sprintf("function %s.%s(%s) end\n\n", moduleName, fn.Name, strings.Join(paramNames, ", ")))
 		}
+	}
 
-		sb.WriteString(fmt.Sprintf("return %s\n", moduleName))
+	// Add single return statement at the end of the file
+	if len(moduleNames) > 0 {
+		sb.WriteString("return {}\n")
 	}
 
 	return sb.String(), nil
@@ -303,8 +360,13 @@ func (a *Analyzer) GenerateModuleStub(moduleName string) (string, error) {
 
 	var sb strings.Builder
 
-	// Add meta annotation for Lua LSP
-	sb.WriteString("---@meta\n\n")
+	// Add meta annotation for Lua LSP with module name
+	sb.WriteString(fmt.Sprintf("---@meta %s\n\n", moduleName))
+
+	// Module-level custom annotations
+	for _, annotation := range module.CustomAnnotations {
+		sb.WriteString(fmt.Sprintf("---%s\n", annotation))
+	}
 
 	// Generate module class
 	sb.WriteString(fmt.Sprintf("---@class %s\n", moduleName))
@@ -312,11 +374,6 @@ func (a *Analyzer) GenerateModuleStub(moduleName string) (string, error) {
 
 	// Generate function stubs
 	for _, fn := range module.Functions {
-		// Function description
-		if fn.Description != "" {
-			sb.WriteString(fmt.Sprintf("--- %s\n", fn.Description))
-		}
-
 		// Parameter annotations
 		for _, param := range fn.Params {
 			if param.Description != "" {
@@ -335,6 +392,11 @@ func (a *Analyzer) GenerateModuleStub(moduleName string) (string, error) {
 			}
 		}
 
+		// Function-level custom annotations
+		for _, annotation := range fn.CustomAnnotations {
+			sb.WriteString(fmt.Sprintf("---%s\n", annotation))
+		}
+
 		// Function signature
 		paramNames := make([]string, len(fn.Params))
 		for i, param := range fn.Params {
@@ -343,6 +405,7 @@ func (a *Analyzer) GenerateModuleStub(moduleName string) (string, error) {
 		sb.WriteString(fmt.Sprintf("function %s.%s(%s) end\n\n", moduleName, fn.Name, strings.Join(paramNames, ", ")))
 	}
 
+	// Return the module
 	sb.WriteString(fmt.Sprintf("return %s\n", moduleName))
 
 	return sb.String(), nil

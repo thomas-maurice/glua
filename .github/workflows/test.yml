@@ -1,3 +1,6 @@
+# Copyright (c) 2024-2025 Thomas Maurice
+# SPDX-License-Identifier: MIT
+
 name: Tests
 
 on:
@@ -10,9 +13,6 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: ['1.21', '1.22', '1.23']
 
     steps:
     - name: Checkout code
@@ -21,7 +21,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: ${{ matrix.go-version }}
+        go-version: '1.24'
 
     - name: Cache Go modules
       uses: actions/cache@v4
@@ -29,9 +29,9 @@ jobs:
         path: |
           ~/go/pkg/mod
           ~/.cache/go-build
-        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+        key: go-1.24-${{ hashFiles('**/go.sum') }}
         restore-keys: |
-          ${{ runner.os }}-go-${{ matrix.go-version }}-
+          go-1.24-
 
     - name: Download dependencies
       run: go mod download
@@ -50,7 +50,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.23'
+        go-version: '1.24'
 
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v6
@@ -69,7 +69,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.23'
+        go-version: '1.24'
 
     - name: Build stubgen
       run: go build -v ./cmd/stubgen
@@ -89,16 +89,78 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.23'
+        go-version: '1.24'
 
     - name: Run example
       working-directory: ./example
       run: |
-        go run main.go
+        go run .
         echo "✓ Example completed successfully"
 
     - name: Generate stubs
       run: |
         go run ./cmd/stubgen -dir pkg/modules -output-dir /tmp/library
-        test -f /tmp/library/kubernetes.lua || (echo "kubernetes.lua not generated" && exit 1)
+        test -f /tmp/library/kubernetes.gen.lua || (echo "kubernetes.gen.lua not generated" && exit 1)
         echo "✓ Stub generation successful"
+
+  kubernetes:
+    name: Kubernetes Integration Test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+
+    - name: Install Kind
+      run: |
+        curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+        chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/kind
+
+    - name: Install kubectl
+      run: |
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        chmod +x kubectl
+        sudo mv kubectl /usr/local/bin/kubectl
+
+    - name: Run Kubernetes integration test
+      working-directory: ./example/kubernetes
+      run: |
+        chmod +x run-test.sh
+        ./run-test.sh
+
+  k8sclient:
+    name: K8s Client Example Test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+
+    - name: Install Kind
+      run: |
+        curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+        chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/kind
+
+    - name: Install kubectl
+      run: |
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        chmod +x kubectl
+        sudo mv kubectl /usr/local/bin/kubectl
+
+    - name: Run k8sclient example test
+      working-directory: ./example/k8sclient
+      run: |
+        chmod +x run-test.sh
+        ./run-test.sh

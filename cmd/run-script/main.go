@@ -1,3 +1,23 @@
+// Copyright (c) 2024-2025 Thomas Maurice
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 package main
 
 import (
@@ -7,12 +27,15 @@ import (
 
 	"github.com/thomas-maurice/glua/example/sample"
 	"github.com/thomas-maurice/glua/pkg/glua"
+	jsonmodule "github.com/thomas-maurice/glua/pkg/modules/json"
 	"github.com/thomas-maurice/glua/pkg/modules/kubernetes"
+	spewmodule "github.com/thomas-maurice/glua/pkg/modules/spew"
 	lua "github.com/yuin/gopher-lua"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// main: entry point for running Lua scripts with Kubernetes module support
 func main() {
 	// Check if script file is provided
 	if len(os.Args) < 2 {
@@ -25,6 +48,8 @@ func main() {
 		fmt.Println("  scripts/05_timestamp_operations.lua")
 		fmt.Println("  scripts/06_multi_container_analysis.lua")
 		fmt.Println("  scripts/07_json_export.lua")
+		fmt.Println("  scripts/08_json_processing.lua")
+		fmt.Println("  scripts/09_spew_debugging.lua")
 		os.Exit(1)
 	}
 
@@ -43,8 +68,10 @@ func main() {
 	L := lua.NewState()
 	defer L.Close()
 
-	// Load kubernetes module
+	// Load kubernetes, json, and spew modules
 	L.PreloadModule("kubernetes", kubernetes.Loader)
+	L.PreloadModule("json", jsonmodule.Loader)
+	L.PreloadModule("spew", spewmodule.Loader)
 
 	// Create translator
 	translator := glua.NewTranslator()
@@ -107,6 +134,7 @@ func main() {
 	fmt.Println("✓ Script execution completed successfully")
 }
 
+// generateStubs: creates Lua LSP type annotations for Kubernetes types
 func generateStubs() error {
 	treg := glua.NewTypeRegistry()
 

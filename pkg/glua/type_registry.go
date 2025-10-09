@@ -1,3 +1,23 @@
+// Copyright (c) 2024-2025 Thomas Maurice
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 package glua
 
 import (
@@ -7,27 +27,27 @@ import (
 	"strings"
 )
 
-// TypeInfo stores information about a registered Go type for Lua stub generation
+// TypeInfo: stores information about a registered Go type for Lua stub generation
 type TypeInfo struct {
-	Name       string              // The Lua-friendly type name (e.g., "corev1.Pod")
-	GoType     reflect.Type        // The original Go type
+	Name       string                // The Lua-friendly type name (e.g., "corev1.Pod")
+	GoType     reflect.Type          // The original Go type
 	Fields     map[string]*FieldInfo // Map of field name to field information
-	IsArray    bool                // Whether this is an array type
-	ElementKey string              // For arrays, the type key of the element
+	IsArray    bool                  // Whether this is an array type
+	ElementKey string                // For arrays, the type key of the element
 }
 
-// FieldInfo stores information about a struct field for Lua stub generation
+// FieldInfo: stores information about a struct field for Lua stub generation
 type FieldInfo struct {
 	Name    string // The field name (from JSON tag)
 	TypeKey string // The Lua type annotation (e.g., "string", "number", "corev1.Container")
 	IsArray bool   // Whether this field is an array
 }
 
-// TypeRegistry manages type registration and stub generation for Lua.
+// TypeRegistry: manages type registration and stub generation for Lua.
 // It processes Go types recursively and generates Lua LSP annotations.
 type TypeRegistry struct {
 	types map[string]*TypeInfo // Map of type key to type information (prevents duplicates)
-	queue []interface{}         // Queue of objects to process (for discovering types)
+	queue []interface{}        // Queue of objects to process (for discovering types)
 }
 
 // NewTypeRegistry: creates a new TypeRegistry instance
@@ -131,12 +151,37 @@ func (r *TypeRegistry) getTypeKey(t reflect.Type) string {
 // Returns the Lua type annotation string for the type.
 // Handles circular dependencies by checking if a type is already registered.
 func (r *TypeRegistry) processType(t reflect.Type) string {
-	// Handle pointers
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
+	t = r.unwrapPointer(t)
+
+	if primType := r.getPrimitiveType(t); primType != "" {
+		return primType
 	}
 
-	// For primitive types, return Lua type name
+	if t.Kind() == reflect.Slice || t.Kind() == reflect.Array {
+		return r.processArrayType(t)
+	}
+
+	if t.Kind() == reflect.Map {
+		return r.processMapType(t)
+	}
+
+	if t.Kind() == reflect.Struct {
+		return r.processStructType(t)
+	}
+
+	return "any"
+}
+
+// unwrapPointer: unwraps pointer types
+func (r *TypeRegistry) unwrapPointer(t reflect.Type) reflect.Type {
+	if t.Kind() == reflect.Ptr {
+		return t.Elem()
+	}
+	return t
+}
+
+// getPrimitiveType: returns Lua type name for primitive Go types
+func (r *TypeRegistry) getPrimitiveType(t reflect.Type) string {
 	switch t.Kind() {
 	case reflect.String:
 		return "string"
@@ -149,75 +194,67 @@ func (r *TypeRegistry) processType(t reflect.Type) string {
 	case reflect.Interface:
 		return "any"
 	}
+	return ""
+}
 
-	// Handle slices/arrays
-	if t.Kind() == reflect.Slice || t.Kind() == reflect.Array {
-		elemType := t.Elem()
-		elemKey := r.processType(elemType)
-		// Return array notation
-		return elemKey + "[]"
+// processArrayType: processes slice and array types
+func (r *TypeRegistry) processArrayType(t reflect.Type) string {
+	elemType := t.Elem()
+	elemKey := r.processType(elemType)
+	return elemKey + "[]"
+}
+
+// processMapType: processes map types
+func (r *TypeRegistry) processMapType(t reflect.Type) string {
+	valueType := t.Elem()
+	valueKey := r.processType(valueType)
+	return "table<string, " + valueKey + ">"
+}
+
+// processStructType: processes struct types and registers them
+func (r *TypeRegistry) processStructType(t reflect.Type) string {
+	typeKey := r.getTypeKey(t)
+
+	if _, exists := r.types[typeKey]; exists {
+		return r.getTypeName(t)
 	}
 
-	// Handle maps
-	if t.Kind() == reflect.Map {
-		valueType := t.Elem()
-		valueKey := r.processType(valueType)
-		return "table<string, " + valueKey + ">"
+	typeName := r.getTypeName(t)
+	typeInfo := &TypeInfo{
+		Name:   typeName,
+		GoType: t,
+		Fields: make(map[string]*FieldInfo),
 	}
+	r.types[typeKey] = typeInfo
 
-	// For structs, register the type
-	if t.Kind() == reflect.Struct {
-		typeKey := r.getTypeKey(t)
+	r.processStructFields(t, typeInfo)
+	return typeName
+}
 
-		// Check if already registered to break circular dependencies
-		if _, exists := r.types[typeKey]; exists {
-			return r.getTypeName(t)
+// processStructFields: processes all fields in a struct
+func (r *TypeRegistry) processStructFields(t reflect.Type, typeInfo *TypeInfo) {
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if !field.IsExported() {
+			continue
 		}
 
-		// Register the type first to break circular references
-		typeName := r.getTypeName(t)
-		typeInfo := &TypeInfo{
-			Name:   typeName,
-			GoType: t,
-			Fields: make(map[string]*FieldInfo),
-		}
-		r.types[typeKey] = typeInfo
-
-		// Process all fields
-		for i := 0; i < t.NumField(); i++ {
-			field := t.Field(i)
-
-			// Skip unexported fields
-			if !field.IsExported() {
-				continue
-			}
-
-			// Get JSON tag name
-			jsonTag := field.Tag.Get("json")
-			if jsonTag == "" || jsonTag == "-" {
-				continue
-			}
-
-			// Extract field name from JSON tag
-			fieldName := strings.Split(jsonTag, ",")[0]
-			if fieldName == "" {
-				fieldName = field.Name
-			}
-
-			// Process the field type
-			fieldTypeKey := r.processType(field.Type)
-
-			typeInfo.Fields[fieldName] = &FieldInfo{
-				Name:    fieldName,
-				TypeKey: fieldTypeKey,
-			}
+		jsonTag := field.Tag.Get("json")
+		if jsonTag == "" || jsonTag == "-" {
+			continue
 		}
 
-		return typeName
+		fieldName := strings.Split(jsonTag, ",")[0]
+		if fieldName == "" {
+			fieldName = field.Name
+		}
+
+		fieldTypeKey := r.processType(field.Type)
+		typeInfo.Fields[fieldName] = &FieldInfo{
+			Name:    fieldName,
+			TypeKey: fieldTypeKey,
+		}
 	}
-
-	// Default case
-	return "any"
 }
 
 // Process: processes all registered types and discovers dependencies.
@@ -238,9 +275,10 @@ func (r *TypeRegistry) Process() error {
 // Returns a string containing ---@class and ---@field annotations.
 //
 // Example output:
-//   ---@class corev1.Pod
-//   ---@field metadata corev1.ObjectMeta
-//   ---@field spec corev1.PodSpec
+//
+//	---@class corev1.Pod
+//	---@field metadata corev1.ObjectMeta
+//	---@field spec corev1.PodSpec
 func (r *TypeRegistry) GenerateStubs() (string, error) {
 	var sb strings.Builder
 
@@ -273,15 +311,7 @@ func (r *TypeRegistry) GenerateStubs() (string, error) {
 		sb.WriteString("\n")
 	}
 
-	// Create a types table to export all type names for convenience
-	sb.WriteString("-- Export all types for convenience\n")
-	sb.WriteString("local types = {\n")
-	for _, key := range typeKeys {
-		typeInfo := r.types[key]
-		sb.WriteString(fmt.Sprintf("  %s = {},\n", typeInfo.Name))
-	}
-	sb.WriteString("}\n\n")
-	sb.WriteString("return types\n")
+	sb.WriteString("return {}\n")
 
 	return sb.String(), nil
 }

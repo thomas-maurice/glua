@@ -2,7 +2,7 @@
 
 This example demonstrates **all core features** of the glua library in a single comprehensive demo.
 
-## 🎯 What It Demonstrates
+## What It Demonstrates
 
 The example application showcases:
 
@@ -17,7 +17,7 @@ The example application showcases:
 6. **Round-Trip Verification** - Verify perfect data integrity preservation
 7. **Feature Summary** - Complete overview of all library capabilities
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Option 1: Run the Main Demo
 
@@ -28,6 +28,7 @@ go run main.go
 ```
 
 Or from repository root:
+
 ```bash
 # Build and run
 make example
@@ -47,7 +48,7 @@ go run ./cmd/run-script scripts/03_policy_validation.lua
 
 See [scripts/README.md](scripts/README.md) for all 7 available scripts.
 
-## 📊 Example Output
+## Example Output
 
 ```
 ╔════════════════════════════════════════════════════════════╗
@@ -106,7 +107,7 @@ Next steps:
 ⏱️  Total execution time: ~4ms
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 glua/
@@ -141,7 +142,7 @@ These files are generated automatically when you run the example or stubgen:
 - **example/annotations.gen.lua** - Type definitions for Pod and related types (~30KB)
 - **library/kubernetes.lua** - Kubernetes module stubs for IDE autocomplete (~1.7KB)
 
-## 🔧 Generating IDE Stubs
+## Generating IDE Stubs
 
 glua provides two types of stubs for IDE autocomplete:
 
@@ -158,12 +159,14 @@ go run ./cmd/stubgen -dir pkg/modules -output-dir library
 ```
 
 **Output**:
+
 ```
 Generated library/kubernetes.lua
 Generated Lua stubs for 1 module(s) in library/
 ```
 
 **What gets generated** (`library/kubernetes.lua`):
+
 ```lua
 ---@meta
 
@@ -198,6 +201,7 @@ return kubernetes
 ```
 
 **How stubgen works**:
+
 1. Scans Go files in `pkg/modules/` for special annotations
 2. Finds `@luamodule` to identify modules
 3. Extracts `@luafunc`, `@luaparam`, `@luareturn` annotations
@@ -215,6 +219,7 @@ go run main.go
 ```
 
 Or programmatically in your code:
+
 ```go
 registry := glua.NewTypeRegistry()
 registry.Register(&corev1.Pod{})
@@ -223,13 +228,14 @@ stubs, _ := registry.GenerateStubs()
 os.WriteFile("annotations.gen.lua", []byte(stubs), 0644)
 ```
 
-## 🎨 IDE Setup for Autocomplete
+## IDE Setup for Autocomplete
 
 ### VSCode
 
 1. **Install Lua extension**: [Lua](https://marketplace.visualstudio.com/items?itemName=sumneko.lua)
 
 2. **Generate stubs**:
+
    ```bash
    # From repo root
    make stubgen          # Generates library/kubernetes.lua
@@ -237,18 +243,19 @@ os.WriteFile("annotations.gen.lua", []byte(stubs), 0644)
    go run main.go        # Generates example/annotations.gen.lua
    ```
 
-3. **Open any Lua file** and enjoy autocomplete! ✨
+3. **Open any Lua file** and enjoy autocomplete
 
 ### Neovim
 
 1. **Install lua-language-server**:
+
    ```vim
    :MasonInstall lua-language-server
    ```
 
 2. **Generate stubs** (same as above)
 
-3. **Open any Lua file** - autocomplete works automatically!
+3. **Open any Lua file** - autocomplete works automatically
 
 ### What You Get
 
@@ -265,11 +272,12 @@ local k8s = require("kubernetes")
 k8s.parse_           -- parse_memory, parse_cpu, parse_time, format_time
 ```
 
-## 📚 Example Scripts
+## Example Scripts
 
 See [scripts/README.md](scripts/README.md) for quick reference, or [EXAMPLES.md](EXAMPLES.md) for comprehensive documentation.
 
 **Quick overview**:
+
 1. **Basic Pod Info** - Display metadata, labels, containers
 2. **Resource Limits** - Parse and analyze CPU/memory with kubernetes module
 3. **Policy Validation** - Enforce organizational policies (4 policies checked)
@@ -278,20 +286,20 @@ See [scripts/README.md](scripts/README.md) for quick reference, or [EXAMPLES.md]
 6. **Multi-Container Analysis** - Analyze sidecar patterns, resource distribution
 7. **JSON Export** - Transform pod data to custom report format
 
-## 🔍 What Gets Demonstrated
+## What Gets Demonstrated
 
 ### Core Library Features
 
-- ✅ **TypeRegistry** - Register Go types and generate LSP stubs
-- ✅ **Translator.ToLua()** - Convert Go structs to Lua tables
-- ✅ **Translator.FromLua()** - Convert Lua tables back to Go
-- ✅ **Kubernetes Module** - parse_memory, parse_cpu, parse_time, format_time
-- ✅ **Round-trip Integrity** - Perfect data preservation
+- **TypeRegistry** - Register Go types and generate LSP stubs
+- **Translator.ToLua()** - Convert Go structs to Lua tables
+- **Translator.FromLua()** - Convert Lua tables back to Go
+- **Kubernetes Module** - parse_memory, parse_cpu, parse_time, format_time
+- **Round-trip Integrity** - Perfect data preservation
 
 ### Real-World Use Cases
 
-- ✅ **Resource Analysis** - Parse and validate resource limits
-- ✅ **Policy Enforcement** - Validate pods against organizational rules
-- ✅ **Data Transformation** - Modify pod data and export to Go
-- ✅ **Complex Calculations** - Time calculations, resource aggregation
-- ✅ **IDE Autocomplete** - Full type safety and IntelliSense
+- **Resource Analysis** - Parse and validate resource limits
+- **Policy Enforcement** - Validate pods against organizational rules
+- **Data Transformation** - Modify pod data and export to Go
+- **Complex Calculations** - Time calculations, resource aggregation
+- **IDE Autocomplete** - Full type safety and IntelliSense

@@ -16,18 +16,80 @@ A comprehensive toolkit for embedding Lua in Go applications with full type safe
 - [API Reference](#api-reference)
 - [Features](#features)
 - [Use Cases](#use-cases)
+- [Performance](#performance)
 - [Testing](#testing)
 - [Contributing](#contributing)
 
 ## Installation
 
+### Using in Your Project
+
+Add glua to your `go.mod`:
+
 ```bash
-go get github.com/thomas-maurice/glua
+go get github.com/thomas-maurice/glua@latest
 ```
 
-Requirements:
-- Go 1.21 or later
-- For Kubernetes support: `k8s.io/api` and `k8s.io/apimachinery`
+Or manually add to `go.mod` and run `go mod tidy`:
+
+```go
+require github.com/thomas-maurice/glua v0.1.0 // or latest version
+```
+
+### Installing Lua Stubs for IDE Autocomplete
+
+Download the latest Lua stubs for IDE autocomplete support:
+
+```bash
+# Download and extract to your project
+VERSION=v0.1.0  # Replace with the latest version
+curl -sL https://github.com/thomas-maurice/glua/releases/download/${VERSION}/glua-stubs_${VERSION}.tar.gz | tar xz
+
+# This extracts to library/*.gen.lua
+# Configure your IDE to recognize the library/ directory
+```
+
+**VS Code Setup** (with Lua extension):
+
+Create or update `.vscode/settings.json`:
+
+```json
+{
+  "Lua.workspace.library": ["library"]
+}
+```
+
+Now you'll get autocomplete for all glua modules in your Lua scripts!
+
+### Installing stubgen Binary (Optional)
+
+If you want to generate stubs for your own modules:
+
+```bash
+# Linux/macOS
+VERSION=v0.1.0  # Replace with the latest version
+curl -sL https://github.com/thomas-maurice/glua/releases/download/${VERSION}/stubgen_${VERSION}_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/').tar.gz | tar xz
+sudo mv stubgen /usr/local/bin/
+
+# Verify installation
+stubgen --help
+```
+
+### Cloning the Repository
+
+To work on glua or run the examples:
+
+```bash
+git clone https://github.com/thomas-maurice/glua.git
+cd glua
+go mod download
+```
+
+### Requirements
+
+- Go 1.24 or later
+- For Kubernetes support: `k8s.io/client-go`, `k8s.io/api`, `k8s.io/apimachinery`
+- For integration tests: `kind` and `kubectl`
 
 ## Quick Start
 
@@ -108,6 +170,7 @@ make help
 ```
 
 Built binaries:
+
 - `bin/stubgen` - Generates Lua LSP stubs for IDE autocomplete
 - `bin/example` - Complete working example with all features
 
@@ -142,6 +205,7 @@ L.SetGlobal("myPod", luaTable)
 ```
 
 Features:
+
 - Preserves timestamps (RFC3339 strings)
 - Preserves resource quantities (CPU/memory strings like "100m", "256Mi")
 - Handles nested structures, arrays, and maps
@@ -165,6 +229,7 @@ if err != nil {
 ```
 
 Features:
+
 - Full round-trip integrity (original == reconstructed)
 - Automatic type coercion
 - Preserves all complex Kubernetes types
@@ -231,6 +296,7 @@ print(pod.spec.containers[1].image)
 The built-in Kubernetes module provides utility functions for parsing K8s resource quantities and timestamps.
 
 Load in Go:
+
 ```go
 L.PreloadModule("kubernetes", kubernetes.Loader)
 ```
@@ -282,6 +348,66 @@ for i, container in ipairs(pod.spec.containers) do
         print(string.format("  CPU limit: %d millicores", cpuMillis))
     end
 end
+```
+
+### K8s Client Module
+
+The `k8sclient` module provides a dynamic Kubernetes client for Lua, allowing full CRUD operations on any Kubernetes resource directly from Lua scripts.
+
+Load in Go:
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/k8sclient"
+
+config, _ := clientcmd.BuildConfigFromFlags("", kubeconfig)
+L.PreloadModule("k8sclient", k8sclient.Loader(config))
+```
+
+Use in Lua:
+
+```lua
+local client = require("k8sclient")
+
+-- Define GVK (Group/Version/Kind)
+local pod_gvk = {group = "", version = "v1", kind = "Pod"}
+
+-- Create a Pod
+local pod = {
+    apiVersion = "v1",
+    kind = "Pod",
+    metadata = {name = "nginx", namespace = "default"},
+    spec = {
+        containers = {{
+            name = "nginx",
+            image = "nginx:alpine"
+        }}
+    }
+}
+local created, err = client.create(pod)
+
+-- Get a resource
+local fetched, err = client.get(pod_gvk, "default", "nginx")
+
+-- Update a resource
+fetched.metadata.labels = {app = "web"}
+local updated, err = client.update(fetched)
+
+-- List resources
+local pods, err = client.list(pod_gvk, "default")
+for i, pod in ipairs(pods) do
+    print(pod.metadata.name)
+end
+
+-- Delete a resource
+local err = client.delete(pod_gvk, "default", "nginx")
+```
+
+**Complete Example:** See [example/k8sclient/](./example/k8sclient) for a full working example with nginx Pod, ConfigMaps, and Kind cluster integration.
+
+**Run the example:**
+
+```bash
+make test-k8sclient  # Runs with temporary Kind cluster
 ```
 
 ### Error Handling
@@ -344,6 +470,7 @@ if string(originalJSON) == string(reconstructedJSON) {
 ```
 
 This works for:
+
 - Timestamps (RFC3339 strings preserved)
 - Resource quantities ("100m", "256Mi" preserved as strings)
 - Maps and labels
@@ -404,13 +531,45 @@ func add(L *lua.LState) int {
 }
 ```
 
-### Step 2: Generate Stubs
+### Step 2: Generate Stubs with stubgen
+
+The stubgen tool scans your Go code for special annotations and generates Lua LSP stubs for IDE autocomplete.
+
+**Run stubgen:**
 
 ```bash
+# Scan pkg/modules directory and generate stubs in library/
 make stubgen
+
+# Or manually:
+go run ./cmd/stubgen -dir pkg/modules -output-dir library
+
+# For a single combined file:
+go run ./cmd/stubgen -dir pkg/modules -output mymodules.gen.lua
 ```
 
-This creates `library/mymodule.lua`:
+**What stubgen looks for:**
+
+The tool scans for these comment annotations in your Go code:
+
+- `@luamodule <name>` - Marks the Loader function (required)
+- `@luafunc <name>` - Exported Lua function name
+- `@luaparam <name> <type> <description>` - Function parameter
+- `@luareturn <type> <description>` - Return value
+
+**Example from our code above:**
+
+```go
+// @luamodule mymodule    <- Tells stubgen this is a Lua module
+func Loader(L *lua.LState) int { ... }
+
+// @luafunc greet         <- Function name in Lua
+// @luaparam name string The name to greet    <- Parameter with type and description
+// @luareturn string The greeting message     <- Return type and description
+func greet(L *lua.LState) int { ... }
+```
+
+**Generated output** (`library/mymodule.gen.lua`):
 
 ```lua
 ---@meta
@@ -431,6 +590,26 @@ function mymodule.greet(name) end
 function mymodule.add(a, b) end
 
 return mymodule
+```
+
+**How it works:**
+
+1. Stubgen scans all `.go` files in the specified directory
+2. Finds functions with `@luamodule` annotation (these are module Loaders)
+3. Finds functions with `@luafunc` annotation (these are exported Lua functions)
+4. Extracts `@luaparam` and `@luareturn` annotations for each function
+5. Generates EmmyLua-compatible annotation files that LSP servers understand
+6. Outputs one `.gen.lua` file per module (or a single combined file)
+
+**Verification:**
+
+```bash
+# Check generated files
+ls library/
+# Output: json.gen.lua  kubernetes.gen.lua  mymodule.gen.lua  spew.gen.lua
+
+# View generated stub
+cat library/mymodule.gen.lua
 ```
 
 ### Step 3: Register and Use
@@ -477,6 +656,7 @@ go run ./cmd/stubgen -dir pkg/modules -output stubs.lua
 ```
 
 Options:
+
 - `-dir`: Directory to scan for Go modules (default: ".")
 - `-output-dir`: Generate per-module files in this directory (recommended for LSP)
 - `-output`: Generate single combined file (default: "module_stubs.gen.lua")
@@ -484,6 +664,7 @@ Options:
 What it does:
 
 Scans Go files for these annotations:
+
 - `@luamodule <name>` - Marks module Loader function
 - `@luafunc <name>` - Exported function
 - `@luaparam <name> <type> <description>` - Function parameter
@@ -500,15 +681,17 @@ This section explains how to enable autocomplete for your Lua scripts.
 1. Install Lua Language Server extension: [Lua](https://marketplace.visualstudio.com/items?itemName=sumneko.lua)
 
 2. Generate stubs:
+
 ```bash
 # Generate module stubs (for kubernetes, custom modules)
-make stubgen  # Creates library/kubernetes.lua, etc.
+make stubgen  # Creates library/kubernetes.gen.lua, etc.
 
 # Generate type stubs (run your app that uses TypeRegistry)
 go run main.go  # Creates annotations.gen.lua
 ```
 
 3. Create `.vscode/settings.json`:
+
 ```json
 {
   "Lua.workspace.library": [
@@ -525,17 +708,20 @@ go run main.go  # Creates annotations.gen.lua
 ### Neovim Setup
 
 1. Install lua-language-server:
+
 ```vim
 :MasonInstall lua-language-server
 ```
 
 2. Generate stubs:
+
 ```bash
 make stubgen
 go run main.go  # If using TypeRegistry
 ```
 
 3. Create `.luarc.json` in project root:
+
 ```json
 {
   "runtime": { "version": "Lua 5.1" },
@@ -631,6 +817,7 @@ All functions return `(value, error)` tuples.
 - **Lua Module System**: Create type-safe Lua modules with Go functions
 - **IDE Support**: Full autocomplete and type checking in VSCode, Neovim, and other editors
 - **Kubernetes Ready**: Built-in support for K8s API types and resource quantities
+- **K8s Dynamic Client**: Full CRUD operations on any Kubernetes resource from Lua scripts
 - **Type Safety**: Preserve complex types like timestamps, quantities, maps, and nested structures
 - **Well Tested**: 79%+ code coverage with comprehensive unit and integration tests
 
@@ -690,11 +877,54 @@ var processedConfig Config
 translator.FromLua(L, L.GetGlobal("result"), &processedConfig)
 ```
 
+## Performance
+
+Performance benchmarks demonstrate glua's efficiency for production use:
+
+```
+BenchmarkGoToLuaSimple-16              409915       3074 ns/op     4327 B/op       45 allocs/op
+BenchmarkGoToLuaComplex-16              75747      15458 ns/op    23979 B/op      221 allocs/op
+BenchmarkGoToLuaPod-16                  29530      40777 ns/op    58909 B/op      468 allocs/op
+BenchmarkLuaToGoSimple-16              609123       2044 ns/op     1000 B/op       23 allocs/op
+BenchmarkLuaToGoComplex-16             124522       9876 ns/op     4901 B/op      118 allocs/op
+BenchmarkRoundTripSimple-16            202911       5640 ns/op     5330 B/op       68 allocs/op
+BenchmarkRoundTripPod-16                30727      39612 ns/op    42924 B/op      391 allocs/op
+BenchmarkLuaFieldAccess-16              88826      13688 ns/op    33937 B/op      114 allocs/op
+BenchmarkLuaNestedFieldAccess-16        49378      24432 ns/op    37745 B/op      271 allocs/op
+BenchmarkLuaArrayIteration-16           42882      28862 ns/op    36633 B/op      335 allocs/op
+BenchmarkLuaMapIteration-16             72069      17139 ns/op    34833 B/op      125 allocs/op
+BenchmarkLuaFieldModification-16        74764      16009 ns/op    34705 B/op      154 allocs/op
+BenchmarkLuaComplexOperation-16         19200      76427 ns/op   195660 B/op      458 allocs/op
+```
+
+Key performance characteristics:
+
+- **Simple conversions**: ~3µs Go→Lua, ~2µs Lua→Go
+- **Kubernetes Pod**: ~40µs full round-trip conversion
+- **Field access**: ~14µs for simple Lua operations
+- **Production ready**: Suitable for request processing, admission controllers, policy evaluation
+
+Run benchmarks yourself:
+
+```bash
+make bench          # View benchmark results
+make bench-update   # Update benchmarks/README.md with latest results
+```
+
 ## Testing
 
 ```bash
-# Run all tests (recommended)
+# Run ALL tests: unit + k8sclient integration (recommended)
 make test
+
+# Or just run make (default target runs all tests)
+make
+
+# Unit tests only
+make test-unit
+
+# K8s integration test only (requires Kind & kubectl)
+make test-k8sclient
 
 # Verbose per-package
 make test-verbose
@@ -706,8 +936,10 @@ make test-short
 Coverage: 79%+ overall with comprehensive unit and integration tests
 
 What's tested:
+
 - Go ↔ Lua conversions in real Lua VMs (not just Go unit tests)
 - Kubernetes module functions with actual K8s types
+- K8s client CRUD operations with real Kind cluster
 - Round-trip integrity (Go → Lua → Go preserves data)
 - Stub generation from Go code
 - Race detection enabled
@@ -726,6 +958,7 @@ cd example && go run main.go
 ```
 
 Features demonstrated:
+
 - Go → Lua conversion (Pod struct to Lua table)
 - Lua script execution with kubernetes module
 - Parsing timestamps, CPU, and memory quantities
@@ -735,6 +968,7 @@ Features demonstrated:
 - Error handling
 
 To get autocomplete in the example:
+
 1. Run `make stubgen` from repo root
 2. Run `go run main.go` from example/ directory
 3. Open `script.lua` in your IDE - autocomplete works
@@ -745,7 +979,7 @@ To get autocomplete in the example:
 
 1. Run `make stubgen` to generate module stubs
 2. Check `.luarc.json` or `.vscode/settings.json` includes `"library"` directory
-3. Verify `library/kubernetes.lua` exists and starts with `---@meta`
+3. Verify `library/kubernetes.gen.lua` exists and starts with `---@meta`
 4. Restart LSP: `:LspRestart` (Neovim) or reload window (VSCode)
 
 ### Module not found error
@@ -763,6 +997,7 @@ Ensure all struct fields are exported (capitalized) and JSON-marshallable
 ## Contributing
 
 Contributions welcome! Please:
+
 1. Ensure all tests pass (`go test -cover -race ./...`)
 2. Add tests for new functionality
 3. Follow existing code style (gofmt)

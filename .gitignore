@@ -9,13 +9,13 @@ claude.md
 
 # Build artifacts
 bin/
+dist/
 *.test
 *.out
 coverage.txt
 
 # Generated files
-# **/annotations.gen.lua
-# **/modules.gen.lua
+example/**/*.gen.lua
 example/library/
 
 # IDE

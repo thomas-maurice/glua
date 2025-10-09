@@ -1,0 +1,61 @@
+# Pre-commit hooks for glua
+# See https://pre-commit.com for more information
+
+repos:
+  # General hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        exclude: ^example/webhook/charts/.*/templates/.*\.yaml$
+      - id: check-added-large-files
+        args:
+          - --maxkb=1000
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+        args:
+          - --fix=lf
+  # Go specific hooks
+  - repo: https://github.com/tekwizely/pre-commit-golang
+    rev: v1.0.0-rc.1
+    hooks:
+      # Format Go code
+      - id: go-fmt
+        args:
+          - -w
+      # Run go mod tidy
+      - id: go-mod-tidy
+      # Lint with golangci-lint (if available)
+      - id: golangci-lint-repo-mod
+        args:
+          - --timeout=5m
+      # Run go vet
+      - id: go-vet-repo-mod
+      # Build the project
+      - id: go-build-repo-mod
+        args:
+          - -o
+          - bin/
+      # Run tests
+      - id: go-test-repo-mod
+        args:
+          - -race
+          - -cover
+          - ./pkg/...
+  # Markdown linting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.43.0
+    hooks:
+      - id: markdownlint
+        args:
+          - --fix
+  # Shell script linting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        args:
+          - --severity=warning

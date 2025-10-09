@@ -1,16 +1,12 @@
--- Comprehensive Lua script demonstrating all glua features
--- This script showcases:
--- 1. Type-safe operations with LSP annotations
--- 2. Kubernetes module usage (parse_time, parse_cpu, parse_memory)
--- 3. Table manipulation and iteration
--- 4. Error handling
--- 5. Data verification and validation
-
 local k8s = require("kubernetes")
 
-print("╔════════════════════════════════════════════════════════════╗")
+print(
+	"╔════════════════════════════════════════════════════════════╗"
+)
 print("║              Lua Script: Pod Processing                    ║")
-print("╚════════════════════════════════════════════════════════════╝")
+print(
+	"╚════════════════════════════════════════════════════════════╝"
+)
 
 -- ============================================================================
 -- Helper Functions
@@ -161,12 +157,12 @@ end
 -- ============================================================================
 print("\n[Lua] Validating data...")
 local validations = {
-	{name = "Pod name not empty", check = pod.metadata.name ~= ""},
-	{name = "Container name not empty", check = container.name ~= ""},
-	{name = "Container image not empty", check = container.image ~= ""},
-	{name = "CPU limit > 0", check = cpuMillis > 0},
-	{name = "Memory limit > 0", check = memBytes > 0},
-	{name = "Timestamp > 0", check = timestamp > 0},
+	{ name = "Pod name not empty", check = pod.metadata.name ~= "" },
+	{ name = "Container name not empty", check = container.name ~= "" },
+	{ name = "Container image not empty", check = container.image ~= "" },
+	{ name = "CPU limit > 0", check = cpuMillis > 0 },
+	{ name = "Memory limit > 0", check = memBytes > 0 },
+	{ name = "Timestamp > 0", check = timestamp > 0 },
 }
 
 local passed = 0
@@ -202,6 +198,10 @@ print("  ✓ Pod ready for Go conversion")
 -- ============================================================================
 -- Summary
 -- ============================================================================
-print("\n╔════════════════════════════════════════════════════════════╗")
+print(
+	"\n╔════════════════════════════════════════════════════════════╗"
+)
 print("║         Lua Script Completed Successfully ✓                ║")
-print("╚════════════════════════════════════════════════════════════╝")
+print(
+	"╚════════════════════════════════════════════════════════════╝"
+)
