@@ -57,8 +57,8 @@ var exports = map[string]lua.LGFunction{
 //
 // @luafunc parse
 // @luaparam jsonstr string The JSON string to parse
-// @luareturn table The parsed JSON as a Lua table, or nil on error
-// @luareturn string|nil Error message if parsing failed
+// @luareturn tbl table The parsed JSON as a Lua table, or nil on error
+// @luareturn err string|nil Error message if parsing failed
 //
 // Example:
 //
@@ -91,8 +91,8 @@ func parse(L *lua.LState) int {
 //
 // @luafunc stringify
 // @luaparam tbl table The Lua table to convert to JSON
-// @luareturn string The JSON string, or nil on error
-// @luareturn string|nil Error message if conversion failed
+// @luareturn str string The JSON string, or nil on error
+// @luareturn err string|nil Error message if conversion failed
 //
 // Example:
 //

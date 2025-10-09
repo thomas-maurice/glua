@@ -1,4 +1,4 @@
-.PHONY: all build test test-unit test-verbose test-short test-k8sclient bench bench-update clean help stubgen example
+.PHONY: all build test test-unit test-verbose test-short test-k8sclient bench bench-update clean help stubgen example gen-stubs
 .PHONY: act-test act-test-unit act-lint act-build act-list act-check
 
 # Default target - runs ALL tests (unit + integration)
@@ -17,6 +17,7 @@ help:
 	@echo "  bench-update     - Run benchmarks and update benchmarks/README.md with results"
 	@echo "  build            - Build all binaries"
 	@echo "  stubgen          - Build stubgen code generator"
+	@echo "  gen-stubs        - Generate Lua stubs for all modules (kubernetes, json, spew, k8sclient)"
 	@echo "  example          - Build example application"
 	@echo "  clean            - Remove built binaries"
 	@echo "  act-check        - Check if act (GitHub Actions local runner) is installed"
@@ -113,6 +114,16 @@ stubgen:
 	@echo "=== Building stubgen ==="
 	go build -o bin/stubgen ./cmd/stubgen
 	@echo "✓ stubgen built -> bin/stubgen"
+
+# Generate Lua stubs for all modules
+gen-stubs:
+	@echo "=== Generating Lua stubs for all modules ==="
+	@go run ./pkg/modules/kubernetes/stubgen/main.go -output library
+	@go run ./pkg/modules/json/stubgen/main.go -output library
+	@go run ./pkg/modules/spew/stubgen/main.go -output library
+	@go run ./pkg/modules/k8sclient/stubgen/main.go -output library
+	@echo ""
+	@echo "✓ All module stubs generated in library/"
 
 # Build example application
 example:

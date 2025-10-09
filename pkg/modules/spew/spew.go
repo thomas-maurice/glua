@@ -80,7 +80,7 @@ func dump(L *lua.LState) int {
 //
 // @luafunc sdump
 // @luaparam value any The Lua value to dump (table, string, number, etc.)
-// @luareturn string A detailed string representation of the value
+// @luareturn str string A detailed string representation of the value
 //
 // Example:
 //

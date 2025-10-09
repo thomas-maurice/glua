@@ -32,9 +32,9 @@ import (
 
 // GVKMatcher: represents a Kubernetes Group/Version/Kind matcher.
 type GVKMatcher struct {
-	Group   string
-	Version string
-	Kind    string
+	Group   string `json:"group"`
+	Version string `json:"version"`
+	Kind    string `json:"kind"`
 }
 
 var (
@@ -89,8 +89,8 @@ var exports = map[string]lua.LGFunction{
 //
 // @luafunc parse_memory
 // @luaparam quantity string The memory quantity to parse (e.g., "1024Mi", "1Gi")
-// @luareturn number The memory value in bytes, or nil on error
-// @luareturn string|nil Error message if parsing failed
+// @luareturn bytes number The memory value in bytes, or nil on error
+// @luareturn err string|nil Error message if parsing failed
 //
 // Example:
 //
@@ -117,8 +117,8 @@ func parseMemory(L *lua.LState) int {
 //
 // @luafunc parse_cpu
 // @luaparam quantity string The CPU quantity to parse (e.g., "100m", "1", "2000m")
-// @luareturn number The CPU value in millicores, or nil on error
-// @luareturn string|nil Error message if parsing failed
+// @luareturn millicores number The CPU value in millicores, or nil on error
+// @luareturn err string|nil Error message if parsing failed
 //
 // Example:
 //
@@ -146,8 +146,8 @@ func parseCPU(L *lua.LState) int {
 //
 // @luafunc parse_time
 // @luaparam timestr string The time string in RFC3339 format (e.g., "2025-10-03T16:39:00Z")
-// @luareturn number The Unix timestamp, or nil on error
-// @luareturn string|nil Error message if parsing failed
+// @luareturn timestamp number The Unix timestamp, or nil on error
+// @luareturn err string|nil Error message if parsing failed
 //
 // Example:
 //
@@ -178,8 +178,8 @@ func parseTime(L *lua.LState) int {
 //
 // @luafunc format_time
 // @luaparam timestamp number The Unix timestamp to convert
-// @luareturn string The time in RFC3339 format (e.g., "2025-10-03T16:39:00Z"), or nil on error
-// @luareturn string|nil Error message if formatting failed
+// @luareturn timestr string The time in RFC3339 format (e.g., "2025-10-03T16:39:00Z"), or nil on error
+// @luareturn err string|nil Error message if formatting failed
 //
 // Example:
 //
@@ -204,7 +204,7 @@ func formatTime(L *lua.LState) int {
 //
 // @luafunc init_defaults
 // @luaparam obj table The Kubernetes object (must have a metadata field)
-// @luareturn table The same object with initialized defaults (modified in-place)
+// @luareturn obj table The same object with initialized defaults (modified in-place)
 //
 // Example:
 //
@@ -249,8 +249,8 @@ func initDefaults(L *lua.LState) int {
 //
 // @luafunc parse_duration
 // @luaparam duration string The duration string to parse (e.g., "5s", "10m", "2h")
-// @luareturn number The duration value in seconds, or nil on error
-// @luareturn string|nil Error message if parsing failed
+// @luareturn seconds number The duration value in seconds, or nil on error
+// @luareturn err string|nil Error message if parsing failed
 //
 // Example:
 //
@@ -277,8 +277,8 @@ func parseDuration(L *lua.LState) int {
 //
 // @luafunc format_duration
 // @luaparam seconds number The duration in seconds to convert
-// @luareturn string The duration string (e.g., "5m0s", "1h30m0s"), or nil on error
-// @luareturn string|nil Error message if formatting failed
+// @luareturn duration string The duration string (e.g., "5m0s", "1h30m0s"), or nil on error
+// @luareturn err string|nil Error message if formatting failed
 //
 // Example:
 //
@@ -300,8 +300,8 @@ func formatDuration(L *lua.LState) int {
 //
 // @luafunc match_gvk
 // @luaparam obj table The Kubernetes object to check
-// @luaparam matcher GVKMatcher The GVK matcher with group, version, and kind fields
-// @luareturn boolean true if the GVK matches
+// @luaparam matcher kubernetes.GVKMatcher The GVK matcher with group, version, and kind fields
+// @luareturn matches boolean true if the GVK matches
 //
 // Example:
 //

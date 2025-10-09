@@ -311,15 +311,7 @@ func (r *TypeRegistry) GenerateStubs() (string, error) {
 		sb.WriteString("\n")
 	}
 
-	// Create a types table to export all type names for convenience
-	sb.WriteString("-- Export all types for convenience\n")
-	sb.WriteString("local types = {\n")
-	for _, key := range typeKeys {
-		typeInfo := r.types[key]
-		sb.WriteString(fmt.Sprintf("  %s = {},\n", typeInfo.Name))
-	}
-	sb.WriteString("}\n\n")
-	sb.WriteString("return types\n")
+	sb.WriteString("return {}\n")
 
 	return sb.String(), nil
 }

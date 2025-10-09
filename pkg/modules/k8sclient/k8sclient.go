@@ -98,8 +98,8 @@ func Loader(config *rest.Config) lua.LGFunction {
 // newClientLua: creates a new client instance in Lua
 //
 // @luafunc new_client
-// @luareturn table The client instance with methods: get, create, update, delete, list
-// @luareturn string|nil Error message if client creation failed
+// @luareturn client table The client instance with methods: get, create, update, delete, list
+// @luareturn err string|nil Error message if client creation failed
 //
 // Example:
 //
@@ -133,8 +133,8 @@ func newClientLua(L *lua.LState, config *rest.Config) int {
 // @luaparam gvk GVKMatcher The GVK matcher with group, version, and kind
 // @luaparam namespace string The namespace of the resource
 // @luaparam name string The name of the resource
-// @luareturn table|nil The Kubernetes object, or nil on error
-// @luareturn string|nil Error message if retrieval failed
+// @luareturn obj table|nil The Kubernetes object, or nil on error
+// @luareturn err string|nil Error message if retrieval failed
 //
 // Example:
 //
@@ -192,8 +192,8 @@ func (c *Client) get(L *lua.LState) int {
 //
 // @luafunc create
 // @luaparam obj table The Kubernetes object to create
-// @luareturn table|nil The created Kubernetes object, or nil on error
-// @luareturn string|nil Error message if creation failed
+// @luareturn obj table|nil The created Kubernetes object, or nil on error
+// @luareturn err string|nil Error message if creation failed
 //
 // Example:
 //
@@ -264,8 +264,8 @@ func (c *Client) create(L *lua.LState) int {
 //
 // @luafunc update
 // @luaparam obj table The Kubernetes object to update
-// @luareturn table|nil The updated Kubernetes object, or nil on error
-// @luareturn string|nil Error message if update failed
+// @luareturn obj table|nil The updated Kubernetes object, or nil on error
+// @luareturn err string|nil Error message if update failed
 //
 // Example:
 //
@@ -333,7 +333,7 @@ func (c *Client) update(L *lua.LState) int {
 // @luaparam gvk GVKMatcher The GVK matcher with group, version, and kind
 // @luaparam namespace string The namespace of the resource
 // @luaparam name string The name of the resource
-// @luareturn string|nil Error message if deletion failed, nil on success
+// @luareturn err string|nil Error message if deletion failed, nil on success
 //
 // Example:
 //
@@ -380,8 +380,8 @@ func (c *Client) delete(L *lua.LState) int {
 // @luafunc list
 // @luaparam gvk GVKMatcher The GVK matcher with group, version, and kind
 // @luaparam namespace string The namespace to list from
-// @luareturn table[]|nil Array of Kubernetes objects, or nil on error
-// @luareturn string|nil Error message if listing failed
+// @luareturn objects table[]|nil Array of Kubernetes objects, or nil on error
+// @luareturn err string|nil Error message if listing failed
 //
 // Example:
 //
