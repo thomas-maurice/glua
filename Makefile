@@ -74,7 +74,26 @@ test-k8sclient:
 		echo "Error: kubectl is not installed. Install from https://kubernetes.io/docs/tasks/tools/"; \
 		exit 1; \
 	fi
-	@cd example/k8sclient && ./run-test.sh
+	@echo "=== Setting up Kind cluster for k8sclient example ==="
+	@if kind get clusters 2>/dev/null | grep -q "^glua-k8sclient-test$$"; then \
+		echo "Deleting existing cluster: glua-k8sclient-test"; \
+		kind delete cluster --name glua-k8sclient-test; \
+	fi
+	@echo "Creating Kind cluster: glua-k8sclient-test"
+	@kind create cluster --name glua-k8sclient-test --wait 5m
+	@echo "Waiting for cluster to be ready..."
+	@kubectl wait --for=condition=Ready nodes --all --timeout=300s
+	@echo ""
+	@echo "=== Building example program ==="
+	@cd example/k8sclient && go build -o ../../bin/k8sclient-example .
+	@echo ""
+	@echo "=== Running k8sclient test script ==="
+	@cd example/k8sclient && ../../bin/k8sclient-example -script test.lua
+	@echo ""
+	@echo "=== Test completed successfully! ==="
+	@echo ""
+	@echo "=== Cleaning up ==="
+	@kind delete cluster --name glua-k8sclient-test || true
 
 # Run benchmarks
 bench:
