@@ -293,6 +293,11 @@ func (r *TypeRegistry) GenerateStubs() (string, error) {
 	for _, key := range typeKeys {
 		typeInfo := r.types[key]
 
+		// Skip types with no fields (likely incomplete type processing)
+		if len(typeInfo.Fields) == 0 {
+			continue
+		}
+
 		sb.WriteString(fmt.Sprintf("---@class %s\n", typeInfo.Name))
 
 		// Sort field names for consistent output
