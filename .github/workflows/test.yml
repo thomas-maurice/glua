@@ -103,37 +103,6 @@ jobs:
         test -f /tmp/library/kubernetes.gen.lua || (echo "kubernetes.gen.lua not generated" && exit 1)
         echo "✓ Stub generation successful"
 
-  kubernetes:
-    name: Kubernetes Integration Test
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.24'
-
-    - name: Install Kind
-      run: |
-        curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
-        chmod +x ./kind
-        sudo mv ./kind /usr/local/bin/kind
-
-    - name: Install kubectl
-      run: |
-        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-        chmod +x kubectl
-        sudo mv kubectl /usr/local/bin/kubectl
-
-    - name: Run Kubernetes integration test
-      working-directory: ./example/kubernetes
-      run: |
-        chmod +x run-test.sh
-        ./run-test.sh
-
   k8sclient:
     name: K8s Client Example Test
     runs-on: ubuntu-latest
@@ -160,7 +129,4 @@ jobs:
         sudo mv kubectl /usr/local/bin/kubectl
 
     - name: Run k8sclient example test
-      working-directory: ./example/k8sclient
-      run: |
-        chmod +x run-test.sh
-        ./run-test.sh
+      run: make test-k8sclient
