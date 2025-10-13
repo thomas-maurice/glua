@@ -1,8 +1,3 @@
----@class kubernetes.GVKMatcher
----@field group string
----@field kind string
----@field version string
-
 ---@meta kubernetes
 
 ---@class kubernetes

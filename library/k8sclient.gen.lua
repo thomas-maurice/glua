@@ -47,6 +47,9 @@ k8sclient.POD = nil
 ---@type table Namespace GVK constant {group="", version="v1", kind="Namespace"}
 k8sclient.NAMESPACE = nil
 
+---@type table Node GVK constant {group="", version="v1", kind="Node"}
+k8sclient.NODE = nil
+
 ---@type table ConfigMap GVK constant {group="", version="v1", kind="ConfigMap"}
 k8sclient.CONFIGMAP = nil
 

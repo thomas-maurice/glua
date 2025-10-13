@@ -107,6 +107,8 @@ func Loader(config *rest.Config) lua.LGFunction {
 
 // @luaconst NAMESPACE table Namespace GVK constant {group="", version="v1", kind="Namespace"}
 
+// @luaconst NODE table Node GVK constant {group="", version="v1", kind="Node"}
+
 // @luaconst CONFIGMAP table ConfigMap GVK constant {group="", version="v1", kind="ConfigMap"}
 
 // @luaconst SECRET table Secret GVK constant {group="", version="v1", kind="Secret"}
@@ -147,6 +149,7 @@ func Loader(config *rest.Config) lua.LGFunction {
 func addGVKConstants(L *lua.LState, mod *lua.LTable) {
 	L.SetField(mod, "POD", createGVKTable(L, "", "v1", "Pod"))
 	L.SetField(mod, "NAMESPACE", createGVKTable(L, "", "v1", "Namespace"))
+	L.SetField(mod, "NODE", createGVKTable(L, "", "v1", "Node"))
 	L.SetField(mod, "CONFIGMAP", createGVKTable(L, "", "v1", "ConfigMap"))
 	L.SetField(mod, "SECRET", createGVKTable(L, "", "v1", "Secret"))
 	L.SetField(mod, "SERVICE", createGVKTable(L, "", "v1", "Service"))
@@ -519,24 +522,59 @@ func (c *Client) list(L *lua.LState) int {
 	return 2
 }
 
-// pluralize: simple pluralization for resource names.
-// This is a basic implementation - Kubernetes has more complex rules.
-// Kubernetes resources are all lowercase.
+// pluralize: converts a Kubernetes resource kind to its plural form.
+// Handles all resource types registered as constants in this module.
+// Kubernetes resource names are all lowercase.
 func pluralize(kind string) string {
 	// Convert to lowercase
 	lower := strings.ToLower(kind)
 
-	// Special cases
-	switch lower {
-	case "endpoints":
-		return "endpoints"
-	case "ingress":
-		return "ingresses"
+	// Map of all registered resource kinds to their correct plural forms
+	pluralMap := map[string]string{
+		// Core resources (group="")
+		"pod":                   "pods",
+		"namespace":             "namespaces",
+		"node":                  "nodes",
+		"configmap":             "configmaps",
+		"secret":                "secrets",
+		"service":               "services",
+		"serviceaccount":        "serviceaccounts",
+		"persistentvolume":      "persistentvolumes",
+		"persistentvolumeclaim": "persistentvolumeclaims",
+		"endpoints":             "endpoints",
+
+		// Apps resources (group="apps")
+		"deployment":  "deployments",
+		"statefulset": "statefulsets",
+		"daemonset":   "daemonsets",
+		"replicaset":  "replicasets",
+
+		// Batch resources (group="batch")
+		"job":     "jobs",
+		"cronjob": "cronjobs",
+
+		// Networking resources (group="networking.k8s.io")
+		"ingress":       "ingresses",
+		"networkpolicy": "networkpolicies",
+
+		// RBAC resources (group="rbac.authorization.k8s.io")
+		"role":               "roles",
+		"clusterrole":        "clusterroles",
+		"rolebinding":        "rolebindings",
+		"clusterrolebinding": "clusterrolebindings",
 	}
 
-	// Simple rule: add 's'
+	// Return exact match if found
+	if plural, ok := pluralMap[lower]; ok {
+		return plural
+	}
+
+	// Fallback: simple pluralization rules
 	if strings.HasSuffix(lower, "s") {
 		return lower + "es"
+	}
+	if strings.HasSuffix(lower, "y") {
+		return strings.TrimSuffix(lower, "y") + "ies"
 	}
 	return lower + "s"
 }
