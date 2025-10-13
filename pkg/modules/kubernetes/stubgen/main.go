@@ -29,6 +29,12 @@ import (
 
 	"github.com/thomas-maurice/glua/pkg/modules/kubernetes"
 	"github.com/thomas-maurice/glua/pkg/stubgen"
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func main() {
@@ -50,7 +56,69 @@ func main() {
 		OutputDir:  *outputDir,
 		ModuleName: "kubernetes",
 		OutputFile: "kubernetes.gen.lua",
-		Types:      []interface{}{kubernetes.GVKMatcher{}},
+		Types: []interface{}{
+			kubernetes.GVKMatcher{},
+			// Core resources
+			corev1.Pod{},
+			corev1.PodList{},
+			corev1.Namespace{},
+			corev1.NamespaceList{},
+			corev1.Node{},
+			corev1.NodeList{},
+			corev1.ConfigMap{},
+			corev1.ConfigMapList{},
+			corev1.Secret{},
+			corev1.SecretList{},
+			corev1.Service{},
+			corev1.ServiceList{},
+			corev1.ServiceAccount{},
+			corev1.ServiceAccountList{},
+			corev1.PersistentVolume{},
+			corev1.PersistentVolumeList{},
+			corev1.PersistentVolumeClaim{},
+			corev1.PersistentVolumeClaimList{},
+			// Apps resources
+			appsv1.Deployment{},
+			appsv1.DeploymentList{},
+			appsv1.StatefulSet{},
+			appsv1.StatefulSetList{},
+			appsv1.DaemonSet{},
+			appsv1.DaemonSetList{},
+			appsv1.ReplicaSet{},
+			appsv1.ReplicaSetList{},
+			// Batch resources
+			batchv1.Job{},
+			batchv1.JobList{},
+			batchv1.CronJob{},
+			batchv1.CronJobList{},
+			// Networking resources
+			networkingv1.Ingress{},
+			networkingv1.IngressList{},
+			networkingv1.NetworkPolicy{},
+			networkingv1.NetworkPolicyList{},
+			// RBAC resources
+			rbacv1.Role{},
+			rbacv1.RoleList{},
+			rbacv1.ClusterRole{},
+			rbacv1.ClusterRoleList{},
+			rbacv1.RoleBinding{},
+			rbacv1.RoleBindingList{},
+			rbacv1.ClusterRoleBinding{},
+			rbacv1.ClusterRoleBindingList{},
+			// Metav1 types
+			metav1.ObjectMeta{},
+			metav1.TypeMeta{},
+			metav1.Time{},
+			metav1.MicroTime{},
+			metav1.Duration{},
+			metav1.Status{},
+			metav1.StatusDetails{},
+			metav1.StatusCause{},
+			metav1.ListMeta{},
+			metav1.OwnerReference{},
+			metav1.LabelSelector{},
+			metav1.LabelSelectorRequirement{},
+		},
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)

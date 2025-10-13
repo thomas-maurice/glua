@@ -26,6 +26,11 @@ import (
 
 	"github.com/thomas-maurice/glua/pkg/glua"
 	lua "github.com/yuin/gopher-lua"
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -49,7 +54,185 @@ func init() {
 	if err := typeRegistry.Register(GVKMatcher{}); err != nil {
 		panic(fmt.Sprintf("failed to register GVKMatcher: %v", err))
 	}
+
+	// Register core Kubernetes types
+	types := []interface{}{
+		// Core resources
+		corev1.Pod{},
+		corev1.PodList{},
+		corev1.Namespace{},
+		corev1.NamespaceList{},
+		corev1.Node{},
+		corev1.NodeList{},
+		corev1.ConfigMap{},
+		corev1.ConfigMapList{},
+		corev1.Secret{},
+		corev1.SecretList{},
+		corev1.Service{},
+		corev1.ServiceList{},
+		corev1.ServiceAccount{},
+		corev1.ServiceAccountList{},
+		corev1.PersistentVolume{},
+		corev1.PersistentVolumeList{},
+		corev1.PersistentVolumeClaim{},
+		corev1.PersistentVolumeClaimList{},
+		// Apps resources
+		appsv1.Deployment{},
+		appsv1.DeploymentList{},
+		appsv1.StatefulSet{},
+		appsv1.StatefulSetList{},
+		appsv1.DaemonSet{},
+		appsv1.DaemonSetList{},
+		appsv1.ReplicaSet{},
+		appsv1.ReplicaSetList{},
+		// Batch resources
+		batchv1.Job{},
+		batchv1.JobList{},
+		batchv1.CronJob{},
+		batchv1.CronJobList{},
+		// Networking resources
+		networkingv1.Ingress{},
+		networkingv1.IngressList{},
+		networkingv1.NetworkPolicy{},
+		networkingv1.NetworkPolicyList{},
+		// RBAC resources
+		rbacv1.Role{},
+		rbacv1.RoleList{},
+		rbacv1.ClusterRole{},
+		rbacv1.ClusterRoleList{},
+		rbacv1.RoleBinding{},
+		rbacv1.RoleBindingList{},
+		rbacv1.ClusterRoleBinding{},
+		rbacv1.ClusterRoleBindingList{},
+		// Metav1 types
+		metav1.ObjectMeta{},
+		metav1.TypeMeta{},
+		metav1.Time{},
+		metav1.MicroTime{},
+		metav1.Duration{},
+		metav1.Status{},
+		metav1.StatusDetails{},
+		metav1.StatusCause{},
+		metav1.ListMeta{},
+		metav1.OwnerReference{},
+		metav1.LabelSelector{},
+		metav1.LabelSelectorRequirement{},
+	}
+
+	for _, t := range types {
+		if err := typeRegistry.Register(t); err != nil {
+			panic(fmt.Sprintf("failed to register type %T: %v", t, err))
+		}
+	}
 }
+
+// @luaclass v1.Pod
+
+// @luaclass v1.PodList
+
+// @luaclass v1.Namespace
+
+// @luaclass v1.NamespaceList
+
+// @luaclass v1.Node
+
+// @luaclass v1.NodeList
+
+// @luaclass v1.ConfigMap
+
+// @luaclass v1.ConfigMapList
+
+// @luaclass v1.Secret
+
+// @luaclass v1.SecretList
+
+// @luaclass v1.Service
+
+// @luaclass v1.ServiceList
+
+// @luaclass v1.ServiceAccount
+
+// @luaclass v1.ServiceAccountList
+
+// @luaclass v1.PersistentVolume
+
+// @luaclass v1.PersistentVolumeList
+
+// @luaclass v1.PersistentVolumeClaim
+
+// @luaclass v1.PersistentVolumeClaimList
+
+// @luaclass v1.Deployment
+
+// @luaclass v1.DeploymentList
+
+// @luaclass v1.StatefulSet
+
+// @luaclass v1.StatefulSetList
+
+// @luaclass v1.DaemonSet
+
+// @luaclass v1.DaemonSetList
+
+// @luaclass v1.ReplicaSet
+
+// @luaclass v1.ReplicaSetList
+
+// @luaclass v1.Job
+
+// @luaclass v1.JobList
+
+// @luaclass v1.CronJob
+
+// @luaclass v1.CronJobList
+
+// @luaclass v1.Ingress
+
+// @luaclass v1.IngressList
+
+// @luaclass v1.NetworkPolicy
+
+// @luaclass v1.NetworkPolicyList
+
+// @luaclass v1.Role
+
+// @luaclass v1.RoleList
+
+// @luaclass v1.ClusterRole
+
+// @luaclass v1.ClusterRoleList
+
+// @luaclass v1.RoleBinding
+
+// @luaclass v1.RoleBindingList
+
+// @luaclass v1.ClusterRoleBinding
+
+// @luaclass v1.ClusterRoleBindingList
+
+// @luaclass v1.ObjectMeta
+
+// @luaclass v1.TypeMeta
+
+// @luaclass v1.Time
+
+// @luaclass v1.MicroTime
+
+// @luaclass v1.Duration
+
+// @luaclass v1.Status
+
+// @luaclass v1.StatusDetails
+
+// @luaclass v1.StatusCause
+
+// @luaclass v1.ListMeta
+
+// @luaclass v1.OwnerReference
+
+// @luaclass v1.LabelSelector
+
+// @luaclass v1.LabelSelectorRequirement
 
 // Loader: creates and returns the kubernetes module for Lua.
 // This function should be registered with L.PreloadModule("kubernetes", kubernetes.Loader)
