@@ -21,9 +21,11 @@
 package spew
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 
-	"github.com/davecgh/go-spew/spew"
+	"github.com/neilotoole/jsoncolor"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -52,7 +54,7 @@ var exports = map[string]lua.LGFunction{
 	"sdump": sdump,
 }
 
-// dump: prints the contents of a Lua value to stdout with detailed formatting.
+// dump: prints the contents of a Lua value to stdout with colored JSON formatting.
 // This is useful for debugging and inspecting complex table structures.
 //
 // @luafunc dump
@@ -62,41 +64,66 @@ var exports = map[string]lua.LGFunction{
 //
 //	local spew = require("spew")
 //	spew.dump({name="John", age=30, items={1,2,3}})
-//	-- Prints detailed representation to stdout
+//	-- Prints colored JSON representation to stdout
 func dump(L *lua.LState) int {
 	value := L.CheckAny(1)
 
 	// Convert Lua value to Go
 	goValue := luaToGo(L, value)
 
-	// Dump to stdout
-	spew.Dump(goValue)
+	// Marshal to JSON with indentation
+	jsonBytes, err := json.MarshalIndent(goValue, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error marshaling to JSON: %v\n", err)
+		return 0
+	}
+
+	// Create encoder with default colors for terminal output
+	enc := jsoncolor.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	enc.SetColors(jsoncolor.DefaultColors())
+
+	// Decode and re-encode with colors
+	var v interface{}
+	if err := json.Unmarshal(jsonBytes, &v); err != nil {
+		fmt.Fprintf(os.Stderr, "Error unmarshaling JSON: %v\n", err)
+		return 0
+	}
+
+	if err := enc.Encode(v); err != nil {
+		fmt.Fprintf(os.Stderr, "Error encoding colored JSON: %v\n", err)
+		return 0
+	}
 
 	return 0
 }
 
-// sdump: returns a string representation of a Lua value with detailed formatting.
-// Unlike dump, this returns the string instead of printing to stdout.
+// sdump: returns a JSON string representation of a Lua value with indentation.
+// Unlike dump, this returns the string instead of printing to stdout (no colors).
 //
 // @luafunc sdump
 // @luaparam value any The Lua value to dump (table, string, number, etc.)
-// @luareturn str string A detailed string representation of the value
+// @luareturn str string A JSON string representation of the value
 //
 // Example:
 //
 //	local spew = require("spew")
 //	local str = spew.sdump({name="John", age=30})
-//	print(str)  -- Prints the detailed representation
+//	print(str)  -- Prints the JSON representation
 func sdump(L *lua.LState) int {
 	value := L.CheckAny(1)
 
 	// Convert Lua value to Go
 	goValue := luaToGo(L, value)
 
-	// Get string representation
-	result := spew.Sdump(goValue)
+	// Marshal to JSON with indentation
+	jsonBytes, err := json.MarshalIndent(goValue, "", "  ")
+	if err != nil {
+		L.Push(lua.LString(fmt.Sprintf("Error: %v", err)))
+		return 1
+	}
 
-	L.Push(lua.LString(result))
+	L.Push(lua.LString(string(jsonBytes)))
 	return 1
 }
 

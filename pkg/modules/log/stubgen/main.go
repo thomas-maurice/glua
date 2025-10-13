@@ -47,9 +47,9 @@ func main() {
 	outputFile, err := gen.Generate(stubgen.GenerateConfig{
 		ScanDir:    moduleDir,
 		OutputDir:  *outputDir,
-		ModuleName: "k8sclient",
-		OutputFile: "k8sclient.gen.lua",
-		Types:      nil, // No types to register for k8sclient module
+		ModuleName: "log",
+		OutputFile: "log.gen.lua",
+		Types:      nil, // No types to register for log module
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)

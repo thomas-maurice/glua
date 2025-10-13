@@ -24,7 +24,7 @@ The example application showcases:
 ```bash
 # From the example directory
 cd example
-go run main.go
+go run .
 ```
 
 Or from repository root:
@@ -35,7 +35,21 @@ make example
 cd example && ../bin/example
 ```
 
-### Option 2: Run Individual Example Scripts
+### Option 2: Run Module-Specific Examples
+
+Try the log and spew module examples:
+
+```bash
+# Log module examples (structured logging)
+cd example/log
+go run .
+
+# Spew module examples (colored JSON debug output)
+cd example/spew
+go run .
+```
+
+### Option 3: Run Individual Example Scripts
 
 The script runner is now a standalone command:
 
@@ -123,6 +137,14 @@ glua/
 │   │   ├── 06_multi_container_analysis.lua
 │   │   └── 07_json_export.lua
 │   ├── sample/              # Sample data (realistic Pod object)
+│   ├── log/                 # Log module examples
+│   │   ├── main.go          # Log module demo runner
+│   │   ├── README.md        # Log module documentation
+│   │   └── test_patterns.lua # Demonstrates logging patterns
+│   ├── spew/                # Spew module examples (colored JSON debug output)
+│   │   ├── main.go          # Spew module demo runner
+│   │   ├── README.md        # Spew module documentation
+│   │   └── demo.lua         # Demonstrates spew.dump() and spew.sdump()
 │   ├── .luarc.json          # Lua LSP configuration for IDE
 │   └── EXAMPLES.md          # Detailed guide for all example scripts
 ├── cmd/
@@ -214,7 +236,7 @@ Generate stubs from Go types using the TypeRegistry:
 
 ```bash
 cd example
-go run main.go
+go run .
 # This generates example/annotations.gen.lua automatically
 ```
 
@@ -240,7 +262,7 @@ os.WriteFile("annotations.gen.lua", []byte(stubs), 0644)
    # From repo root
    make stubgen          # Generates library/kubernetes.lua
    cd example
-   go run main.go        # Generates example/annotations.gen.lua
+   go run .        # Generates example/annotations.gen.lua
    ```
 
 3. **Open any Lua file** and enjoy autocomplete

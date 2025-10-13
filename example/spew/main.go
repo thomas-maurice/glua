@@ -21,40 +21,25 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
-	"runtime"
 
-	"github.com/thomas-maurice/glua/pkg/stubgen"
+	spewmodule "github.com/thomas-maurice/glua/pkg/modules/spew"
+	lua "github.com/yuin/gopher-lua"
 )
 
 func main() {
-	outputDir := flag.String("output", "library", "Output directory for generated stubs")
-	flag.Parse()
+	fmt.Println("=== Spew Module - Colored JSON Output Demo ===")
 
-	// Get the directory where this source file lives
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		fmt.Fprintf(os.Stderr, "Error determining source directory\n")
+	L := lua.NewState()
+	defer L.Close()
+
+	// Preload the spew module
+	L.PreloadModule("spew", spewmodule.Loader)
+
+	// Run the demo script
+	if err := L.DoFile("demo.lua"); err != nil {
+		fmt.Fprintf(os.Stderr, "Error running demo: %v\n", err)
 		os.Exit(1)
 	}
-	moduleDir := filepath.Dir(filepath.Dir(filename))
-
-	// Create generator and generate stubs
-	gen := stubgen.NewGenerator()
-	outputFile, err := gen.Generate(stubgen.GenerateConfig{
-		ScanDir:    moduleDir,
-		OutputDir:  *outputDir,
-		ModuleName: "k8sclient",
-		OutputFile: "k8sclient.gen.lua",
-		Types:      nil, // No types to register for k8sclient module
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Generated %s\n", outputFile)
 }

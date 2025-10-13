@@ -481,6 +481,10 @@ This works for:
 
 ### Step 1: Create Module
 
+You can create two types of Lua modules: **function-based modules** (simple) and **UserData-based modules** (for stateful objects).
+
+#### Option A: Simple Function-Based Module
+
 Create `pkg/modules/mymodule/mymodule.go`:
 
 ```go
@@ -531,6 +535,176 @@ func add(L *lua.LState) int {
 }
 ```
 
+#### Option B: UserData-Based Module (Stateful Objects)
+
+For modules that need to maintain state or provide object-oriented APIs, use UserData. This example shows how to create a Logger object with methods (like the built-in `log` module):
+
+Create `pkg/modules/counter/counter.go`:
+
+```go
+package counter
+
+import (
+    lua "github.com/yuin/gopher-lua"
+)
+
+const counterTypeName = "counter.Counter"
+
+// Counter: a simple counter object
+type Counter struct {
+    value int
+}
+
+// Loader: creates the counter Lua module
+//
+// @luamodule counter
+func Loader(L *lua.LState) int {
+    // Register the Counter type with methods
+    registerCounterType(L)
+
+    // Create module table with functions
+    mod := L.SetFuncs(L.NewTable(), exports)
+    L.Push(mod)
+    return 1
+}
+
+var exports = map[string]lua.LGFunction{
+    "new": newCounter,
+}
+
+// registerCounterType: registers the Counter UserData type with its metatable
+func registerCounterType(L *lua.LState) {
+    mt := L.NewTypeMetatable(counterTypeName)
+    L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), counterMethods))
+}
+
+// counterMethods: map of Counter object methods
+var counterMethods = map[string]lua.LGFunction{
+    "increment": counterIncrement,
+    "decrement": counterDecrement,
+    "get":       counterGet,
+    "reset":     counterReset,
+}
+
+// wrapCounter: wraps a Counter in UserData for use in Lua
+func wrapCounter(L *lua.LState, c *Counter) *lua.LUserData {
+    ud := L.NewUserData()
+    ud.Value = c
+    L.SetMetatable(ud, L.GetTypeMetatable(counterTypeName))
+    return ud
+}
+
+// checkCounter: extracts Counter from UserData
+func checkCounter(L *lua.LState, n int) *Counter {
+    ud := L.CheckUserData(n)
+    if c, ok := ud.Value.(*Counter); ok {
+        return c
+    }
+    L.ArgError(n, "Counter expected")
+    return nil
+}
+
+// newCounter: creates a new Counter object
+//
+// @luafunc new
+// @luaparam initialValue number Optional initial value (default: 0)
+// @luareturn counter.Counter counter.Counter A new counter object
+func newCounter(L *lua.LState) int {
+    initialValue := 0
+    if L.GetTop() >= 1 {
+        initialValue = int(L.CheckNumber(1))
+    }
+
+    counter := &Counter{value: initialValue}
+    ud := wrapCounter(L, counter)
+    L.Push(ud)
+    return 1
+}
+
+// counterIncrement: increments the counter
+//
+// @luamethod counter.Counter increment
+// @luaparam self counter.Counter The counter object
+// @luaparam amount number Optional amount to add (default: 1)
+func counterIncrement(L *lua.LState) int {
+    c := checkCounter(L, 1)
+    amount := 1
+    if L.GetTop() >= 2 {
+        amount = int(L.CheckNumber(2))
+    }
+    c.value += amount
+    return 0
+}
+
+// counterDecrement: decrements the counter
+//
+// @luamethod counter.Counter decrement
+// @luaparam self counter.Counter The counter object
+// @luaparam amount number Optional amount to subtract (default: 1)
+func counterDecrement(L *lua.LState) int {
+    c := checkCounter(L, 1)
+    amount := 1
+    if L.GetTop() >= 2 {
+        amount = int(L.CheckNumber(2))
+    }
+    c.value -= amount
+    return 0
+}
+
+// counterGet: gets the current counter value
+//
+// @luamethod counter.Counter get
+// @luaparam self counter.Counter The counter object
+// @luareturn number The current counter value
+func counterGet(L *lua.LState) int {
+    c := checkCounter(L, 1)
+    L.Push(lua.LNumber(c.value))
+    return 1
+}
+
+// counterReset: resets the counter to zero
+//
+// @luamethod counter.Counter reset
+// @luaparam self counter.Counter The counter object
+func counterReset(L *lua.LState) int {
+    c := checkCounter(L, 1)
+    c.value = 0
+    return 0
+}
+```
+
+**Usage in Lua:**
+
+```lua
+local counter = require("counter")
+
+-- Create counter objects
+local c1 = counter.new()
+local c2 = counter.new(10)
+
+-- Use object methods with : notation
+c1:increment()
+c1:increment(5)
+print(c1:get())  -- 6
+
+c2:decrement()
+print(c2:get())  -- 9
+
+c1:reset()
+print(c1:get())  -- 0
+```
+
+**Key concepts for UserData objects:**
+
+1. **Type Name**: Unique identifier for your UserData type (e.g., `"counter.Counter"`)
+2. **Metatable**: Defines methods available on your object via `__index`
+3. **Wrapper Function**: `wrapCounter()` creates UserData from Go struct
+4. **Checker Function**: `checkCounter()` extracts Go struct from UserData
+5. **Method Signature**: Methods use `:` notation in Lua, which implicitly passes `self` as first argument
+6. **Annotations**: Use `@luamethod ModuleName.ClassName methodName` for methods vs `@luafunc` for module functions
+
+**See also:** The built-in `log` module (`pkg/modules/log/`) is a complete real-world example of UserData objects with proper stub generation.
+
 ### Step 2: Generate Stubs with stubgen
 
 The stubgen tool scans your Go code for special annotations and generates Lua LSP stubs for IDE autocomplete.
@@ -552,14 +726,124 @@ go run ./cmd/stubgen -dir pkg/modules -output mymodules.gen.lua
 
 The tool scans for these comment annotations in your Go code:
 
-- `@luamodule <name>` - Marks the Loader function (required)
-- `@luafunc <name>` - Exported Lua function name
-- `@luaparam <name> <type> <description>` - Function parameter
-- `@luareturn <type> <description>` - Return value
+### Module and Function Annotations
+
+- **`@luamodule <name>`** - Marks the Loader function (required for each module)
+  - Must be directly above the `Loader` function
+  - Example: `@luamodule mymodule`
+
+- **`@luafunc <name>`** - Defines a module-level function
+  - For functions like `mymodule.greet()`
+  - Example: `@luafunc greet`
+
+- **`@luamethod <ClassName> <methodName>`** - Defines a method on a UserData object
+  - For object methods like `logger:info()`
+  - Class name should be namespaced (e.g., `log.Logger`, `counter.Counter`)
+  - Example: `@luamethod log.Logger info`
+
+- **`@luaclass <ClassName>`** - Defines a standalone class/type (for data structures without methods)
+  - For data types like `GVKMatcher`, `Config`, etc.
+  - Use with `@luafield` to define the class's fields
+  - Class name can be simple (`GVKMatcher`) or namespaced (`mymodule.Config`)
+  - Example: `@luaclass GVKMatcher`
+
+- **`@luafield <fieldName> <type> [description]`** - Defines a field in a class
+  - Must be used after `@luaclass` annotation
+  - `<fieldName>`: Name of the field
+  - `<type>`: Lua type of the field (`string`, `number`, `table`, etc.)
+  - `[description]`: Optional human-readable description
+  - Example: `@luafield group string The API group`
+
+- **`@luaconst <NAME> <type> [description]`** - Defines a module constant
+  - For constants like `k8sclient.POD`, `k8sclient.DEPLOYMENT`
+  - `<NAME>`: Constant name (typically UPPERCASE)
+  - `<type>`: Lua type of the constant (`table`, `string`, `number`, etc.)
+  - `[description]`: Optional human-readable description
+  - Can be placed anywhere in the file (not just above functions)
+  - Example: `@luaconst POD table Pod GVK constant {group="", version="v1", kind="Pod"}`
+
+### Parameter Annotations
+
+- **`@luaparam <name> <type> [description]`** - Defines a function/method parameter
+  - `<name>`: Parameter name (use `self` for the implicit object parameter in methods)
+  - `<type>`: Lua type (`string`, `number`, `boolean`, `table`, `any`, or custom type like `log.Logger`)
+  - `[description]`: Optional human-readable description
+  - Examples:
+    - `@luaparam msg string The message to log`
+    - `@luaparam count number`
+    - `@luaparam ... any Optional key-value pairs` (for variadic parameters)
+    - `@luaparam self log.Logger The logger object` (for methods)
+
+### Return Value Annotations
+
+- **`@luareturn <type> [description]`** - Defines a return value
+  - Can have multiple `@luareturn` annotations for multiple return values
+  - `<type>`: Lua type or custom type
+  - `[description]`: Optional human-readable description
+  - Type can include union types: `string|nil` for optional returns
+  - Examples:
+    - `@luareturn string The greeting message`
+    - `@luareturn log.Logger log.Logger A new logger with additional fields`
+    - `@luareturn err string|nil Error message if any`
+
+### Annotation Placement
+
+Annotations must be in **Go-style comments** (`//`) directly above the function:
+
+```go
+// functionName: brief description of what it does
+//
+// @luafunc functionName
+// @luaparam param1 string Description of param1
+// @luaparam param2 number Description of param2
+// @luareturn result string Description of return value
+// @luareturn err string|nil Error message if operation failed
+func functionName(L *lua.LState) int { ... }
+```
+
+For methods:
+
+```go
+// methodName: brief description of what it does
+//
+// @luamethod ClassName methodName
+// @luaparam self ClassName The object instance
+// @luaparam param1 string Description of param1
+// @luareturn result any Description of return value
+func methodName(L *lua.LState) int { ... }
+```
+
+For standalone classes (data structures):
+
+```go
+// Loader: creates the mymodule Lua module
+//
+// @luamodule mymodule
+//
+// @luaclass GVKMatcher
+// @luafield group string The API group
+// @luafield version string The API version
+// @luafield kind string The resource kind
+func Loader(L *lua.LState) int { ... }
+```
+
+For constants (can appear anywhere in the file):
+
+```go
+// @luaconst POD table Pod GVK constant {group="", version="v1", kind="Pod"}
+
+// @luaconst DEPLOYMENT table Deployment GVK constant {group="apps", version="v1", kind="Deployment"}
+
+func setupConstants(L *lua.LState, mod *lua.LTable) {
+    L.SetField(mod, "POD", createGVKTable(L, "", "v1", "Pod"))
+    L.SetField(mod, "DEPLOYMENT", createGVKTable(L, "apps", "v1", "Deployment"))
+}
+```
 
 **Example from our code above:**
 
 ```go
+// Module-level function annotation
 // @luamodule mymodule    <- Tells stubgen this is a Lua module
 func Loader(L *lua.LState) int { ... }
 
@@ -567,22 +851,26 @@ func Loader(L *lua.LState) int { ... }
 // @luaparam name string The name to greet    <- Parameter with type and description
 // @luareturn string The greeting message     <- Return type and description
 func greet(L *lua.LState) int { ... }
+
+// UserData method annotation
+// @luamethod counter.Counter increment    <- Method on Counter class
+// @luaparam self counter.Counter The counter object
+// @luaparam amount number Optional amount to add
+func counterIncrement(L *lua.LState) int { ... }
 ```
 
-**Generated output** (`library/mymodule.gen.lua`):
+**Generated output for simple module** (`library/mymodule.gen.lua`):
 
 ```lua
----@meta
+---@meta mymodule
 
 ---@class mymodule
 local mymodule = {}
 
---- greet: returns a personalized greeting
 ---@param name string The name to greet
 ---@return string The greeting message
 function mymodule.greet(name) end
 
---- add: adds two numbers
 ---@param a number First number
 ---@param b number Second number
 ---@return number Sum of a and b
@@ -591,6 +879,40 @@ function mymodule.add(a, b) end
 
 return mymodule
 ```
+
+**Generated output for UserData module** (`library/counter.gen.lua`):
+
+```lua
+---@meta counter
+
+---@class counter.Counter
+local Counter = {}
+
+---@param amount number Optional amount to add (default: 1)
+function Counter:increment(amount) end
+
+---@param amount number Optional amount to subtract (default: 1)
+function Counter:decrement(amount) end
+
+---@return number The current counter value
+function Counter:get() end
+
+function Counter:reset() end
+
+---@class counter
+---@field Counter counter.Counter
+local counter = {}
+
+---@param initialValue number Optional initial value (default: 0)
+---@return counter.Counter A new counter object
+function counter.new(initialValue) end
+
+counter.Counter = Counter
+
+return counter
+```
+
+Note how the UserData class (`Counter`) is defined first with its methods, then the module (`counter`) is defined with the class as a field, and finally they're linked together with `counter.Counter = Counter`. This structure enables proper IDE autocomplete.
 
 **How it works:**
 
@@ -666,11 +988,21 @@ What it does:
 Scans Go files for these annotations:
 
 - `@luamodule <name>` - Marks module Loader function
-- `@luafunc <name>` - Exported function
-- `@luaparam <name> <type> <description>` - Function parameter
-- `@luareturn <type> <description>` - Return value
+- `@luafunc <name>` - Module-level function
+- `@luamethod <ClassName> <methodName>` - Method on UserData object (e.g., `@luamethod log.Logger info`)
+- `@luaconst <NAME> <type> [description]` - Module constant (e.g., `@luaconst POD table`)
+  - Can appear anywhere in the file
+  - Generates `---@type` annotations
+- `@luaparam <name> <type> [description]` - Function/method parameter
+  - Supports variadic: `@luaparam ... any`
+  - For methods, include: `@luaparam self ClassName`
+- `@luareturn <type> [description]` - Return value
+  - Supports multiple returns
+  - Supports union types: `string|nil`
 
-Generates Lua LSP annotation files that IDEs use for autocomplete.
+Generates Lua LSP annotation files that IDEs use for autocomplete. For UserData objects, it automatically generates the proper class structure with methods and exports the class as a module field.
+
+**See detailed annotation reference in the "Creating Custom Lua Modules" section above.**
 
 ## IDE Setup
 
@@ -687,7 +1019,7 @@ This section explains how to enable autocomplete for your Lua scripts.
 make stubgen  # Creates library/kubernetes.gen.lua, etc.
 
 # Generate type stubs (run your app that uses TypeRegistry)
-go run main.go  # Creates annotations.gen.lua
+go run .  # Creates annotations.gen.lua
 ```
 
 3. Create `.vscode/settings.json`:
@@ -717,7 +1049,7 @@ go run main.go  # Creates annotations.gen.lua
 
 ```bash
 make stubgen
-go run main.go  # If using TypeRegistry
+go run .  # If using TypeRegistry
 ```
 
 3. Create `.luarc.json` in project root:
@@ -954,7 +1286,7 @@ The [example/](./example) directory contains a complete working demo showing all
 make example && ./bin/example
 
 # Or
-cd example && go run main.go
+cd example && go run .
 ```
 
 Features demonstrated:
@@ -970,7 +1302,7 @@ Features demonstrated:
 To get autocomplete in the example:
 
 1. Run `make stubgen` from repo root
-2. Run `go run main.go` from example/ directory
+2. Run `go run .` from example/ directory
 3. Open `script.lua` in your IDE - autocomplete works
 
 ## Troubleshooting

@@ -1,4 +1,4 @@
-.PHONY: all build test test-unit test-verbose test-short test-k8sclient bench bench-update clean help stubgen example gen-stubs
+.PHONY: all build test test-unit test-verbose test-short test-k8sclient bench bench-update clean help stubgen example gen-stubs fmt
 .PHONY: act-test act-test-unit act-lint act-build act-list act-check
 
 # Default target - runs ALL tests (unit + integration)
@@ -15,7 +15,8 @@ help:
 	@echo "  test-k8sclient   - Run k8sclient example with Kind cluster (requires kind & kubectl)"
 	@echo "  bench            - Run all benchmarks"
 	@echo "  bench-update     - Run benchmarks and update benchmarks/README.md with results"
-	@echo "  build            - Build all binaries"
+	@echo "  build            - Build all binaries (runs fmt automatically)"
+	@echo "  fmt              - Format all Go code with go fmt"
 	@echo "  stubgen          - Build stubgen code generator"
 	@echo "  gen-stubs        - Generate Lua stubs for all modules (kubernetes, json, spew, k8sclient)"
 	@echo "  example          - Build example application"
@@ -104,8 +105,14 @@ bench-update:
 	@echo ""
 	@echo "IMPORTANT: Review the updated benchmarks/README.md and update Key Takeaways if needed"
 
+# Format all Go code
+fmt:
+	@echo "=== Formatting Go code ==="
+	@go fmt ./...
+	@echo "✓ Code formatted"
+
 # Build all binaries
-build: stubgen example
+build: fmt stubgen example
 	@echo ""
 	@echo "✓ All binaries built successfully"
 
@@ -122,6 +129,7 @@ gen-stubs:
 	@go run ./pkg/modules/json/stubgen/main.go -output library
 	@go run ./pkg/modules/spew/stubgen/main.go -output library
 	@go run ./pkg/modules/k8sclient/stubgen/main.go -output library
+	@go run ./pkg/modules/log/stubgen/main.go -output library
 	@echo ""
 	@echo "✓ All module stubs generated in library/"
 

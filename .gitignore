@@ -17,6 +17,8 @@ coverage.txt
 # Generated files
 example/**/*.gen.lua
 example/library/
+pkg/modules/*/stubgen/library/
+pkg/modules/*/stubgen/stubgen
 
 # IDE
 .vscode/

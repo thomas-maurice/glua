@@ -34,10 +34,6 @@ func main() {
 	outputDir := flag.String("output", "library", "Output directory for generated stubs")
 	flag.Parse()
 
-	// Create generator
-	gen := stubgen.NewGenerator()
-
-	// Scan module directory for function annotations
 	// Get the directory where this source file lives
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
@@ -46,35 +42,17 @@ func main() {
 	}
 	moduleDir := filepath.Dir(filepath.Dir(filename))
 
-	if err := gen.ScanDirectory(moduleDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Error scanning directory: %v\n", err)
-		os.Exit(1)
-	}
-
-	// No types to register for json module
-
-	// Process types to discover dependencies
-	if err := gen.ProcessTypes(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error processing types: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Generate combined stub
-	stubs, err := gen.GenerateModule("json")
+	// Create generator and generate stubs
+	gen := stubgen.NewGenerator()
+	outputFile, err := gen.Generate(stubgen.GenerateConfig{
+		ScanDir:    moduleDir,
+		OutputDir:  *outputDir,
+		ModuleName: "json",
+		OutputFile: "json.gen.lua",
+		Types:      nil, // No types to register for json module
+	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating stubs: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Write output
-	if err := os.MkdirAll(*outputDir, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating output directory: %v\n", err)
-		os.Exit(1)
-	}
-
-	outputFile := filepath.Join(*outputDir, "json.gen.lua")
-	if err := os.WriteFile(outputFile, []byte(stubs), 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 

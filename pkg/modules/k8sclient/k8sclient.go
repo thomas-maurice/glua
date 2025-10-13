@@ -69,6 +69,11 @@ func NewClient(config *rest.Config) (*Client, error) {
 //	local client = k8sclient.new_client()
 //	local gvk = {group = "", version = "v1", kind = "ConfigMap"}
 //	local cm, err = client:get(gvk, "default", "my-config")
+//
+// @luaclass GVKMatcher
+// @luafield group string The API group (empty string for core resources)
+// @luafield version string The API version (e.g., "v1", "v1beta1")
+// @luafield kind string The resource kind (e.g., "Pod", "Deployment")
 func Loader(config *rest.Config) lua.LGFunction {
 	return func(L *lua.LState) int {
 		// Create module table with new_client factory function
@@ -90,9 +95,85 @@ func Loader(config *rest.Config) lua.LGFunction {
 		L.SetField(mod, "delete", L.NewFunction(client.delete))
 		L.SetField(mod, "list", L.NewFunction(client.list))
 
+		// Add GVK constants for common resources
+		addGVKConstants(L, mod)
+
 		L.Push(mod)
 		return 1
 	}
+}
+
+// @luaconst POD table Pod GVK constant {group="", version="v1", kind="Pod"}
+
+// @luaconst NAMESPACE table Namespace GVK constant {group="", version="v1", kind="Namespace"}
+
+// @luaconst CONFIGMAP table ConfigMap GVK constant {group="", version="v1", kind="ConfigMap"}
+
+// @luaconst SECRET table Secret GVK constant {group="", version="v1", kind="Secret"}
+
+// @luaconst SERVICE table Service GVK constant {group="", version="v1", kind="Service"}
+
+// @luaconst SERVICEACCOUNT table ServiceAccount GVK constant {group="", version="v1", kind="ServiceAccount"}
+
+// @luaconst PERSISTENTVOLUME table PersistentVolume GVK constant {group="", version="v1", kind="PersistentVolume"}
+
+// @luaconst PERSISTENTVOLUMECLAIM table PersistentVolumeClaim GVK constant {group="", version="v1", kind="PersistentVolumeClaim"}
+
+// @luaconst DEPLOYMENT table Deployment GVK constant {group="apps", version="v1", kind="Deployment"}
+
+// @luaconst STATEFULSET table StatefulSet GVK constant {group="apps", version="v1", kind="StatefulSet"}
+
+// @luaconst DAEMONSET table DaemonSet GVK constant {group="apps", version="v1", kind="DaemonSet"}
+
+// @luaconst REPLICASET table ReplicaSet GVK constant {group="apps", version="v1", kind="ReplicaSet"}
+
+// @luaconst JOB table Job GVK constant {group="batch", version="v1", kind="Job"}
+
+// @luaconst CRONJOB table CronJob GVK constant {group="batch", version="v1", kind="CronJob"}
+
+// @luaconst INGRESS table Ingress GVK constant {group="networking.k8s.io", version="v1", kind="Ingress"}
+
+// @luaconst NETWORKPOLICY table NetworkPolicy GVK constant {group="networking.k8s.io", version="v1", kind="NetworkPolicy"}
+
+// @luaconst ROLE table Role GVK constant {group="rbac.authorization.k8s.io", version="v1", kind="Role"}
+
+// @luaconst CLUSTERROLE table ClusterRole GVK constant {group="rbac.authorization.k8s.io", version="v1", kind="ClusterRole"}
+
+// @luaconst ROLEBINDING table RoleBinding GVK constant {group="rbac.authorization.k8s.io", version="v1", kind="RoleBinding"}
+
+// @luaconst CLUSTERROLEBINDING table ClusterRoleBinding GVK constant {group="rbac.authorization.k8s.io", version="v1", kind="ClusterRoleBinding"}
+
+// addGVKConstants: adds GVK constants for common Kubernetes resources to the module
+func addGVKConstants(L *lua.LState, mod *lua.LTable) {
+	L.SetField(mod, "POD", createGVKTable(L, "", "v1", "Pod"))
+	L.SetField(mod, "NAMESPACE", createGVKTable(L, "", "v1", "Namespace"))
+	L.SetField(mod, "CONFIGMAP", createGVKTable(L, "", "v1", "ConfigMap"))
+	L.SetField(mod, "SECRET", createGVKTable(L, "", "v1", "Secret"))
+	L.SetField(mod, "SERVICE", createGVKTable(L, "", "v1", "Service"))
+	L.SetField(mod, "SERVICEACCOUNT", createGVKTable(L, "", "v1", "ServiceAccount"))
+	L.SetField(mod, "PERSISTENTVOLUME", createGVKTable(L, "", "v1", "PersistentVolume"))
+	L.SetField(mod, "PERSISTENTVOLUMECLAIM", createGVKTable(L, "", "v1", "PersistentVolumeClaim"))
+	L.SetField(mod, "DEPLOYMENT", createGVKTable(L, "apps", "v1", "Deployment"))
+	L.SetField(mod, "STATEFULSET", createGVKTable(L, "apps", "v1", "StatefulSet"))
+	L.SetField(mod, "DAEMONSET", createGVKTable(L, "apps", "v1", "DaemonSet"))
+	L.SetField(mod, "REPLICASET", createGVKTable(L, "apps", "v1", "ReplicaSet"))
+	L.SetField(mod, "JOB", createGVKTable(L, "batch", "v1", "Job"))
+	L.SetField(mod, "CRONJOB", createGVKTable(L, "batch", "v1", "CronJob"))
+	L.SetField(mod, "INGRESS", createGVKTable(L, "networking.k8s.io", "v1", "Ingress"))
+	L.SetField(mod, "NETWORKPOLICY", createGVKTable(L, "networking.k8s.io", "v1", "NetworkPolicy"))
+	L.SetField(mod, "ROLE", createGVKTable(L, "rbac.authorization.k8s.io", "v1", "Role"))
+	L.SetField(mod, "CLUSTERROLE", createGVKTable(L, "rbac.authorization.k8s.io", "v1", "ClusterRole"))
+	L.SetField(mod, "ROLEBINDING", createGVKTable(L, "rbac.authorization.k8s.io", "v1", "RoleBinding"))
+	L.SetField(mod, "CLUSTERROLEBINDING", createGVKTable(L, "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"))
+}
+
+// createGVKTable: creates a Lua table representing a GVK
+func createGVKTable(L *lua.LState, group, version, kind string) *lua.LTable {
+	gvk := L.NewTable()
+	L.SetField(gvk, "group", lua.LString(group))
+	L.SetField(gvk, "version", lua.LString(version))
+	L.SetField(gvk, "kind", lua.LString(kind))
+	return gvk
 }
 
 // newClientLua: creates a new client instance in Lua
