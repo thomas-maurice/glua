@@ -23,7 +23,6 @@ package log
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"sync"
 	"time"
@@ -516,21 +515,4 @@ func tableToJSON(L *lua.LState, tbl *lua.LTable) string {
 		return fmt.Sprintf("{\"error\": \"failed to marshal: %v\"}", err)
 	}
 	return string(jsonBytes)
-}
-
-// NewLogger: creates a new charmbracelet/log logger with the specified configuration.
-// This is a convenience function for creating loggers that can be injected into Lua states.
-//
-// Example usage:
-//
-//	logger := logmodule.NewLogger(os.Stderr, true, time.RFC3339, log.TextFormatter)
-//	logger = logger.With("app", "myapp", "version", "1.0.0")
-//	logmodule.InjectLogger(L, logger)
-func NewLogger(w io.Writer, reportCaller bool, timeFormat string, formatter log.Formatter) *log.Logger {
-	return log.NewWithOptions(w, log.Options{
-		TimeFormat:      timeFormat,
-		ReportTimestamp: true,
-		ReportCaller:    reportCaller,
-		Formatter:       formatter,
-	})
 }
