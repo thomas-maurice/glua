@@ -741,13 +741,14 @@ The tool scans for these comment annotations in your Go code:
   - Class name should be namespaced (e.g., `log.Logger`, `counter.Counter`)
   - Example: `@luamethod log.Logger info`
 
-- **`@luaclass <ClassName>`** - Defines a standalone class/type (for data structures without methods)
-  - For data types like `GVKMatcher`, `Config`, etc.
-  - Use with `@luafield` to define the class's fields
+- **`@luaclass <ClassName>`** - Defines a data structure type with manual field annotations
+  - For table-like data structures where you want explicit control over field documentation
+  - Use with `@luafield` to define each field with custom descriptions
   - Class name can be simple (`GVKMatcher`) or namespaced (`mymodule.Config`)
   - Example: `@luaclass GVKMatcher`
+  - **TIP**: For complex Go structs with many nested fields, Type Registry offers automatic field discovery
 
-- **`@luafield <fieldName> <type> [description]`** - Defines a field in a class
+- **`@luafield <fieldName> <type> [description]`** - Defines a field in a `@luaclass`
   - Must be used after `@luaclass` annotation
   - `<fieldName>`: Name of the field
   - `<type>`: Lua type of the field (`string`, `number`, `table`, etc.)
@@ -914,7 +915,45 @@ return counter
 
 Note how the UserData class (`Counter`) is defined first with its methods, then the module (`counter`) is defined with the class as a field, and finally they're linked together with `counter.Counter = Counter`. This structure enables proper IDE autocomplete.
 
-**How it works:**
+### Choosing Between @luaclass and Type Registry
+
+Both approaches are fully supported and actively used. Choose based on your needs:
+
+**Use `@luaclass` + `@luafield` annotations when:**
+
+- You want explicit control over documentation and field descriptions
+- Defining simple table-like data structures (e.g., configuration objects)
+- You need custom field descriptions that differ from Go struct tags
+- Working with interface types or non-struct data
+- Example: `GVKMatcher` with detailed field descriptions
+
+**Use Type Registry (`typeRegistry.Register()`) when:**
+
+- You want automatic field discovery from Go struct definitions
+- Working with complex Go structs with many nested fields
+- Using third-party types (e.g., Kubernetes API types)
+- You have many similar types that need consistent documentation
+- Field names and types from JSON tags are sufficient
+- Example: Kubernetes resources, complex configuration structs
+
+**Example comparison:**
+
+```go
+// @luaclass approach - simple, manual
+// @luaclass GVKMatcher
+// @luafield group string API group
+// @luafield version string API version
+// @luafield kind string Resource kind
+
+// Type Registry approach - automatic, comprehensive
+typeRegistry.Register(corev1.Pod{})        // Auto-discovers ALL fields
+typeRegistry.Register(corev1.Service{})    // Including nested types
+typeRegistry.Register(corev1.ConfigMap{})  // With proper type references
+```
+
+The Type Registry automatically processes nested types, creates proper type hierarchies, and handles complex struct relationships. See the [Type Registry section](#type-registry-and-lsp-stub-generation) for details.
+
+**How stubgen works:**
 
 1. Stubgen scans all `.go` files in the specified directory
 2. Finds functions with `@luamodule` annotation (these are module Loaders)
