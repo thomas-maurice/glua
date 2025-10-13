@@ -44,6 +44,13 @@ func TestPluralize(t *testing.T) {
 		{"Ingress", "ingresses"},
 		{"Endpoints", "endpoints"},
 		{"StatefulSet", "statefulsets"},
+		{"NetworkPolicy", "networkpolicies"},
+		{"CronJob", "cronjobs"},
+		{"PersistentVolume", "persistentvolumes"},
+		// Fallback cases
+		{"CustomResource", "customresources"},
+		{"Entity", "entities"},
+		{"Glass", "glasses"},
 	}
 
 	for _, tt := range tests {
@@ -228,4 +235,135 @@ func TestErrorNoAPIVersion(t *testing.T) {
 // TestErrorNoKind tests error handling for missing kind in object
 func TestErrorNoKind(t *testing.T) {
 	runLuaTestFile(t, "test_error_no_kind.lua")
+}
+
+// TestNewClient tests the NewClient function
+func TestNewClient(t *testing.T) {
+	config := &rest.Config{
+		Host: "https://localhost:6443",
+	}
+
+	client, err := NewClient(config)
+	if err != nil {
+		t.Fatalf("NewClient() failed: %v", err)
+	}
+
+	if client == nil {
+		t.Fatal("NewClient() returned nil client")
+	}
+
+	if client.dynamic == nil {
+		t.Error("NewClient() returned client with nil dynamic interface")
+	}
+}
+
+// TestCreateGVKTable tests the createGVKTable helper function
+func TestCreateGVKTable(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	table := createGVKTable(L, "apps", "v1", "Deployment")
+
+	if table == nil {
+		t.Fatal("createGVKTable returned nil")
+	}
+
+	group := L.GetField(table, "group")
+	if group.String() != "apps" {
+		t.Errorf("Expected group 'apps', got %q", group.String())
+	}
+
+	version := L.GetField(table, "version")
+	if version.String() != "v1" {
+		t.Errorf("Expected version 'v1', got %q", version.String())
+	}
+
+	kind := L.GetField(table, "kind")
+	if kind.String() != "Deployment" {
+		t.Errorf("Expected kind 'Deployment', got %q", kind.String())
+	}
+}
+
+// TestAddGVKConstants tests that GVK constants are added correctly
+func TestAddGVKConstants(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	mod := L.NewTable()
+	addGVKConstants(L, mod)
+
+	// Test a few constants
+	constants := []struct {
+		name    string
+		group   string
+		version string
+		kind    string
+	}{
+		{"POD", "", "v1", "Pod"},
+		{"DEPLOYMENT", "apps", "v1", "Deployment"},
+		{"INGRESS", "networking.k8s.io", "v1", "Ingress"},
+		{"ROLE", "rbac.authorization.k8s.io", "v1", "Role"},
+	}
+
+	for _, tc := range constants {
+		t.Run(tc.name, func(t *testing.T) {
+			gvkValue := L.GetField(mod, tc.name)
+			if gvkValue.Type() != lua.LTTable {
+				t.Fatalf("Expected %s to be a table, got %v", tc.name, gvkValue.Type())
+			}
+
+			gvkTable := gvkValue.(*lua.LTable)
+			group := L.GetField(gvkTable, "group")
+			if group.String() != tc.group {
+				t.Errorf("Expected group %q, got %q", tc.group, group.String())
+			}
+
+			version := L.GetField(gvkTable, "version")
+			if version.String() != tc.version {
+				t.Errorf("Expected version %q, got %q", tc.version, version.String())
+			}
+
+			kind := L.GetField(gvkTable, "kind")
+			if kind.String() != tc.kind {
+				t.Errorf("Expected kind %q, got %q", tc.kind, kind.String())
+			}
+		})
+	}
+}
+
+// TestNewClientLua tests the newClientLua function
+func TestNewClientLua(t *testing.T) {
+	config := &rest.Config{
+		Host: "https://localhost:6443",
+	}
+
+	L := lua.NewState()
+	defer L.Close()
+
+	n := newClientLua(L, config)
+	if n != 2 {
+		t.Errorf("Expected newClientLua to return 2 values, got %d", n)
+	}
+
+	// Check that client table was pushed
+	client := L.Get(-2)
+	if client.Type() != lua.LTTable {
+		t.Errorf("Expected client to be a table, got %v", client.Type())
+	}
+
+	// Check that error is nil
+	err := L.Get(-1)
+	if err != lua.LNil {
+		t.Errorf("Expected error to be nil, got %v", err)
+	}
+
+	// Verify client has methods
+	clientTable := client.(*lua.LTable)
+	methods := []string{"get", "create", "update", "delete", "list"}
+	for _, method := range methods {
+		field := L.GetField(clientTable, method)
+		if field.Type() != lua.LTFunction {
+			t.Errorf("Expected %s to be a function, got %v", method, field.Type())
+		}
+	}
 }

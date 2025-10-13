@@ -1954,4 +1954,60 @@ function kubernetes.format_duration(seconds) end
 ---@return matches boolean true if the GVK matches
 function kubernetes.match_gvk(obj, matcher) end
 
+---@param obj table The Kubernetes object
+---@return obj table The same object with initialized metadata (modified in-place)
+function kubernetes.ensure_metadata(obj) end
+
+---@param obj table The Kubernetes object
+---@param key string The label key
+---@param value string The label value
+---@return obj table The modified object (for chaining)
+function kubernetes.add_label(obj, key, value) end
+
+---@param obj table The Kubernetes object
+---@param labels table A table of key-value pairs to add as labels
+---@return obj table The modified object (for chaining)
+function kubernetes.add_labels(obj, labels) end
+
+---@param obj table The Kubernetes object
+---@param key string The label key to remove
+---@return obj table The modified object (for chaining)
+function kubernetes.remove_label(obj, key) end
+
+---@param obj table The Kubernetes object
+---@param key string The label key to check
+---@return exists boolean true if the label exists
+function kubernetes.has_label(obj, key) end
+
+---@param obj table The Kubernetes object
+---@param key string The label key
+---@return value string|nil The label value, or nil if not found
+function kubernetes.get_label(obj, key) end
+
+---@param obj table The Kubernetes object
+---@param key string The annotation key
+---@param value string The annotation value
+---@return obj table The modified object (for chaining)
+function kubernetes.add_annotation(obj, key, value) end
+
+---@param obj table The Kubernetes object
+---@param annotations table A table of key-value pairs to add as annotations
+---@return obj table The modified object (for chaining)
+function kubernetes.add_annotations(obj, annotations) end
+
+---@param obj table The Kubernetes object
+---@param key string The annotation key to remove
+---@return obj table The modified object (for chaining)
+function kubernetes.remove_annotation(obj, key) end
+
+---@param obj table The Kubernetes object
+---@param key string The annotation key to check
+---@return exists boolean true if the annotation exists
+function kubernetes.has_annotation(obj, key) end
+
+---@param obj table The Kubernetes object
+---@param key string The annotation key
+---@return value string|nil The annotation value, or nil if not found
+function kubernetes.get_annotation(obj, key) end
+
 return kubernetes

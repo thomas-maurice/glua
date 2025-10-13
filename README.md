@@ -33,7 +33,7 @@ go get github.com/thomas-maurice/glua@latest
 Or manually add to `go.mod` and run `go mod tidy`:
 
 ```go
-require github.com/thomas-maurice/glua v0.1.0 // or latest version
+require github.com/thomas-maurice/glua v0.0.4 // or latest version
 ```
 
 ### Installing Lua Stubs for IDE Autocomplete
@@ -42,7 +42,7 @@ Download the latest Lua stubs for IDE autocomplete support:
 
 ```bash
 # Download and extract to your project
-VERSION=v0.1.0  # Replace with the latest version
+VERSION=v0.0.4  # Replace with the latest version
 curl -sL https://github.com/thomas-maurice/glua/releases/download/${VERSION}/glua-stubs_${VERSION}.tar.gz | tar xz
 
 # This extracts to library/*.gen.lua
@@ -67,7 +67,7 @@ If you want to generate stubs for your own modules:
 
 ```bash
 # Linux/macOS
-VERSION=v0.1.0  # Replace with the latest version
+VERSION=v0.0.4  # Replace with the latest version
 curl -sL https://github.com/thomas-maurice/glua/releases/download/${VERSION}/stubgen_${VERSION}_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/').tar.gz | tar xz
 sudo mv stubgen /usr/local/bin/
 

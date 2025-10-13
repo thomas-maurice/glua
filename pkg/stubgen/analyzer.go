@@ -137,96 +137,119 @@ func (a *Analyzer) parseFile(filename string) error {
 	}
 
 	var currentModule *LuaModule
-	classMap := make(map[string]*LuaClass) // Track classes by name
+	classMap := make(map[string]*LuaClass)
 
-	// Iterate through all declarations
+	// Process function declarations
+	currentModule = a.processFuncDeclarations(file, classMap)
+
+	// Process standalone comments
+	a.processStandaloneComments(file, currentModule, classMap)
+
+	return nil
+}
+
+// processFuncDeclarations: processes all function declarations in a file
+func (a *Analyzer) processFuncDeclarations(file *ast.File, classMap map[string]*LuaClass) *LuaModule {
+	var currentModule *LuaModule
+
 	for _, decl := range file.Decls {
 		funcDecl, ok := decl.(*ast.FuncDecl)
-		if !ok {
-			continue
-		}
-
-		// Skip if no doc comment
-		if funcDecl.Doc == nil {
+		if !ok || funcDecl.Doc == nil {
 			continue
 		}
 
 		comment := funcDecl.Doc.Text()
 
-		// Check if this is a module loader
-		if moduleName := a.extractModuleName(comment); moduleName != "" {
-			currentModule = &LuaModule{
-				Name:              moduleName,
-				Functions:         make([]*LuaFunction, 0),
-				Classes:           make([]*LuaClass, 0),
-				CustomAnnotations: a.extractCustomAnnotations(comment),
-			}
-			a.modules[moduleName] = currentModule
-			continue
-		}
-
-		// Check if this is a Lua function
-		if luaFunc := a.extractFunction(comment); luaFunc != nil && currentModule != nil {
-			currentModule.Functions = append(currentModule.Functions, luaFunc)
-			continue
-		}
-
-		// Check if this is a Lua constant
-		if luaConst := a.extractConst(comment); luaConst != nil && currentModule != nil {
-			currentModule.Constants = append(currentModule.Constants, luaConst)
-			continue
-		}
-
-		// Check if this is a Lua method
-		if luaMethod := a.extractMethod(comment); luaMethod != nil && currentModule != nil {
-			className := luaMethod.className
-			class, ok := classMap[className]
-			if !ok {
-				// Create new class
-				class = &LuaClass{
-					Name:              className,
-					Methods:           make([]*LuaMethod, 0),
-					Fields:            make([]*LuaField, 0),
-					CustomAnnotations: make([]string, 0),
-				}
-				classMap[className] = class
-				currentModule.Classes = append(currentModule.Classes, class)
-			}
-			class.Methods = append(class.Methods, luaMethod.method)
+		// Try to extract module, function, const, or method
+		if module := a.tryExtractModule(comment); module != nil {
+			currentModule = module
+			a.modules[module.Name] = module
+		} else if currentModule != nil {
+			a.tryAddFunctionOrConstOrMethod(comment, currentModule, classMap)
 		}
 	}
 
-	// After processing function declarations, scan all comments for constants and standalone classes
-	// This allows finding @luaconst and @luaclass annotations anywhere in the file
-	if currentModule != nil {
-		for _, commentGroup := range file.Comments {
-			comment := commentGroup.Text()
+	return currentModule
+}
 
-			// Check for constants
-			if luaConst := a.extractConst(comment); luaConst != nil {
-				currentModule.Constants = append(currentModule.Constants, luaConst)
-			}
-
-			// Check for standalone class definitions
-			if classInfo := a.extractClassDefinition(comment); classInfo != nil {
-				// Check if class already exists (e.g., from methods)
-				existingClass, exists := classMap[classInfo.Name]
-				if exists {
-					// Merge fields and description into existing class
-					existingClass.Fields = append(existingClass.Fields, classInfo.Fields...)
-					if existingClass.Description == "" {
-						existingClass.Description = classInfo.Description
-					}
-				} else {
-					// Add new class
-					classMap[classInfo.Name] = classInfo
-					currentModule.Classes = append(currentModule.Classes, classInfo)
-				}
-			}
+// tryExtractModule: tries to extract a module from a comment
+func (a *Analyzer) tryExtractModule(comment string) *LuaModule {
+	if moduleName := a.extractModuleName(comment); moduleName != "" {
+		return &LuaModule{
+			Name:              moduleName,
+			Functions:         make([]*LuaFunction, 0),
+			Classes:           make([]*LuaClass, 0),
+			CustomAnnotations: a.extractCustomAnnotations(comment),
 		}
 	}
-
 	return nil
+}
+
+// tryAddFunctionOrConstOrMethod: tries to add a function, constant, or method to the current module
+func (a *Analyzer) tryAddFunctionOrConstOrMethod(comment string, module *LuaModule, classMap map[string]*LuaClass) {
+	if luaFunc := a.extractFunction(comment); luaFunc != nil {
+		module.Functions = append(module.Functions, luaFunc)
+		return
+	}
+
+	if luaConst := a.extractConst(comment); luaConst != nil {
+		module.Constants = append(module.Constants, luaConst)
+		return
+	}
+
+	if luaMethod := a.extractMethod(comment); luaMethod != nil {
+		a.addMethodToClass(luaMethod, module, classMap)
+	}
+}
+
+// addMethodToClass: adds a method to a class, creating the class if needed
+func (a *Analyzer) addMethodToClass(luaMethod *methodResult, module *LuaModule, classMap map[string]*LuaClass) {
+	className := luaMethod.className
+	class, ok := classMap[className]
+	if !ok {
+		class = &LuaClass{
+			Name:              className,
+			Methods:           make([]*LuaMethod, 0),
+			Fields:            make([]*LuaField, 0),
+			CustomAnnotations: make([]string, 0),
+		}
+		classMap[className] = class
+		module.Classes = append(module.Classes, class)
+	}
+	class.Methods = append(class.Methods, luaMethod.method)
+}
+
+// processStandaloneComments: processes standalone comments for constants and class definitions
+func (a *Analyzer) processStandaloneComments(file *ast.File, module *LuaModule, classMap map[string]*LuaClass) {
+	if module == nil {
+		return
+	}
+
+	for _, commentGroup := range file.Comments {
+		comment := commentGroup.Text()
+
+		if luaConst := a.extractConst(comment); luaConst != nil {
+			module.Constants = append(module.Constants, luaConst)
+		}
+
+		if classInfo := a.extractClassDefinition(comment); classInfo != nil {
+			a.mergeOrAddClass(classInfo, module, classMap)
+		}
+	}
+}
+
+// mergeOrAddClass: merges class info into existing class or adds new class
+func (a *Analyzer) mergeOrAddClass(classInfo *LuaClass, module *LuaModule, classMap map[string]*LuaClass) {
+	existingClass, exists := classMap[classInfo.Name]
+	if exists {
+		existingClass.Fields = append(existingClass.Fields, classInfo.Fields...)
+		if existingClass.Description == "" {
+			existingClass.Description = classInfo.Description
+		}
+	} else {
+		classMap[classInfo.Name] = classInfo
+		module.Classes = append(module.Classes, classInfo)
+	}
 }
 
 // extractModuleName: extracts module name from @luamodule annotation
@@ -604,147 +627,19 @@ func (a *Analyzer) GenerateModuleStub(moduleName string) (string, error) {
 	sb.WriteString(fmt.Sprintf("---@meta %s\n\n", moduleName))
 
 	// Module-level custom annotations
-	for _, annotation := range module.CustomAnnotations {
-		sb.WriteString(fmt.Sprintf("---%s\n", annotation))
-	}
+	a.writeAnnotations(&sb, module.CustomAnnotations)
 
 	// Generate class stubs FIRST (must come before module for proper LSP resolution)
-	var namespacedClasses []string
-	for _, class := range module.Classes {
-		// Class declaration
-		sb.WriteString(fmt.Sprintf("---@class %s\n", class.Name))
+	namespacedClasses := a.generateClassStubs(&sb, module, moduleName)
 
-		// Class-level custom annotations
-		for _, annotation := range class.CustomAnnotations {
-			sb.WriteString(fmt.Sprintf("---%s\n", annotation))
-		}
-
-		// Field annotations
-		for _, field := range class.Fields {
-			if field.Description != "" {
-				sb.WriteString(fmt.Sprintf("---@field %s %s %s\n", field.Name, field.Type, field.Description))
-			} else {
-				sb.WriteString(fmt.Sprintf("---@field %s %s\n", field.Name, field.Type))
-			}
-		}
-
-		// Determine local variable name
-		var localVarName string
-		if strings.HasPrefix(class.Name, moduleName+".") {
-			// Namespaced class (e.g., "log.Logger" -> "Logger")
-			localVarName = strings.TrimPrefix(class.Name, moduleName+".")
-			namespacedClasses = append(namespacedClasses, localVarName)
-		} else {
-			// Simple class name
-			localVarName = class.Name
-		}
-
-		// Only generate local variable for classes with methods
-		// Pure data classes (only fields, no methods) don't need a local variable
-		if len(class.Methods) > 0 {
-			sb.WriteString(fmt.Sprintf("local %s = {}\n\n", localVarName))
-		} else {
-			sb.WriteString("\n")
-		}
-
-		// Generate method stubs
-		for _, method := range class.Methods {
-			// Parameter annotations (skip self since it's in the method signature comment)
-			for _, param := range method.Params {
-				if param.Name == "self" {
-					continue // Skip self parameter in annotations
-				}
-				if param.Description != "" {
-					sb.WriteString(fmt.Sprintf("---@param %s %s %s\n", param.Name, param.Type, param.Description))
-				} else {
-					sb.WriteString(fmt.Sprintf("---@param %s %s\n", param.Name, param.Type))
-				}
-			}
-
-			// Return annotations
-			for _, ret := range method.Returns {
-				if ret.Description != "" {
-					sb.WriteString(fmt.Sprintf("---@return %s %s\n", ret.Type, ret.Description))
-				} else {
-					sb.WriteString(fmt.Sprintf("---@return %s\n", ret.Type))
-				}
-			}
-
-			// Method-level custom annotations
-			for _, annotation := range method.CustomAnnotations {
-				sb.WriteString(fmt.Sprintf("---%s\n", annotation))
-			}
-
-			// Method signature (using : for method notation, using local variable name)
-			// Skip the first parameter if it's 'self' since : notation provides it implicitly
-			var paramNames []string
-			for i, param := range method.Params {
-				if i == 0 && param.Name == "self" {
-					continue // Skip self parameter
-				}
-				paramNames = append(paramNames, param.Name)
-			}
-			sb.WriteString(fmt.Sprintf("function %s:%s(%s) end\n\n", localVarName, method.Name, strings.Join(paramNames, ", ")))
-		}
-	}
-
-	// Generate module class
-	sb.WriteString(fmt.Sprintf("---@class %s\n", moduleName))
-
-	// Add field annotations for namespaced classes (e.g., log.Logger)
-	for _, class := range module.Classes {
-		if strings.HasPrefix(class.Name, moduleName+".") {
-			// Extract the field name (e.g., "Logger" from "log.Logger")
-			fieldName := strings.TrimPrefix(class.Name, moduleName+".")
-			sb.WriteString(fmt.Sprintf("---@field %s %s\n", fieldName, class.Name))
-		}
-	}
-
-	sb.WriteString(fmt.Sprintf("local %s = {}\n\n", moduleName))
+	// Generate module declaration
+	a.generateModuleDeclaration(&sb, module, moduleName)
 
 	// Generate function stubs
-	for _, fn := range module.Functions {
-		// Parameter annotations
-		for _, param := range fn.Params {
-			if param.Description != "" {
-				sb.WriteString(fmt.Sprintf("---@param %s %s %s\n", param.Name, param.Type, param.Description))
-			} else {
-				sb.WriteString(fmt.Sprintf("---@param %s %s\n", param.Name, param.Type))
-			}
-		}
-
-		// Return annotations
-		for _, ret := range fn.Returns {
-			if ret.Description != "" {
-				sb.WriteString(fmt.Sprintf("---@return %s %s\n", ret.Type, ret.Description))
-			} else {
-				sb.WriteString(fmt.Sprintf("---@return %s\n", ret.Type))
-			}
-		}
-
-		// Function-level custom annotations
-		for _, annotation := range fn.CustomAnnotations {
-			sb.WriteString(fmt.Sprintf("---%s\n", annotation))
-		}
-
-		// Function signature
-		paramNames := make([]string, len(fn.Params))
-		for i, param := range fn.Params {
-			paramNames[i] = param.Name
-		}
-		sb.WriteString(fmt.Sprintf("function %s.%s(%s) end\n\n", moduleName, fn.Name, strings.Join(paramNames, ", ")))
-	}
+	a.generateFunctionStubs(&sb, module, moduleName)
 
 	// Generate constant declarations
-	for _, cnst := range module.Constants {
-		// Constant annotation
-		if cnst.Description != "" {
-			sb.WriteString(fmt.Sprintf("---@type %s %s\n", cnst.Type, cnst.Description))
-		} else {
-			sb.WriteString(fmt.Sprintf("---@type %s\n", cnst.Type))
-		}
-		sb.WriteString(fmt.Sprintf("%s.%s = nil\n\n", moduleName, cnst.Name))
-	}
+	a.generateConstantStubs(&sb, module, moduleName)
 
 	// Assign namespaced classes to module fields (e.g., log.Logger = Logger)
 	for _, fieldName := range namespacedClasses {
@@ -755,4 +650,161 @@ func (a *Analyzer) GenerateModuleStub(moduleName string) (string, error) {
 	sb.WriteString(fmt.Sprintf("return %s\n", moduleName))
 
 	return sb.String(), nil
+}
+
+// writeAnnotations: writes custom annotations to the string builder
+func (a *Analyzer) writeAnnotations(sb *strings.Builder, annotations []string) {
+	for _, annotation := range annotations {
+		fmt.Fprintf(sb, "---%s\n", annotation)
+	}
+}
+
+// generateClassStubs: generates Lua annotation stubs for all classes in a module.
+// Returns a list of namespaced class names for later assignment.
+func (a *Analyzer) generateClassStubs(sb *strings.Builder, module *LuaModule, moduleName string) []string {
+	var namespacedClasses []string
+
+	for _, class := range module.Classes {
+		localVarName := a.generateSingleClassStub(sb, class, moduleName)
+		if strings.HasPrefix(class.Name, moduleName+".") {
+			namespacedClasses = append(namespacedClasses, localVarName)
+		}
+	}
+
+	return namespacedClasses
+}
+
+// generateSingleClassStub: generates stub for a single class and returns its local variable name
+func (a *Analyzer) generateSingleClassStub(sb *strings.Builder, class *LuaClass, moduleName string) string {
+	// Class declaration
+	fmt.Fprintf(sb, "---@class %s\n", class.Name)
+
+	// Class-level custom annotations
+	a.writeAnnotations(sb, class.CustomAnnotations)
+
+	// Field annotations
+	a.writeFieldAnnotations(sb, class.Fields)
+
+	// Determine local variable name
+	localVarName := a.getClassLocalName(class.Name, moduleName)
+
+	// Only generate local variable for classes with methods
+	if len(class.Methods) > 0 {
+		fmt.Fprintf(sb, "local %s = {}\n\n", localVarName)
+		a.generateMethodStubs(sb, class.Methods, localVarName)
+	} else {
+		sb.WriteString("\n")
+	}
+
+	return localVarName
+}
+
+// writeFieldAnnotations: writes field annotations for a class
+func (a *Analyzer) writeFieldAnnotations(sb *strings.Builder, fields []*LuaField) {
+	for _, field := range fields {
+		if field.Description != "" {
+			fmt.Fprintf(sb, "---@field %s %s %s\n", field.Name, field.Type, field.Description)
+		} else {
+			fmt.Fprintf(sb, "---@field %s %s\n", field.Name, field.Type)
+		}
+	}
+}
+
+// getClassLocalName: determines the local variable name for a class
+func (a *Analyzer) getClassLocalName(className, moduleName string) string {
+	if strings.HasPrefix(className, moduleName+".") {
+		return strings.TrimPrefix(className, moduleName+".")
+	}
+	return className
+}
+
+// generateMethodStubs: generates method stub declarations for a class
+func (a *Analyzer) generateMethodStubs(sb *strings.Builder, methods []*LuaMethod, localVarName string) {
+	for _, method := range methods {
+		a.writeParamAnnotations(sb, method.Params, true)
+		a.writeReturnAnnotations(sb, method.Returns)
+		a.writeAnnotations(sb, method.CustomAnnotations)
+
+		paramNames := a.extractParamNames(method.Params, true)
+		fmt.Fprintf(sb, "function %s:%s(%s) end\n\n", localVarName, method.Name, strings.Join(paramNames, ", "))
+	}
+}
+
+// writeParamAnnotations: writes parameter annotations
+func (a *Analyzer) writeParamAnnotations(sb *strings.Builder, params []*LuaParam, skipSelf bool) {
+	for _, param := range params {
+		if skipSelf && param.Name == "self" {
+			continue
+		}
+		if param.Description != "" {
+			fmt.Fprintf(sb, "---@param %s %s %s\n", param.Name, param.Type, param.Description)
+		} else {
+			fmt.Fprintf(sb, "---@param %s %s\n", param.Name, param.Type)
+		}
+	}
+}
+
+// writeReturnAnnotations: writes return value annotations
+func (a *Analyzer) writeReturnAnnotations(sb *strings.Builder, returns []*LuaReturn) {
+	for _, ret := range returns {
+		if ret.Description != "" {
+			fmt.Fprintf(sb, "---@return %s %s\n", ret.Type, ret.Description)
+		} else {
+			fmt.Fprintf(sb, "---@return %s\n", ret.Type)
+		}
+	}
+}
+
+// extractParamNames: extracts parameter names from a list of parameters
+func (a *Analyzer) extractParamNames(params []*LuaParam, skipSelf bool) []string {
+	var paramNames []string
+	for i, param := range params {
+		if skipSelf && i == 0 && param.Name == "self" {
+			continue
+		}
+		paramNames = append(paramNames, param.Name)
+	}
+	return paramNames
+}
+
+// generateModuleDeclaration: generates the module class declaration
+func (a *Analyzer) generateModuleDeclaration(sb *strings.Builder, module *LuaModule, moduleName string) {
+	fmt.Fprintf(sb, "---@class %s\n", moduleName)
+
+	// Add field annotations for namespaced classes
+	for _, class := range module.Classes {
+		if strings.HasPrefix(class.Name, moduleName+".") {
+			fieldName := strings.TrimPrefix(class.Name, moduleName+".")
+			fmt.Fprintf(sb, "---@field %s %s\n", fieldName, class.Name)
+		}
+	}
+
+	fmt.Fprintf(sb, "local %s = {}\n\n", moduleName)
+}
+
+// generateFunctionStubs: generates function stub declarations for a module
+func (a *Analyzer) generateFunctionStubs(sb *strings.Builder, module *LuaModule, moduleName string) {
+	for _, fn := range module.Functions {
+		a.writeParamAnnotations(sb, fn.Params, false)
+		a.writeReturnAnnotations(sb, fn.Returns)
+		a.writeAnnotations(sb, fn.CustomAnnotations)
+
+		paramNames := make([]string, len(fn.Params))
+		for i, param := range fn.Params {
+			paramNames[i] = param.Name
+		}
+		fmt.Fprintf(sb, "function %s.%s(%s) end\n\n", moduleName, fn.Name, strings.Join(paramNames, ", "))
+	}
+}
+
+// generateConstantStubs: generates constant declarations for a module
+func (a *Analyzer) generateConstantStubs(sb *strings.Builder, module *LuaModule, moduleName string) {
+	for _, cnst := range module.Constants {
+		if cnst.Description != "" {
+			fmt.Fprintf(sb, "---@type %s %s\n", cnst.Type, cnst.Description)
+		} else {
+			fmt.Fprintf(sb, "---@type %s\n", cnst.Type)
+		}
+		fmt.Fprintf(sb, "%s.%s = nil\n\n", moduleName, cnst.Name)
+	}
 }

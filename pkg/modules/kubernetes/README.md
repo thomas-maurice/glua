@@ -1,6 +1,63 @@
 # Kubernetes Module
 
-The `kubernetes` module provides utilities for working with Kubernetes resource quantities and timestamps in Lua scripts.
+The `kubernetes` module provides utilities for working with Kubernetes resource quantities and timestamps in Lua scripts. It also includes comprehensive type definitions for all common Kubernetes resources through LSP stubs for IDE autocomplete.
+
+## Available Kubernetes Types
+
+The module provides type definitions for all standard Kubernetes resources through the `library/kubernetes.gen.lua` stub file. This enables full IDE autocomplete and type checking for Kubernetes objects.
+
+### Core API (v1)
+
+- **Pod** - Represents a running container workload
+- **Service** - Exposes pods as a network service
+- **ConfigMap** - Stores configuration data as key-value pairs
+- **Secret** - Stores sensitive data like passwords and tokens
+- **PersistentVolume** / **PersistentVolumeClaim** - Manages storage resources
+- **Namespace** - Provides logical isolation for resources
+- **ServiceAccount** - Provides identity for processes running in pods
+- **Node** - Represents a worker machine in the cluster
+- **Event** - Records cluster events for debugging
+- **Endpoints** - Tracks the IP addresses of pods backing a service
+- **LimitRange** - Enforces resource constraints per namespace
+- **ResourceQuota** - Limits resource consumption per namespace
+
+### Apps API (apps/v1)
+
+- **Deployment** - Manages stateless application replicas
+- **StatefulSet** - Manages stateful application replicas with stable identities
+- **DaemonSet** - Ensures a pod runs on all (or some) nodes
+- **ReplicaSet** - Maintains a stable set of replica pods
+
+### Batch API (batch/v1)
+
+- **Job** - Runs a task to completion
+- **CronJob** - Schedules jobs to run at specific times (like cron)
+
+### Networking API (networking.k8s.io/v1)
+
+- **Ingress** - Manages external HTTP/HTTPS access to services
+- **IngressClass** - Represents the class of Ingress controller
+- **NetworkPolicy** - Controls network traffic between pods
+
+### RBAC API (rbac.authorization.k8s.io/v1)
+
+- **Role** / **ClusterRole** - Defines permissions within a namespace or cluster-wide
+- **RoleBinding** / **ClusterRoleBinding** - Grants permissions to users or service accounts
+
+### Storage API (storage.k8s.io/v1)
+
+- **StorageClass** - Defines classes of storage with different characteristics
+- **VolumeAttachment** - Tracks volume attachments to nodes
+
+### Autoscaling API (autoscaling/v2)
+
+- **HorizontalPodAutoscaler** - Automatically scales pod replicas based on metrics
+
+### Policy API (policy/v1)
+
+- **PodDisruptionBudget** - Limits the number of pods that can be down simultaneously
+
+All types include their full specifications with nested objects (e.g., `PodSpec`, `ServiceSpec`, `IngressRule`) providing complete type safety and IDE autocomplete when working with Kubernetes objects in Lua.
 
 ## Functions
 
@@ -323,6 +380,271 @@ print(is_service)  -- prints false
 - For resources in other API groups (Deployment, StatefulSet, etc.), specify the group name (e.g., "apps", "batch")
 - The apiVersion field in the object should match the group/version format (e.g., "v1" for core resources, "apps/v1" for apps group)
 - The GVKMatcher is a Go type registered with the TypeRegistry, allowing seamless conversion between Go and Lua
+
+### `kubernetes.ensure_metadata(obj)`
+
+Ensures that metadata, labels, and annotations tables exist on an object. This is a modernized version of `init_defaults` with a clearer name.
+
+**Parameters:**
+
+- `obj` (table): The Kubernetes object
+
+**Returns:**
+
+- `table`: The same object with initialized metadata (modified in-place)
+
+**Example:**
+
+```lua
+local k8s = require("kubernetes")
+
+local pod = {kind = "Pod"}
+k8s.ensure_metadata(pod)
+
+-- Now safe to use metadata, labels, and annotations
+pod.metadata.labels.app = "myapp"
+pod.metadata.annotations.version = "1.0"
+```
+
+### `kubernetes.add_label(obj, key, value)`
+
+Adds a single label to a Kubernetes object's metadata. Automatically initializes metadata and labels if they don't exist.
+
+**Parameters:**
+
+- `obj` (table): The Kubernetes object
+- `key` (string): The label key
+- `value` (string): The label value
+
+**Returns:**
+
+- `table`: The modified object
+
+**Example:**
+
+```lua
+local k8s = require("kubernetes")
+
+local pod = {kind = "Pod"}
+k8s.add_label(pod, "app", "nginx")
+k8s.add_label(pod, "version", "1.0")
+
+print(pod.metadata.labels.app)  -- prints "nginx"
+```
+
+### `kubernetes.add_labels(obj, labels)`
+
+Adds multiple labels to a Kubernetes object's metadata from a table. Automatically initializes metadata and labels if they don't exist.
+
+**Parameters:**
+
+- `obj` (table): The Kubernetes object
+- `labels` (table): A table of key-value pairs to add as labels
+
+**Returns:**
+
+- `table`: The modified object
+
+**Example:**
+
+```lua
+local k8s = require("kubernetes")
+
+local pod = {kind = "Pod"}
+k8s.add_labels(pod, {
+    app = "nginx",
+    version = "1.0",
+    tier = "frontend"
+})
+```
+
+### `kubernetes.remove_label(obj, key)`
+
+Removes a label from a Kubernetes object's metadata.
+
+**Parameters:**
+
+- `obj` (table): The Kubernetes object
+- `key` (string): The label key to remove
+
+**Returns:**
+
+- `table`: The modified object
+
+**Example:**
+
+```lua
+local k8s = require("kubernetes")
+
+k8s.add_label(pod, "temp", "value")
+k8s.remove_label(pod, "temp")
+```
+
+### `kubernetes.has_label(obj, key)`
+
+Checks if a Kubernetes object has a specific label.
+
+**Parameters:**
+
+- `obj` (table): The Kubernetes object
+- `key` (string): The label key to check
+
+**Returns:**
+
+- `boolean`: true if the label exists, false otherwise
+
+**Example:**
+
+```lua
+local k8s = require("kubernetes")
+
+if k8s.has_label(pod, "app") then
+    print("Pod has app label")
+end
+```
+
+### `kubernetes.get_label(obj, key)`
+
+Gets the value of a specific label from a Kubernetes object.
+
+**Parameters:**
+
+- `obj` (table): The Kubernetes object
+- `key` (string): The label key
+
+**Returns:**
+
+- `string|nil`: The label value, or nil if not found
+
+**Example:**
+
+```lua
+local k8s = require("kubernetes")
+
+local app = k8s.get_label(pod, "app")
+if app then
+    print("App: " .. app)
+end
+```
+
+### `kubernetes.add_annotation(obj, key, value)`
+
+Adds a single annotation to a Kubernetes object's metadata. Automatically initializes metadata and annotations if they don't exist.
+
+**Parameters:**
+
+- `obj` (table): The Kubernetes object
+- `key` (string): The annotation key
+- `value` (string): The annotation value
+
+**Returns:**
+
+- `table`: The modified object
+
+**Example:**
+
+```lua
+local k8s = require("kubernetes")
+
+local pod = {kind = "Pod"}
+k8s.add_annotation(pod, "description", "My nginx pod")
+k8s.add_annotation(pod, "owner", "team-backend")
+```
+
+### `kubernetes.add_annotations(obj, annotations)`
+
+Adds multiple annotations to a Kubernetes object's metadata from a table. Automatically initializes metadata and annotations if they don't exist.
+
+**Parameters:**
+
+- `obj` (table): The Kubernetes object
+- `annotations` (table): A table of key-value pairs to add as annotations
+
+**Returns:**
+
+- `table`: The modified object
+
+**Example:**
+
+```lua
+local k8s = require("kubernetes")
+
+local pod = {kind = "Pod"}
+k8s.add_annotations(pod, {
+    description = "My nginx pod",
+    owner = "team-backend",
+    version = "1.2.3"
+})
+```
+
+### `kubernetes.remove_annotation(obj, key)`
+
+Removes an annotation from a Kubernetes object's metadata.
+
+**Parameters:**
+
+- `obj` (table): The Kubernetes object
+- `key` (string): The annotation key to remove
+
+**Returns:**
+
+- `table`: The modified object
+
+**Example:**
+
+```lua
+local k8s = require("kubernetes")
+
+k8s.add_annotation(pod, "temp", "value")
+k8s.remove_annotation(pod, "temp")
+```
+
+### `kubernetes.has_annotation(obj, key)`
+
+Checks if a Kubernetes object has a specific annotation.
+
+**Parameters:**
+
+- `obj` (table): The Kubernetes object
+- `key` (string): The annotation key to check
+
+**Returns:**
+
+- `boolean`: true if the annotation exists, false otherwise
+
+**Example:**
+
+```lua
+local k8s = require("kubernetes")
+
+if k8s.has_annotation(pod, "description") then
+    print("Pod has description annotation")
+end
+```
+
+### `kubernetes.get_annotation(obj, key)`
+
+Gets the value of a specific annotation from a Kubernetes object.
+
+**Parameters:**
+
+- `obj` (table): The Kubernetes object
+- `key` (string): The annotation key
+
+**Returns:**
+
+- `string|nil`: The annotation value, or nil if not found
+
+**Example:**
+
+```lua
+local k8s = require("kubernetes")
+
+local desc = k8s.get_annotation(pod, "description")
+if desc then
+    print("Description: " .. desc)
+end
+```
 
 ## Usage in Go
 
