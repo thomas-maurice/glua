@@ -805,10 +805,6 @@
 ---@field hostProcess boolean
 ---@field runAsUserName string
 
----@class resource.Quantity
-
----@class v1.FieldsV1
-
 ---@class v1.LabelSelector
 ---@field matchExpressions v1.LabelSelectorRequirement[]
 ---@field matchLabels table<string, string>
@@ -852,12 +848,8 @@
 ---@field name string
 ---@field uid string
 
----@class v1.Time
-
 ---@class v1.TypeMeta
 ---@field apiVersion string
 ---@field kind string
-
----@class intstr.IntOrString
 
 return {}
