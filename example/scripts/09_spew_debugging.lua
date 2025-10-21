@@ -1,4 +1,5 @@
 
+---@diagnostic disable-next-line: undefined-global
 -- Script: Spew Debugging
 -- Description: Demonstrates the spew module for deep inspection and debugging of Lua tables
 

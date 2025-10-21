@@ -1,4 +1,5 @@
 
+---@diagnostic disable-next-line: undefined-global
 -- Script: JSON Processing and Serialization
 -- Description: Demonstrates the json module for parsing and stringifying data
 

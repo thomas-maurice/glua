@@ -5,6 +5,7 @@
 -- to query Kubernetes resources during mutation
 --
 -- Global variables available:
+---@diagnostic disable: undefined-global
 --   pod: the Kubernetes Pod object being mutated
 --   patches: empty table to populate with JSON patch operations
 --   k8sclient: Kubernetes dynamic client (if enabled)

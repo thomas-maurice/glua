@@ -34,6 +34,7 @@ end
 -- ============================================================================
 
 ---@type corev1.Pod
+---@diagnostic disable-next-line: undefined-global
 local pod = originalPod
 
 -- Verify pod structure
@@ -65,6 +66,7 @@ print(string.format("  Output: %d (Unix timestamp)", timestamp))
 assert(timestamp > 0, "Timestamp should be positive")
 
 -- Export for Go verification
+---@diagnostic disable-next-line: lowercase-global
 parsedTimestamp = timestamp
 
 -- ============================================================================
@@ -95,6 +97,7 @@ end
 
 print(string.format("  CPU request (parsed): %d millicores", cpuReqMillis))
 
+---@diagnostic disable-next-line: lowercase-global
 -- Export for Go verification
 parsedCPUMillis = cpuMillis
 
@@ -124,6 +127,7 @@ end
 
 local memReqMB = memReqBytes / (1024 * 1024)
 print(string.format("  Memory request (parsed): %d bytes (%.2f MB)", memReqBytes, memReqMB))
+---@diagnostic disable-next-line: lowercase-global
 
 -- Export for Go verification
 parsedMemoryBytes = memBytes
@@ -189,6 +193,7 @@ print("\n[Lua] Preparing pod for round-trip conversion...")
 
 -- In a real scenario, you might modify the pod here:
 -- pod.metadata.labels["processed-by-lua"] = "true"
+---@diagnostic disable-next-line: lowercase-global
 -- pod.spec.containers[1].env[#pod.spec.containers[1].env + 1] = {name = "PROCESSED", value = "true"}
 
 -- For this demo, we pass it through unchanged to verify round-trip integrity

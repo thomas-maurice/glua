@@ -3,6 +3,7 @@
 -- This script extracts and displays basic pod information
 
 ---@type corev1.Pod
+---@diagnostic disable-next-line: undefined-global
 local pod = myPod
 
 print("=== Basic Pod Information ===")

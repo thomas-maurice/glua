@@ -5,6 +5,7 @@
 local k8s = require("kubernetes")
 
 ---@type corev1.Pod
+---@diagnostic disable-next-line: undefined-global
 local pod = myPod
 
 print("=== Timestamp Operations ===")

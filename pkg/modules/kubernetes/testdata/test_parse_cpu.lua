@@ -1,4 +1,5 @@
 
+---@diagnostic disable-next-line: undefined-global
 -- Test: parse_cpu with input from Go
 --
 -- This test is parameterized from Go. The input value is set
