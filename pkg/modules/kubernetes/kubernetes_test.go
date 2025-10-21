@@ -21,6 +21,7 @@
 package kubernetes
 
 import (
+	"path/filepath"
 	"testing"
 
 	lua "github.com/yuin/gopher-lua"
@@ -288,39 +289,46 @@ func TestInitDefaults(t *testing.T) {
 	}
 }
 
-func TestInitDefaultsFullWorkflow(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("kubernetes", Loader)
-
-	if err := L.DoFile("testdata/init_defaults_full_workflow.lua"); err != nil {
-		t.Fatalf("Test failed: %v", err)
+// TestLuaIntegrationScripts: runs integration test scripts (those not starting with test_)
+func TestLuaIntegrationScripts(t *testing.T) {
+	patterns := []string{
+		"testdata/init_*.lua",
+		"testdata/integration_*.lua",
+		"testdata/module_*.lua",
 	}
 
-	result := L.Get(-1)
-	L.Pop(1)
-
-	if result != lua.LTrue {
-		t.Errorf("Expected true, got %v", result)
-	}
-}
-
-func TestModuleIntegration(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("kubernetes", Loader)
-
-	if err := L.DoFile("testdata/module_integration.lua"); err != nil {
-		t.Fatalf("Integration test failed: %v", err)
+	var files []string
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			t.Fatalf("Failed to glob %s: %v", pattern, err)
+		}
+		files = append(files, matches...)
 	}
 
-	result := L.Get(-1)
-	L.Pop(1)
+	if len(files) == 0 {
+		t.Fatal("No integration test files found in testdata/")
+	}
 
-	if result != lua.LTrue {
-		t.Errorf("Expected true, got %v", result)
+	for _, file := range files {
+		testName := filepath.Base(file)
+		t.Run(testName, func(t *testing.T) {
+			L := lua.NewState()
+			defer L.Close()
+
+			L.PreloadModule("kubernetes", Loader)
+
+			if err := L.DoFile(file); err != nil {
+				t.Fatalf("Test failed: %v", err)
+			}
+
+			result := L.Get(-1)
+			L.Pop(1)
+
+			if result != lua.LTrue {
+				t.Errorf("Expected true, got %v", result)
+			}
+		})
 	}
 }
 
@@ -420,92 +428,26 @@ func TestFormatDuration(t *testing.T) {
 	}
 }
 
-func TestNewFunctionsIntegration(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("kubernetes", Loader)
-
-	if err := L.DoFile("testdata/integration_new_functions.lua"); err != nil {
-		t.Fatalf("Integration test failed: %v", err)
+// TestLuaMatchGVKScripts: runs all match_gvk test scripts using file discovery
+func TestLuaMatchGVKScripts(t *testing.T) {
+	files, err := filepath.Glob("testdata/test_match_gvk_*.lua")
+	if err != nil {
+		t.Fatalf("Failed to glob testdata: %v", err)
 	}
 
-	result := L.Get(-1)
-	L.Pop(1)
-
-	if result != lua.LTrue {
-		t.Errorf("Expected true, got %v", result)
-	}
-}
-
-func TestMatchGVK(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("kubernetes", Loader)
-
-	tests := []struct {
-		name     string
-		filename string
-	}{
-		{"pod matches v1/Pod", "testdata/test_match_gvk_pod.lua"},
-		{"deployment matches apps/v1/Deployment", "testdata/test_match_gvk_deployment.lua"},
-		{"wrong kind does not match", "testdata/test_match_gvk_wrong_kind.lua"},
-		{"wrong version does not match", "testdata/test_match_gvk_wrong_version.lua"},
-		{"configmap matches v1/ConfigMap", "testdata/test_match_gvk_configmap.lua"},
+	if len(files) == 0 {
+		t.Fatal("No match_gvk test files found in testdata/")
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := L.DoFile(tt.filename); err != nil {
-				t.Fatalf("Test failed: %v", err)
-			}
+	for _, file := range files {
+		testName := filepath.Base(file)
+		t.Run(testName, func(t *testing.T) {
+			L := lua.NewState()
+			defer L.Close()
 
-			result := L.Get(-1)
-			L.Pop(1)
+			L.PreloadModule("kubernetes", Loader)
 
-			if result != lua.LTrue {
-				t.Errorf("Expected true, got %v", result)
-			}
-		})
-	}
-}
-
-func TestMatchGVKIntegration(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("kubernetes", Loader)
-
-	if err := L.DoFile("testdata/integration_match_gvk.lua"); err != nil {
-		t.Fatalf("Integration test failed: %v", err)
-	}
-
-	result := L.Get(-1)
-	L.Pop(1)
-
-	if result != lua.LTrue {
-		t.Errorf("Expected true, got %v", result)
-	}
-}
-
-func TestMatchGVKValidation(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("kubernetes", Loader)
-
-	tests := []struct {
-		name     string
-		filename string
-	}{
-		{"missing kind field", "testdata/test_match_gvk_validation.lua"},
-		{"missing version field", "testdata/test_match_gvk_validation_version.lua"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := L.DoFile(tt.filename); err != nil {
+			if err := L.DoFile(file); err != nil {
 				t.Fatalf("Test failed: %v", err)
 			}
 
