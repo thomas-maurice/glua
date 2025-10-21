@@ -30,10 +30,13 @@ import (
 	"github.com/thomas-maurice/glua/pkg/modules/kubernetes"
 	"github.com/thomas-maurice/glua/pkg/stubgen"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -105,6 +108,17 @@ func main() {
 			rbacv1.RoleBindingList{},
 			rbacv1.ClusterRoleBinding{},
 			rbacv1.ClusterRoleBindingList{},
+			// Autoscaling resources
+			autoscalingv2.HorizontalPodAutoscaler{},
+			autoscalingv2.HorizontalPodAutoscalerList{},
+			// Storage resources
+			storagev1.StorageClass{},
+			storagev1.StorageClassList{},
+			storagev1.VolumeAttachment{},
+			storagev1.VolumeAttachmentList{},
+			// Policy resources
+			policyv1.PodDisruptionBudget{},
+			policyv1.PodDisruptionBudgetList{},
 			// Metav1 types
 			metav1.ObjectMeta{},
 			metav1.TypeMeta{},

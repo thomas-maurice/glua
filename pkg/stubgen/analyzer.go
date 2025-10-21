@@ -620,9 +620,9 @@ func (a *Analyzer) GenerateStubs() (string, error) {
 			// Parameter annotations
 			for _, param := range fn.Params {
 				if param.Description != "" {
-					sb.WriteString(fmt.Sprintf("---@param %s %s %s\n", param.Type, param.Name, param.Description))
+					sb.WriteString(fmt.Sprintf("---@param %s %s %s\n", param.Name, param.Type, param.Description))
 				} else {
-					sb.WriteString(fmt.Sprintf("---@param %s %s\n", param.Type, param.Name))
+					sb.WriteString(fmt.Sprintf("---@param %s %s\n", param.Name, param.Type))
 				}
 			}
 
@@ -795,9 +795,9 @@ func (a *Analyzer) writeParamAnnotations(sb *strings.Builder, params []*LuaParam
 			continue
 		}
 		if param.Description != "" {
-			fmt.Fprintf(sb, "---@param %s %s %s\n", param.Type, param.Name, param.Description)
+			fmt.Fprintf(sb, "---@param %s %s %s\n", param.Name, param.Type, param.Description)
 		} else {
-			fmt.Fprintf(sb, "---@param %s %s\n", param.Type, param.Name)
+			fmt.Fprintf(sb, "---@param %s %s\n", param.Name, param.Type)
 		}
 	}
 }

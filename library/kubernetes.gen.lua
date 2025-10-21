@@ -187,6 +187,134 @@
 ---@field rollingUpdate appsv1.RollingUpdateStatefulSetStrategy
 ---@field type string
 
+---@class autoscalingv2.ContainerResourceMetricSource
+---@field container string
+---@field name string
+---@field target autoscalingv2.MetricTarget
+
+---@class autoscalingv2.ContainerResourceMetricStatus
+---@field container string
+---@field current autoscalingv2.MetricValueStatus
+---@field name string
+
+---@class autoscalingv2.CrossVersionObjectReference
+---@field apiVersion string
+---@field kind string
+---@field name string
+
+---@class autoscalingv2.ExternalMetricSource
+---@field metric autoscalingv2.MetricIdentifier
+---@field target autoscalingv2.MetricTarget
+
+---@class autoscalingv2.ExternalMetricStatus
+---@field current autoscalingv2.MetricValueStatus
+---@field metric autoscalingv2.MetricIdentifier
+
+---@class autoscalingv2.HPAScalingPolicy
+---@field periodSeconds number
+---@field type string
+---@field value number
+
+---@class autoscalingv2.HPAScalingRules
+---@field policies autoscalingv2.HPAScalingPolicy[]
+---@field selectPolicy string
+---@field stabilizationWindowSeconds number
+---@field tolerance resource.Quantity
+
+---@class autoscalingv2.HorizontalPodAutoscaler
+---@field TypeMeta v1.TypeMeta
+---@field metadata v1.ObjectMeta
+---@field spec autoscalingv2.HorizontalPodAutoscalerSpec
+---@field status autoscalingv2.HorizontalPodAutoscalerStatus
+
+---@class autoscalingv2.HorizontalPodAutoscalerBehavior
+---@field scaleDown autoscalingv2.HPAScalingRules
+---@field scaleUp autoscalingv2.HPAScalingRules
+
+---@class autoscalingv2.HorizontalPodAutoscalerCondition
+---@field lastTransitionTime v1.Time
+---@field message string
+---@field reason string
+---@field status string
+---@field type string
+
+---@class autoscalingv2.HorizontalPodAutoscalerList
+---@field TypeMeta v1.TypeMeta
+---@field items autoscalingv2.HorizontalPodAutoscaler[]
+---@field metadata v1.ListMeta
+
+---@class autoscalingv2.HorizontalPodAutoscalerSpec
+---@field behavior autoscalingv2.HorizontalPodAutoscalerBehavior
+---@field maxReplicas number
+---@field metrics autoscalingv2.MetricSpec[]
+---@field minReplicas number
+---@field scaleTargetRef autoscalingv2.CrossVersionObjectReference
+
+---@class autoscalingv2.HorizontalPodAutoscalerStatus
+---@field conditions autoscalingv2.HorizontalPodAutoscalerCondition[]
+---@field currentMetrics autoscalingv2.MetricStatus[]
+---@field currentReplicas number
+---@field desiredReplicas number
+---@field lastScaleTime v1.Time
+---@field observedGeneration number
+
+---@class autoscalingv2.MetricIdentifier
+---@field name string
+---@field selector v1.LabelSelector
+
+---@class autoscalingv2.MetricSpec
+---@field containerResource autoscalingv2.ContainerResourceMetricSource
+---@field external autoscalingv2.ExternalMetricSource
+---@field object autoscalingv2.ObjectMetricSource
+---@field pods autoscalingv2.PodsMetricSource
+---@field resource autoscalingv2.ResourceMetricSource
+---@field type string
+
+---@class autoscalingv2.MetricStatus
+---@field containerResource autoscalingv2.ContainerResourceMetricStatus
+---@field external autoscalingv2.ExternalMetricStatus
+---@field object autoscalingv2.ObjectMetricStatus
+---@field pods autoscalingv2.PodsMetricStatus
+---@field resource autoscalingv2.ResourceMetricStatus
+---@field type string
+
+---@class autoscalingv2.MetricTarget
+---@field averageUtilization number
+---@field averageValue resource.Quantity
+---@field type string
+---@field value resource.Quantity
+
+---@class autoscalingv2.MetricValueStatus
+---@field averageUtilization number
+---@field averageValue resource.Quantity
+---@field value resource.Quantity
+
+---@class autoscalingv2.ObjectMetricSource
+---@field describedObject autoscalingv2.CrossVersionObjectReference
+---@field metric autoscalingv2.MetricIdentifier
+---@field target autoscalingv2.MetricTarget
+
+---@class autoscalingv2.ObjectMetricStatus
+---@field current autoscalingv2.MetricValueStatus
+---@field describedObject autoscalingv2.CrossVersionObjectReference
+---@field metric autoscalingv2.MetricIdentifier
+
+---@class autoscalingv2.PodsMetricSource
+---@field metric autoscalingv2.MetricIdentifier
+---@field target autoscalingv2.MetricTarget
+
+---@class autoscalingv2.PodsMetricStatus
+---@field current autoscalingv2.MetricValueStatus
+---@field metric autoscalingv2.MetricIdentifier
+
+---@class autoscalingv2.ResourceMetricSource
+---@field name string
+---@field target autoscalingv2.MetricTarget
+
+---@class autoscalingv2.ResourceMetricStatus
+---@field current autoscalingv2.MetricValueStatus
+---@field name string
+
 ---@class batchv1.CronJob
 ---@field TypeMeta v1.TypeMeta
 ---@field metadata v1.ObjectMeta
@@ -1434,6 +1562,13 @@
 ---@field tolerationSeconds number
 ---@field value string
 
+---@class corev1.TopologySelectorLabelRequirement
+---@field key string
+---@field values string[]
+
+---@class corev1.TopologySelectorTerm
+---@field matchLabelExpressions corev1.TopologySelectorLabelRequirement[]
+
 ---@class corev1.TopologySpreadConstraint
 ---@field labelSelector v1.LabelSelector
 ---@field matchLabelKeys string[]
@@ -1643,6 +1778,32 @@
 ---@field name string
 ---@field number number
 
+---@class policyv1.PodDisruptionBudget
+---@field TypeMeta v1.TypeMeta
+---@field metadata v1.ObjectMeta
+---@field spec policyv1.PodDisruptionBudgetSpec
+---@field status policyv1.PodDisruptionBudgetStatus
+
+---@class policyv1.PodDisruptionBudgetList
+---@field TypeMeta v1.TypeMeta
+---@field items policyv1.PodDisruptionBudget[]
+---@field metadata v1.ListMeta
+
+---@class policyv1.PodDisruptionBudgetSpec
+---@field maxUnavailable intstr.IntOrString
+---@field minAvailable intstr.IntOrString
+---@field selector v1.LabelSelector
+---@field unhealthyPodEvictionPolicy string
+
+---@class policyv1.PodDisruptionBudgetStatus
+---@field conditions v1.Condition[]
+---@field currentHealthy number
+---@field desiredHealthy number
+---@field disruptedPods table<string, v1.Time>
+---@field disruptionsAllowed number
+---@field expectedPods number
+---@field observedGeneration number
+
 ---@class rbacv1.AggregationRule
 ---@field clusterRoleSelectors v1.LabelSelector[]
 
@@ -1706,6 +1867,53 @@
 ---@field kind string
 ---@field name string
 ---@field namespace string
+
+---@class storagev1.StorageClass
+---@field TypeMeta v1.TypeMeta
+---@field allowVolumeExpansion boolean
+---@field allowedTopologies corev1.TopologySelectorTerm[]
+---@field metadata v1.ObjectMeta
+---@field mountOptions string[]
+---@field parameters table<string, string>
+---@field provisioner string
+---@field reclaimPolicy string
+---@field volumeBindingMode string
+
+---@class storagev1.StorageClassList
+---@field TypeMeta v1.TypeMeta
+---@field items storagev1.StorageClass[]
+---@field metadata v1.ListMeta
+
+---@class storagev1.VolumeAttachment
+---@field TypeMeta v1.TypeMeta
+---@field metadata v1.ObjectMeta
+---@field spec storagev1.VolumeAttachmentSpec
+---@field status storagev1.VolumeAttachmentStatus
+
+---@class storagev1.VolumeAttachmentList
+---@field TypeMeta v1.TypeMeta
+---@field items storagev1.VolumeAttachment[]
+---@field metadata v1.ListMeta
+
+---@class storagev1.VolumeAttachmentSource
+---@field inlineVolumeSpec corev1.PersistentVolumeSpec
+---@field persistentVolumeName string
+
+---@class storagev1.VolumeAttachmentSpec
+---@field attacher string
+---@field nodeName string
+---@field source storagev1.VolumeAttachmentSource
+
+---@class storagev1.VolumeAttachmentStatus
+---@field attachError storagev1.VolumeError
+---@field attached boolean
+---@field attachmentMetadata table<string, string>
+---@field detachError storagev1.VolumeError
+
+---@class storagev1.VolumeError
+---@field errorCode number
+---@field message string
+---@field time v1.Time
 
 ---@class v1.Condition
 ---@field lastTransitionTime v1.Time
@@ -1795,98 +2003,98 @@
 ---@class kubernetes
 local kubernetes = {}
 
----@param string quantity The memory quantity to parse (e.g., "1024Mi", "1Gi")
+---@param quantity string The memory quantity to parse (e.g., "1024Mi", "1Gi")
 ---@return number bytes The memory value in bytes, or nil on error
 ---@return string|nil err Error message if parsing failed
 function kubernetes.parse_memory(quantity) end
 
----@param string quantity The CPU quantity to parse (e.g., "100m", "1", "2000m")
+---@param quantity string The CPU quantity to parse (e.g., "100m", "1", "2000m")
 ---@return number millicores The CPU value in millicores, or nil on error
 ---@return string|nil err Error message if parsing failed
 function kubernetes.parse_cpu(quantity) end
 
----@param string timestr The time string in RFC3339 format (e.g., "2025-10-03T16:39:00Z")
+---@param timestr string The time string in RFC3339 format (e.g., "2025-10-03T16:39:00Z")
 ---@return number timestamp The Unix timestamp, or nil on error
 ---@return string|nil err Error message if parsing failed
 function kubernetes.parse_time(timestr) end
 
----@param number timestamp The Unix timestamp to convert
+---@param timestamp number The Unix timestamp to convert
 ---@return string timestr The time in RFC3339 format (e.g., "2025-10-03T16:39:00Z"), or nil on error
 ---@return string|nil err Error message if formatting failed
 function kubernetes.format_time(timestamp) end
 
----@param table obj The Kubernetes object (must have a metadata field)
+---@param obj table The Kubernetes object (must have a metadata field)
 ---@return table obj The same object with initialized defaults (modified in-place)
 function kubernetes.init_defaults(obj) end
 
----@param string duration The duration string to parse (e.g., "5s", "10m", "2h")
+---@param duration string The duration string to parse (e.g., "5s", "10m", "2h")
 ---@return number seconds The duration value in seconds, or nil on error
 ---@return string|nil err Error message if parsing failed
 function kubernetes.parse_duration(duration) end
 
----@param number seconds The duration in seconds to convert
+---@param seconds number The duration in seconds to convert
 ---@return string duration The duration string (e.g., "5m0s", "1h30m0s"), or nil on error
 ---@return string|nil err Error message if formatting failed
 function kubernetes.format_duration(seconds) end
 
----@param table obj The Kubernetes object to check
----@param kubernetes.GVKMatcher matcher The GVK matcher with group, version, and kind fields
+---@param obj table The Kubernetes object to check
+---@param matcher kubernetes.GVKMatcher The GVK matcher with group, version, and kind fields
 ---@return boolean matches true if the GVK matches
 function kubernetes.match_gvk(obj, matcher) end
 
----@param table obj The Kubernetes object
+---@param obj table The Kubernetes object
 ---@return table obj The same object with initialized metadata (modified in-place)
 function kubernetes.ensure_metadata(obj) end
 
----@param table obj The Kubernetes object
----@param string key The label key
----@param string value The label value
+---@param obj table The Kubernetes object
+---@param key string The label key
+---@param value string The label value
 ---@return table obj The modified object (for chaining)
 function kubernetes.add_label(obj, key, value) end
 
----@param table obj The Kubernetes object
----@param table labels A table of key-value pairs to add as labels
+---@param obj table The Kubernetes object
+---@param labels table A table of key-value pairs to add as labels
 ---@return table obj The modified object (for chaining)
 function kubernetes.add_labels(obj, labels) end
 
----@param table obj The Kubernetes object
----@param string key The label key to remove
+---@param obj table The Kubernetes object
+---@param key string The label key to remove
 ---@return table obj The modified object (for chaining)
 function kubernetes.remove_label(obj, key) end
 
----@param table obj The Kubernetes object
----@param string key The label key to check
+---@param obj table The Kubernetes object
+---@param key string The label key to check
 ---@return boolean exists true if the label exists
 function kubernetes.has_label(obj, key) end
 
----@param table obj The Kubernetes object
----@param string key The label key
+---@param obj table The Kubernetes object
+---@param key string The label key
 ---@return string|nil value The label value, or nil if not found
 function kubernetes.get_label(obj, key) end
 
----@param table obj The Kubernetes object
----@param string key The annotation key
----@param string value The annotation value
+---@param obj table The Kubernetes object
+---@param key string The annotation key
+---@param value string The annotation value
 ---@return table obj The modified object (for chaining)
 function kubernetes.add_annotation(obj, key, value) end
 
----@param table obj The Kubernetes object
----@param table annotations A table of key-value pairs to add as annotations
+---@param obj table The Kubernetes object
+---@param annotations table A table of key-value pairs to add as annotations
 ---@return table obj The modified object (for chaining)
 function kubernetes.add_annotations(obj, annotations) end
 
----@param table obj The Kubernetes object
----@param string key The annotation key to remove
+---@param obj table The Kubernetes object
+---@param key string The annotation key to remove
 ---@return table obj The modified object (for chaining)
 function kubernetes.remove_annotation(obj, key) end
 
----@param table obj The Kubernetes object
----@param string key The annotation key to check
+---@param obj table The Kubernetes object
+---@param key string The annotation key to check
 ---@return boolean exists true if the annotation exists
 function kubernetes.has_annotation(obj, key) end
 
----@param table obj The Kubernetes object
----@param string key The annotation key
+---@param obj table The Kubernetes object
+---@param key string The annotation key
 ---@return string|nil value The annotation value, or nil if not found
 function kubernetes.get_annotation(obj, key) end
 

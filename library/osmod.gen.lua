@@ -3,16 +3,16 @@
 ---@class osmod
 local osmod = {}
 
----@param string name The environment variable name
+---@param name string The environment variable name
 ---@return string The value of the environment variable (empty string if not set)
 function osmod.getenv(name) end
 
----@param string name The environment variable name
----@param string value The value to set
+---@param name string The environment variable name
+---@param value string The value to set
 ---@return string|nil Error message if operation failed
 function osmod.setenv(name, value) end
 
----@param string name The environment variable name
+---@param name string The environment variable name
 ---@return string|nil Error message if operation failed
 function osmod.unsetenv(name) end
 

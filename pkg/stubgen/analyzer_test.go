@@ -252,8 +252,8 @@ func TestAnalyzer_GenerateStubs(t *testing.T) {
 	expectedStrings := []string{
 		"---@class testmod",
 		"function testmod.add(a, b) end",
-		"---@param number a First number",
-		"---@param number b Second number",
+		"---@param a number First number",
+		"---@param b number Second number",
 		"---@return number The sum",
 		"return {}",
 	}
