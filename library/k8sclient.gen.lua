@@ -12,31 +12,31 @@ local k8sclient = {}
 ---@return string|nil err Error message if client creation failed
 function k8sclient.new_client() end
 
----@param gvk GVKMatcher The GVK matcher with group, version, and kind
----@param namespace string The namespace of the resource
----@param name string The name of the resource
+---@param GVKMatcher gvk The GVK matcher with group, version, and kind
+---@param string namespace The namespace of the resource
+---@param string name The name of the resource
 ---@return table|nil obj The Kubernetes object, or nil on error
 ---@return string|nil err Error message if retrieval failed
 function k8sclient.get(gvk, namespace, name) end
 
----@param obj table The Kubernetes object to create
+---@param table obj The Kubernetes object to create
 ---@return table|nil obj The created Kubernetes object, or nil on error
 ---@return string|nil err Error message if creation failed
 function k8sclient.create(obj) end
 
----@param obj table The Kubernetes object to update
+---@param table obj The Kubernetes object to update
 ---@return table|nil obj The updated Kubernetes object, or nil on error
 ---@return string|nil err Error message if update failed
 function k8sclient.update(obj) end
 
----@param gvk GVKMatcher The GVK matcher with group, version, and kind
----@param namespace string The namespace of the resource
----@param name string The name of the resource
+---@param GVKMatcher gvk The GVK matcher with group, version, and kind
+---@param string namespace The namespace of the resource
+---@param string name The name of the resource
 ---@return string|nil err Error message if deletion failed, nil on success
 function k8sclient.delete(gvk, namespace, name) end
 
----@param gvk GVKMatcher The GVK matcher with group, version, and kind
----@param namespace string The namespace to list from
+---@param GVKMatcher gvk The GVK matcher with group, version, and kind
+---@param string namespace The namespace to list from
 ---@return table[]|nil objects Array of Kubernetes objects, or nil on error
 ---@return string|nil err Error message if listing failed
 function k8sclient.list(gvk, namespace) end
