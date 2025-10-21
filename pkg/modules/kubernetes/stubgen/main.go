@@ -164,5 +164,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Post-process: Add IntOrString type alias at the top
+	// IntOrString is a special Kubernetes type that can be either string or number
+	content, err := os.ReadFile(outputFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading generated file: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Prepend the type alias
+	aliasHeader := "---@alias intstr.IntOrString string|number\n\n"
+	newContent := aliasHeader + string(content)
+
+	if err := os.WriteFile(outputFile, []byte(newContent), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing updated file: %v\n", err)
+		os.Exit(1)
+	}
+
 	fmt.Printf("Generated %s\n", outputFile)
 }
