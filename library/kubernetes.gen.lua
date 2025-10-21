@@ -1,4 +1,6 @@
 ---@alias intstr.IntOrString string|number
+---@alias v1.Time string
+---@alias v1.MicroTime string
 
 ---@class kubernetes.GVKMatcher
 ---@field group string

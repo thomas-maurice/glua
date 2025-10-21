@@ -172,8 +172,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Prepend the type alias
-	aliasHeader := "---@alias intstr.IntOrString string|number\n\n"
+	// Prepend the type aliases
+	// IntOrString can be either a string or number (e.g., for targetPort)
+	// Time and MicroTime are time types that serialize as strings
+	aliasHeader := `---@alias intstr.IntOrString string|number
+---@alias v1.Time string
+---@alias v1.MicroTime string
+
+`
 	newContent := aliasHeader + string(content)
 
 	if err := os.WriteFile(outputFile, []byte(newContent), 0644); err != nil {
