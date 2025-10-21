@@ -59,8 +59,8 @@ var exports = map[string]lua.LGFunction{
 // @luafunc render
 // @luaparam tmpl string The template string
 // @luaparam data table The data to render with
-// @luareturn result string The rendered template, or nil on error
-// @luareturn err string|nil Error message if rendering failed
+// @luareturn string The rendered template, or nil on error
+// @luareturn string|nil Error message if rendering failed
 //
 // Example:
 //
@@ -103,8 +103,8 @@ func render(L *lua.LState) int {
 // @luafunc render_file
 // @luaparam path string The path to the template file
 // @luaparam data table The data to render with
-// @luareturn result string The rendered template, or nil on error
-// @luareturn err string|nil Error message if rendering failed
+// @luareturn string The rendered template, or nil on error
+// @luareturn string|nil Error message if rendering failed
 //
 // Example:
 //

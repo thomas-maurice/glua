@@ -1796,98 +1796,98 @@
 local kubernetes = {}
 
 ---@param quantity string The memory quantity to parse (e.g., "1024Mi", "1Gi")
----@return bytes number The memory value in bytes, or nil on error
----@return err string|nil Error message if parsing failed
+---@return number The memory value in bytes, or nil on error
+---@return string|nil Error message if parsing failed
 function kubernetes.parse_memory(quantity) end
 
 ---@param quantity string The CPU quantity to parse (e.g., "100m", "1", "2000m")
----@return millicores number The CPU value in millicores, or nil on error
----@return err string|nil Error message if parsing failed
+---@return number The CPU value in millicores, or nil on error
+---@return string|nil Error message if parsing failed
 function kubernetes.parse_cpu(quantity) end
 
 ---@param timestr string The time string in RFC3339 format (e.g., "2025-10-03T16:39:00Z")
----@return timestamp number The Unix timestamp, or nil on error
----@return err string|nil Error message if parsing failed
+---@return number The Unix timestamp, or nil on error
+---@return string|nil Error message if parsing failed
 function kubernetes.parse_time(timestr) end
 
 ---@param timestamp number The Unix timestamp to convert
----@return timestr string The time in RFC3339 format (e.g., "2025-10-03T16:39:00Z"), or nil on error
----@return err string|nil Error message if formatting failed
+---@return string The time in RFC3339 format (e.g., "2025-10-03T16:39:00Z"), or nil on error
+---@return string|nil Error message if formatting failed
 function kubernetes.format_time(timestamp) end
 
 ---@param obj table The Kubernetes object (must have a metadata field)
----@return obj table The same object with initialized defaults (modified in-place)
+---@return table The same object with initialized defaults (modified in-place)
 function kubernetes.init_defaults(obj) end
 
 ---@param duration string The duration string to parse (e.g., "5s", "10m", "2h")
----@return seconds number The duration value in seconds, or nil on error
----@return err string|nil Error message if parsing failed
+---@return number The duration value in seconds, or nil on error
+---@return string|nil Error message if parsing failed
 function kubernetes.parse_duration(duration) end
 
 ---@param seconds number The duration in seconds to convert
----@return duration string The duration string (e.g., "5m0s", "1h30m0s"), or nil on error
----@return err string|nil Error message if formatting failed
+---@return string The duration string (e.g., "5m0s", "1h30m0s"), or nil on error
+---@return string|nil Error message if formatting failed
 function kubernetes.format_duration(seconds) end
 
 ---@param obj table The Kubernetes object to check
 ---@param matcher kubernetes.GVKMatcher The GVK matcher with group, version, and kind fields
----@return matches boolean true if the GVK matches
+---@return boolean true if the GVK matches
 function kubernetes.match_gvk(obj, matcher) end
 
 ---@param obj table The Kubernetes object
----@return obj table The same object with initialized metadata (modified in-place)
+---@return table The same object with initialized metadata (modified in-place)
 function kubernetes.ensure_metadata(obj) end
 
 ---@param obj table The Kubernetes object
 ---@param key string The label key
 ---@param value string The label value
----@return obj table The modified object (for chaining)
+---@return table The modified object (for chaining)
 function kubernetes.add_label(obj, key, value) end
 
 ---@param obj table The Kubernetes object
 ---@param labels table A table of key-value pairs to add as labels
----@return obj table The modified object (for chaining)
+---@return table The modified object (for chaining)
 function kubernetes.add_labels(obj, labels) end
 
 ---@param obj table The Kubernetes object
 ---@param key string The label key to remove
----@return obj table The modified object (for chaining)
+---@return table The modified object (for chaining)
 function kubernetes.remove_label(obj, key) end
 
 ---@param obj table The Kubernetes object
 ---@param key string The label key to check
----@return exists boolean true if the label exists
+---@return boolean true if the label exists
 function kubernetes.has_label(obj, key) end
 
 ---@param obj table The Kubernetes object
 ---@param key string The label key
----@return value string|nil The label value, or nil if not found
+---@return string|nil The label value, or nil if not found
 function kubernetes.get_label(obj, key) end
 
 ---@param obj table The Kubernetes object
 ---@param key string The annotation key
 ---@param value string The annotation value
----@return obj table The modified object (for chaining)
+---@return table The modified object (for chaining)
 function kubernetes.add_annotation(obj, key, value) end
 
 ---@param obj table The Kubernetes object
 ---@param annotations table A table of key-value pairs to add as annotations
----@return obj table The modified object (for chaining)
+---@return table The modified object (for chaining)
 function kubernetes.add_annotations(obj, annotations) end
 
 ---@param obj table The Kubernetes object
 ---@param key string The annotation key to remove
----@return obj table The modified object (for chaining)
+---@return table The modified object (for chaining)
 function kubernetes.remove_annotation(obj, key) end
 
 ---@param obj table The Kubernetes object
 ---@param key string The annotation key to check
----@return exists boolean true if the annotation exists
+---@return boolean true if the annotation exists
 function kubernetes.has_annotation(obj, key) end
 
 ---@param obj table The Kubernetes object
 ---@param key string The annotation key
----@return value string|nil The annotation value, or nil if not found
+---@return string|nil The annotation value, or nil if not found
 function kubernetes.get_annotation(obj, key) end
 
 return kubernetes

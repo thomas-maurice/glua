@@ -62,7 +62,7 @@ var exports = map[string]lua.LGFunction{
 // now: returns the current Unix timestamp.
 //
 // @luafunc now
-// @luareturn timestamp number Current Unix timestamp (seconds since epoch)
+// @luareturn number Current Unix timestamp (seconds since epoch)
 //
 // Example:
 //
@@ -78,8 +78,8 @@ func now(L *lua.LState) int {
 // @luafunc parse
 // @luaparam timestr string The time string to parse
 // @luaparam layout string The Go time layout format (e.g., "2006-01-02 15:04:05")
-// @luareturn timestamp number Unix timestamp, or nil on error
-// @luareturn err string|nil Error message if parsing failed
+// @luareturn number Unix timestamp, or nil on error
+// @luareturn string|nil Error message if parsing failed
 //
 // Example:
 //
@@ -109,8 +109,8 @@ func parse(L *lua.LState) int {
 //
 // @luafunc parse_rfc3339
 // @luaparam timestr string The RFC3339 time string (e.g., "2024-03-15T14:30:00Z")
-// @luareturn timestamp number Unix timestamp, or nil on error
-// @luareturn err string|nil Error message if parsing failed
+// @luareturn number Unix timestamp, or nil on error
+// @luareturn string|nil Error message if parsing failed
 //
 // Example:
 //
@@ -140,7 +140,7 @@ func parseRFC3339(L *lua.LState) int {
 // @luafunc format
 // @luaparam timestamp number Unix timestamp
 // @luaparam layout string The Go time layout format (e.g., "2006-01-02 15:04:05")
-// @luareturn formatted string Formatted time string
+// @luareturn string Formatted time string
 //
 // Example:
 //
@@ -162,7 +162,7 @@ func format(L *lua.LState) int {
 // @luafunc add
 // @luaparam timestamp number Unix timestamp
 // @luaparam seconds number Number of seconds to add (can be negative)
-// @luareturn new_timestamp number New Unix timestamp
+// @luareturn number New Unix timestamp
 //
 // Example:
 //
@@ -184,7 +184,7 @@ func add(L *lua.LState) int {
 // @luafunc diff
 // @luaparam time1 number First Unix timestamp
 // @luaparam time2 number Second Unix timestamp
-// @luareturn seconds number Difference in seconds (time1 - time2)
+// @luareturn number Difference in seconds (time1 - time2)
 //
 // Example:
 //
@@ -220,7 +220,7 @@ func sleep(L *lua.LState) int {
 //
 // @luafunc to_osdate
 // @luaparam timestamp number Unix timestamp
-// @luareturn date_table table Table with year, month, day, hour, min, sec, wday, yday, isdst
+// @luareturn table Table with year, month, day, hour, min, sec, wday, yday, isdst
 //
 // Example:
 //
@@ -250,7 +250,7 @@ func toOsdate(L *lua.LState) int {
 //
 // @luafunc from_osdate
 // @luaparam date_table table Table with year, month, day, hour, min, sec (other fields optional)
-// @luareturn timestamp number Unix timestamp
+// @luareturn number Unix timestamp
 //
 // Example:
 //
