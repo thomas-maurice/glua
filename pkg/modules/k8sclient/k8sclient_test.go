@@ -167,74 +167,34 @@ func setupLuaWithClient(client *Client) *lua.LState {
 	return L
 }
 
-// runLuaTestFile runs a Lua test file and returns the result
-func runLuaTestFile(t *testing.T, filename string) {
-	t.Helper()
-
-	client := setupFakeClient()
-	L := setupLuaWithClient(client)
-	defer L.Close()
-
-	testPath := filepath.Join("testdata", filename)
-
-	if err := L.DoFile(testPath); err != nil {
-		t.Fatalf("Test script %s failed: %v", filename, err)
+// TestLuaScripts: runs all Lua test scripts in testdata/ directory
+func TestLuaScripts(t *testing.T) {
+	files, err := filepath.Glob("testdata/test_*.lua")
+	if err != nil {
+		t.Fatalf("Failed to glob testdata: %v", err)
 	}
 
-	result := L.Get(-1)
-	if result != lua.LTrue {
-		t.Errorf("Test script %s returned %v, expected true", filename, result)
+	if len(files) == 0 {
+		t.Fatal("No Lua test files found in testdata/")
 	}
-}
 
-// TestGet tests the get operation
-func TestGet(t *testing.T) {
-	runLuaTestFile(t, "test_get.lua")
-}
+	for _, file := range files {
+		testName := filepath.Base(file)
+		t.Run(testName, func(t *testing.T) {
+			client := setupFakeClient()
+			L := setupLuaWithClient(client)
+			defer L.Close()
 
-// TestCreate tests the create operation
-func TestCreate(t *testing.T) {
-	runLuaTestFile(t, "test_create.lua")
-}
+			if err := L.DoFile(file); err != nil {
+				t.Fatalf("Test script %s failed: %v", testName, err)
+			}
 
-// TestUpdate tests the update operation
-func TestUpdate(t *testing.T) {
-	runLuaTestFile(t, "test_update.lua")
-}
-
-// TestDelete tests the delete operation
-func TestDelete(t *testing.T) {
-	runLuaTestFile(t, "test_delete.lua")
-}
-
-// TestList tests the list operation
-func TestList(t *testing.T) {
-	runLuaTestFile(t, "test_list.lua")
-}
-
-// TestIntegration tests a complete CRUD workflow
-func TestIntegration(t *testing.T) {
-	runLuaTestFile(t, "test_integration.lua")
-}
-
-// TestErrorMissingKind tests error handling for missing kind
-func TestErrorMissingKind(t *testing.T) {
-	runLuaTestFile(t, "test_error_missing_kind.lua")
-}
-
-// TestErrorMissingVersion tests error handling for missing version
-func TestErrorMissingVersion(t *testing.T) {
-	runLuaTestFile(t, "test_error_missing_version.lua")
-}
-
-// TestErrorNoAPIVersion tests error handling for missing apiVersion
-func TestErrorNoAPIVersion(t *testing.T) {
-	runLuaTestFile(t, "test_error_no_apiversion.lua")
-}
-
-// TestErrorNoKind tests error handling for missing kind in object
-func TestErrorNoKind(t *testing.T) {
-	runLuaTestFile(t, "test_error_no_kind.lua")
+			result := L.Get(-1)
+			if result != lua.LTrue {
+				t.Errorf("Test script %s returned %v, expected true", testName, result)
+			}
+		})
+	}
 }
 
 // TestNewClient tests the NewClient function

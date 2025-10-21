@@ -21,158 +21,72 @@
 package spew
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
 	lua "github.com/yuin/gopher-lua"
 )
 
-func TestSdump_SimpleObject(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("spew", Loader)
-
-	if err := L.DoFile("testdata/sdump_simple_object.lua"); err != nil {
-		t.Fatalf("Lua script failed: %v", err)
+// TestLuaScripts: runs all Lua test scripts in testdata/ directory
+func TestLuaScripts(t *testing.T) {
+	files, err := filepath.Glob("testdata/*.lua")
+	if err != nil {
+		t.Fatalf("Failed to glob testdata: %v", err)
 	}
 
-	// Check the returned value
-	result := L.Get(-1)
-	if result.Type() != lua.LTString {
-		t.Fatalf("Expected string result, got %v", result.Type())
+	if len(files) == 0 {
+		t.Fatal("No Lua test files found in testdata/")
 	}
 
-	resultStr := result.String()
-	if !strings.Contains(resultStr, "name") {
-		t.Errorf("Expected result to contain 'name', got: %s", resultStr)
-	}
-}
-
-func TestSdump_Array(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("spew", Loader)
-
-	if err := L.DoFile("testdata/sdump_array.lua"); err != nil {
-		t.Fatalf("Lua script failed: %v", err)
-	}
-
-	result := L.Get(-1).String()
-	if len(result) == 0 {
-		t.Error("Expected non-empty spew output for array")
-	}
-}
-
-func TestSdump_NestedStructure(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("spew", Loader)
-
-	if err := L.DoFile("testdata/sdump_nested_structure.lua"); err != nil {
-		t.Fatalf("Lua script failed: %v", err)
-	}
-
-	result := L.Get(-1).String()
-	if !strings.Contains(result, "Alice") || !strings.Contains(result, "NYC") {
-		t.Errorf("Expected result to contain nested values")
-	}
-}
-
-func TestSdump_PrimitiveTypes(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("spew", Loader)
-
-	if err := L.DoFile("testdata/sdump_primitive_types.lua"); err != nil {
-		t.Fatalf("Lua script failed: %v", err)
-	}
-}
-
-func TestSdump_EmptyTable(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("spew", Loader)
-
-	if err := L.DoFile("testdata/sdump_empty_table.lua"); err != nil {
-		t.Fatalf("Lua script failed: %v", err)
-	}
-}
-
-func TestSdump_MixedTable(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("spew", Loader)
-
-	if err := L.DoFile("testdata/sdump_mixed_table.lua"); err != nil {
-		t.Fatalf("Lua script failed: %v", err)
-	}
-}
-
-func TestDump_OutputsToStdout(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("spew", Loader)
-
-	if err := L.DoFile("testdata/dump_outputs_to_stdout.lua"); err != nil {
-		t.Fatalf("Lua script failed: %v", err)
+	// Map of test files to their specific validation logic
+	validators := map[string]func(*testing.T, *lua.LState){
+		"sdump_simple_object.lua": func(t *testing.T, L *lua.LState) {
+			result := L.Get(-1)
+			if result.Type() != lua.LTString {
+				t.Fatalf("Expected string result, got %v", result.Type())
+			}
+			resultStr := result.String()
+			if !strings.Contains(resultStr, "name") {
+				t.Errorf("Expected result to contain 'name', got: %s", resultStr)
+			}
+		},
+		"sdump_array.lua": func(t *testing.T, L *lua.LState) {
+			result := L.Get(-1).String()
+			if len(result) == 0 {
+				t.Error("Expected non-empty spew output for array")
+			}
+		},
+		"sdump_nested_structure.lua": func(t *testing.T, L *lua.LState) {
+			result := L.Get(-1).String()
+			if !strings.Contains(result, "Alice") || !strings.Contains(result, "NYC") {
+				t.Errorf("Expected result to contain nested values")
+			}
+		},
+		"sdump_complex_nesting.lua": func(t *testing.T, L *lua.LState) {
+			result := L.Get(-1).String()
+			if !strings.Contains(result, "found") {
+				t.Error("Expected deeply nested value to be present in output")
+			}
+		},
 	}
 
-	// Just verify it doesn't crash
-	// Actual stdout capture would be more complex
-}
+	for _, file := range files {
+		testName := filepath.Base(file)
+		t.Run(testName, func(t *testing.T) {
+			L := lua.NewState()
+			defer L.Close()
 
-func TestSdump_ComplexNesting(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
+			L.PreloadModule("spew", Loader)
 
-	L.PreloadModule("spew", Loader)
+			if err := L.DoFile(file); err != nil {
+				t.Fatalf("Lua script failed: %v", err)
+			}
 
-	if err := L.DoFile("testdata/sdump_complex_nesting.lua"); err != nil {
-		t.Fatalf("Lua script failed: %v", err)
-	}
-
-	result := L.Get(-1).String()
-	if !strings.Contains(result, "found") {
-		t.Error("Expected deeply nested value to be present in output")
-	}
-}
-
-func TestSdump_ArrayOfObjects(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("spew", Loader)
-
-	if err := L.DoFile("testdata/sdump_array_of_objects.lua"); err != nil {
-		t.Fatalf("Lua script failed: %v", err)
-	}
-}
-
-func TestSdump_NumberKeys(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("spew", Loader)
-
-	if err := L.DoFile("testdata/sdump_number_keys.lua"); err != nil {
-		t.Fatalf("Lua script failed: %v", err)
-	}
-}
-
-func TestModuleLoading(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("spew", Loader)
-
-	if err := L.DoFile("testdata/module_loading.lua"); err != nil {
-		t.Fatalf("Lua script failed: %v", err)
+			// Run validator if one exists for this test
+			if validator, ok := validators[testName]; ok {
+				validator(t, L)
+			}
+		})
 	}
 }
