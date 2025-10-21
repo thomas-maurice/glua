@@ -18,6 +18,9 @@
       "parsedCPUMillis",
       "parsedMemoryBytes",
       "parsedTimestamp"
+    ],
+    "disable": [
+      "duplicate-doc-field"
     ]
   }
 }

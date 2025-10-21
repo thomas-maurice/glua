@@ -1,0 +1,16 @@
+{
+  "runtime": {
+    "version": "Lua 5.1"
+  },
+  "workspace": {
+    "library": [
+      "library"
+    ],
+    "checkThirdParty": false
+  },
+  "diagnostics": {
+    "disable": [
+      "duplicate-doc-field"
+    ]
+  }
+}
