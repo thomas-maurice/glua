@@ -69,7 +69,7 @@ var exports = map[string]lua.LGFunction{
 //
 // @luafunc md5
 // @luaparam str string The string to hash
-// @luareturn hash string The hex-encoded MD5 hash
+// @luareturn string The hex-encoded MD5 hash
 //
 // Example:
 //
@@ -86,7 +86,7 @@ func md5Hash(L *lua.LState) int {
 //
 // @luafunc sha1
 // @luaparam str string The string to hash
-// @luareturn hash string The hex-encoded SHA1 hash
+// @luareturn string The hex-encoded SHA1 hash
 //
 // Example:
 //
@@ -103,7 +103,7 @@ func sha1Hash(L *lua.LState) int {
 //
 // @luafunc sha256
 // @luaparam str string The string to hash
-// @luareturn hash string The hex-encoded SHA256 hash
+// @luareturn string The hex-encoded SHA256 hash
 //
 // Example:
 //
@@ -120,7 +120,7 @@ func sha256Hash(L *lua.LState) int {
 //
 // @luafunc sha512
 // @luaparam str string The string to hash
-// @luareturn hash string The hex-encoded SHA512 hash
+// @luareturn string The hex-encoded SHA512 hash
 //
 // Example:
 //
@@ -137,7 +137,7 @@ func sha512Hash(L *lua.LState) int {
 // @luafunc hmac_sha256
 // @luaparam message string The message to authenticate
 // @luaparam key string The secret key
-// @luareturn hash string The hex-encoded HMAC-SHA256
+// @luareturn string The hex-encoded HMAC-SHA256
 //
 // Example:
 //
@@ -170,8 +170,8 @@ func tableToJSON(L *lua.LState, table lua.LValue) ([]byte, error) {
 //
 // @luafunc md5_obj
 // @luaparam obj table The table to hash
-// @luareturn hash string The hex-encoded MD5 hash
-// @luareturn error string|nil Error message if conversion fails
+// @luareturn string The hex-encoded MD5 hash
+// @luareturn string|nil Error message if conversion fails
 //
 // Example:
 //
@@ -197,8 +197,8 @@ func md5HashObj(L *lua.LState) int {
 //
 // @luafunc sha1_obj
 // @luaparam obj table The table to hash
-// @luareturn hash string The hex-encoded SHA1 hash
-// @luareturn error string|nil Error message if conversion fails
+// @luareturn string The hex-encoded SHA1 hash
+// @luareturn string|nil Error message if conversion fails
 //
 // Example:
 //
@@ -224,8 +224,8 @@ func sha1HashObj(L *lua.LState) int {
 //
 // @luafunc sha256_obj
 // @luaparam obj table The table to hash
-// @luareturn hash string The hex-encoded SHA256 hash
-// @luareturn error string|nil Error message if conversion fails
+// @luareturn string The hex-encoded SHA256 hash
+// @luareturn string|nil Error message if conversion fails
 //
 // Example:
 //
@@ -251,8 +251,8 @@ func sha256HashObj(L *lua.LState) int {
 //
 // @luafunc sha512_obj
 // @luaparam obj table The table to hash
-// @luareturn hash string The hex-encoded SHA512 hash
-// @luareturn error string|nil Error message if conversion fails
+// @luareturn string The hex-encoded SHA512 hash
+// @luareturn string|nil Error message if conversion fails
 //
 // Example:
 //
