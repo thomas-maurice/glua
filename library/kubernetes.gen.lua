@@ -1,3 +1,5 @@
+---@alias intstr.IntOrString string|number
+
 ---@class kubernetes.GVKMatcher
 ---@field group string
 ---@field kind string

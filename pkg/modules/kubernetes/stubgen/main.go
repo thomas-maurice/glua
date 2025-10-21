@@ -42,6 +42,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	apiregistrationv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 )
 
@@ -154,6 +155,8 @@ func main() {
 			metav1.OwnerReference{},
 			metav1.LabelSelector{},
 			metav1.LabelSelectorRequirement{},
+			// IntOrString type (used for targetPort, etc.)
+			intstr.IntOrString{},
 		},
 	})
 	if err != nil {
