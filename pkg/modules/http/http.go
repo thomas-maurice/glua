@@ -63,7 +63,7 @@ var exports = map[string]lua.LGFunction{
 // @luafunc get
 // @luaparam url string The URL to request
 // @luaparam headers table|nil Optional headers table
-// @luareturn table Response table with status, body, headers, or nil on error
+// @luareturn table response Response table with status, body, headers, or nil on error
 // @luareturn string|nil Error message if request failed
 //
 // Example:
@@ -89,7 +89,7 @@ func get(L *lua.LState) int {
 // @luaparam url string The URL to request
 // @luaparam body string The request body
 // @luaparam headers table|nil Optional headers table
-// @luareturn table Response table with status, body, headers, or nil on error
+// @luareturn table response Response table with status, body, headers, or nil on error
 // @luareturn string|nil Error message if request failed
 //
 // Example:
@@ -113,7 +113,7 @@ func post(L *lua.LState) int {
 // @luaparam url string The URL to request
 // @luaparam body string The request body
 // @luaparam headers table|nil Optional headers table
-// @luareturn table Response table with status, body, headers, or nil on error
+// @luareturn table response Response table with status, body, headers, or nil on error
 // @luareturn string|nil Error message if request failed
 //
 // Example:
@@ -135,7 +135,7 @@ func put(L *lua.LState) int {
 // @luafunc delete
 // @luaparam url string The URL to request
 // @luaparam headers table|nil Optional headers table
-// @luareturn table Response table with status, body, headers, or nil on error
+// @luareturn table response Response table with status, body, headers, or nil on error
 // @luareturn string|nil Error message if request failed
 //
 // Example:
@@ -154,7 +154,7 @@ func delete_(L *lua.LState) int {
 // @luaparam url string The URL to request
 // @luaparam body string|nil Optional request body
 // @luaparam headers table|nil Optional headers table
-// @luareturn table Response table with status, body, headers, or nil on error
+// @luareturn table response Response table with status, body, headers, or nil on error
 // @luareturn string|nil Error message if request failed
 //
 // Example:

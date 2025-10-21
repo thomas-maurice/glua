@@ -3,40 +3,40 @@
 ---@class time
 local time = {}
 
----@return number Current Unix timestamp (seconds since epoch)
+---@return number timestamp Current Unix timestamp (seconds since epoch)
 function time.now() end
 
 ---@param timestr string The time string to parse
 ---@param layout string The Go time layout format (e.g., "2006-01-02 15:04:05")
----@return number Unix timestamp, or nil on error
----@return string|nil Error message if parsing failed
+---@return number timestamp Unix timestamp, or nil on error
+---@return string|nil err Error message if parsing failed
 function time.parse(timestr, layout) end
 
 ---@param timestr string The RFC3339 time string (e.g., "2024-03-15T14:30:00Z")
----@return number Unix timestamp, or nil on error
----@return string|nil Error message if parsing failed
+---@return number timestamp Unix timestamp, or nil on error
+---@return string|nil err Error message if parsing failed
 function time.parse_rfc3339(timestr) end
 
 ---@param timestamp number Unix timestamp
 ---@param layout string The Go time layout format (e.g., "2006-01-02 15:04:05")
----@return string Formatted time string
+---@return string formatted Formatted time string
 function time.format(timestamp, layout) end
 
 ---@param timestamp number Unix timestamp
 ---@param seconds number Number of seconds to add (can be negative)
----@return number New Unix timestamp
+---@return number new_timestamp New Unix timestamp
 function time.add(timestamp, seconds) end
 
 ---@param time1 number First Unix timestamp
 ---@param time2 number Second Unix timestamp
----@return number Difference in seconds (time1 - time2)
+---@return number seconds Difference in seconds (time1 - time2)
 function time.diff(time1, time2) end
 
 ---@param seconds number Number of seconds to sleep
 function time.sleep(seconds) end
 
 ---@param timestamp number Unix timestamp
----@return table Table with year, month, day, hour, min, sec, wday, yday, isdst
+---@return table date_table Table with year, month, day, hour, min, sec, wday, yday, isdst
 function time.to_osdate(timestamp) end
 
 ---@param date_table table Table with year, month, day, hour, min, sec (other fields optional)

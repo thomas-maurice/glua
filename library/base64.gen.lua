@@ -4,21 +4,21 @@
 local base64 = {}
 
 ---@param str string The string to encode
----@return string The base64 encoded string
+---@return string encoded The base64 encoded string
 function base64.encode(str) end
 
 ---@param encoded string The base64 encoded string
----@return string The decoded string, or nil on error
----@return string|nil Error message if decoding failed
+---@return string decoded The decoded string, or nil on error
+---@return string|nil err Error message if decoding failed
 function base64.decode(encoded) end
 
 ---@param str string The string to encode
----@return string The URL-safe base64 encoded string
+---@return string encoded The URL-safe base64 encoded string
 function base64.encode_url(str) end
 
 ---@param encoded string The URL-safe base64 encoded string
----@return string The decoded string, or nil on error
----@return string|nil Error message if decoding failed
+---@return string decoded The decoded string, or nil on error
+---@return string|nil err Error message if decoding failed
 function base64.decode_url(encoded) end
 
 return base64

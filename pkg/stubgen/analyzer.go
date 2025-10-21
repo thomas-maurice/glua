@@ -84,6 +84,7 @@ type LuaParam struct {
 // LuaReturn: represents a function return value
 type LuaReturn struct {
 	Type        string
+	Name        string
 	Description string
 }
 
@@ -513,10 +514,11 @@ func (a *Analyzer) parseParam(line string) *LuaParam {
 }
 
 // parseReturn: parses @luareturn annotation
-// Format: @luareturn <type> <description>
+// Format: @luareturn <type> <name> <description>
+// Or: @luareturn <type> <description> (name will be empty)
 func (a *Analyzer) parseReturn(line string) *LuaReturn {
 	line = strings.TrimSpace(strings.TrimPrefix(line, "@luareturn "))
-	parts := strings.SplitN(line, " ", 2)
+	parts := strings.SplitN(line, " ", 3)
 
 	if len(parts) < 1 {
 		return nil
@@ -526,8 +528,60 @@ func (a *Analyzer) parseReturn(line string) *LuaReturn {
 		Type: parts[0],
 	}
 
-	if len(parts) >= 2 {
-		ret.Description = parts[1]
+	// If we have 3 parts, check if middle part is actually a name or part of description
+	// If we have 2 parts, it could be: <type> <description> OR <type> <name>
+	// We detect based on whether the second part starts with uppercase (description)
+	// or lowercase (likely a name followed by description)
+	if len(parts) >= 3 {
+		// Check if parts[1] looks like a variable name (starts with lowercase)
+		potentialName := parts[1]
+		if len(potentialName) > 0 && potentialName[0] >= 'a' && potentialName[0] <= 'z' {
+			// Looks like a name
+			ret.Name = parts[1]
+			ret.Description = parts[2]
+		} else {
+			// Starts with uppercase - it's part of the description, not a name
+			ret.Description = parts[1] + " " + parts[2]
+		}
+	} else if len(parts) == 2 {
+		secondPart := parts[1]
+
+		// If it starts with uppercase or is empty, it's a description
+		if len(secondPart) == 0 || (secondPart[0] >= 'A' && secondPart[0] <= 'Z') {
+			ret.Description = secondPart
+		} else {
+			// Starts with lowercase - check if first word looks like a variable name
+			words := strings.Fields(secondPart)
+			if len(words) == 0 {
+				ret.Description = secondPart
+			} else {
+				firstWord := words[0]
+				// Check if first word is a valid identifier (lowercase start, alphanumeric+underscore)
+				isValidIdentifier := true
+				for i, ch := range firstWord {
+					if i == 0 {
+						if (ch < 'a' || ch > 'z') && ch != '_' {
+							isValidIdentifier = false
+							break
+						}
+					} else {
+						if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '_' {
+							isValidIdentifier = false
+							break
+						}
+					}
+				}
+
+				if isValidIdentifier && len(words) > 1 {
+					// First word is a valid identifier and there are more words - treat as name
+					ret.Name = firstWord
+					ret.Description = strings.Join(words[1:], " ")
+				} else {
+					// Either not a valid identifier or only one word - treat whole thing as description
+					ret.Description = secondPart
+				}
+			}
+		}
 	}
 
 	return ret
@@ -574,7 +628,11 @@ func (a *Analyzer) GenerateStubs() (string, error) {
 
 			// Return annotations
 			for _, ret := range fn.Returns {
-				if ret.Description != "" {
+				if ret.Name != "" && ret.Description != "" {
+					sb.WriteString(fmt.Sprintf("---@return %s %s %s\n", ret.Type, ret.Name, ret.Description))
+				} else if ret.Name != "" {
+					sb.WriteString(fmt.Sprintf("---@return %s %s\n", ret.Type, ret.Name))
+				} else if ret.Description != "" {
 					sb.WriteString(fmt.Sprintf("---@return %s %s\n", ret.Type, ret.Description))
 				} else {
 					sb.WriteString(fmt.Sprintf("---@return %s\n", ret.Type))
@@ -747,7 +805,11 @@ func (a *Analyzer) writeParamAnnotations(sb *strings.Builder, params []*LuaParam
 // writeReturnAnnotations: writes return value annotations
 func (a *Analyzer) writeReturnAnnotations(sb *strings.Builder, returns []*LuaReturn) {
 	for _, ret := range returns {
-		if ret.Description != "" {
+		if ret.Name != "" && ret.Description != "" {
+			fmt.Fprintf(sb, "---@return %s %s %s\n", ret.Type, ret.Name, ret.Description)
+		} else if ret.Name != "" {
+			fmt.Fprintf(sb, "---@return %s %s\n", ret.Type, ret.Name)
+		} else if ret.Description != "" {
 			fmt.Fprintf(sb, "---@return %s %s\n", ret.Type, ret.Description)
 		} else {
 			fmt.Fprintf(sb, "---@return %s\n", ret.Type)

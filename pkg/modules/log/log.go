@@ -282,7 +282,7 @@ func moduleFatal(L *lua.LState) int {
 // moduleLogger: returns the default logger object.
 //
 // @luafunc logger
-// @luareturn log.Logger log.Logger The default logger object
+// @luareturn log.Logger logger The default logger object
 //
 // Example:
 //
@@ -376,7 +376,7 @@ func loggerFatal(L *lua.LState) int {
 // @luamethod log.Logger with
 // @luaparam self log.Logger The logger object
 // @luaparam ... any Key-value pairs to add to the logger context
-// @luareturn log.Logger log.Logger A new logger with the additional fields
+// @luareturn log.Logger logger A new logger with the additional fields
 //
 // Example:
 //

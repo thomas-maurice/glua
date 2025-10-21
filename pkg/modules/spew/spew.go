@@ -103,7 +103,7 @@ func dump(L *lua.LState) int {
 //
 // @luafunc sdump
 // @luaparam value any The Lua value to dump (table, string, number, etc.)
-// @luareturn string A JSON string representation of the value
+// @luareturn string str A JSON string representation of the value
 //
 // Example:
 //
