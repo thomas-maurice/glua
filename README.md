@@ -1549,11 +1549,33 @@ decoded, err = base64.decode(encoded)
 encoded = hex.encode("hello")
 decoded, err = hex.decode(encoded)
 
--- Hash
+-- Hash strings
 md5 = hash.md5("hello")
 sha1 = hash.sha1("hello")
 sha256 = hash.sha256("hello")
 sha512 = hash.sha512("hello")
+
+-- Hash Lua tables (converted to JSON)
+hash_val, err = hash.md5_obj({name="John", age=30})
+hash_val, err = hash.sha1_obj({key="value"})
+hash_val, err = hash.sha256_obj({foo="bar", nested={data=123}})
+hash_val, err = hash.sha512_obj({items={1, 2, 3}})
+```
+
+**Object Hashing:**
+
+The `*_obj` functions convert Lua tables to JSON before hashing, making them useful for:
+
+- Content-based resource identifiers
+- Detecting configuration changes
+- Caching keys for complex data structures
+- Checksums for nested objects
+
+```lua
+-- Example: Detect if a Pod spec has changed
+local hash = require("hash")
+local pod_hash = hash.sha256_obj(pod.spec)
+-- Store/compare this hash to detect changes
 ```
 
 #### log
