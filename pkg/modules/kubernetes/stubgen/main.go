@@ -29,15 +29,20 @@ import (
 
 	"github.com/thomas-maurice/glua/pkg/modules/kubernetes"
 	"github.com/thomas-maurice/glua/pkg/stubgen"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
+	eventsv1 "k8s.io/api/events/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apiregistrationv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 )
 
 func main() {
@@ -119,6 +124,23 @@ func main() {
 			// Policy resources
 			policyv1.PodDisruptionBudget{},
 			policyv1.PodDisruptionBudgetList{},
+			// Admission registration resources
+			admissionregistrationv1.ValidatingWebhookConfiguration{},
+			admissionregistrationv1.ValidatingWebhookConfigurationList{},
+			admissionregistrationv1.MutatingWebhookConfiguration{},
+			admissionregistrationv1.MutatingWebhookConfigurationList{},
+			// API registration resources
+			apiregistrationv1.APIService{},
+			apiregistrationv1.APIServiceList{},
+			// Events resources
+			eventsv1.Event{},
+			eventsv1.EventList{},
+			// Discovery resources
+			discoveryv1.EndpointSlice{},
+			discoveryv1.EndpointSliceList{},
+			// Coordination resources
+			coordinationv1.Lease{},
+			coordinationv1.LeaseList{},
 			// Metav1 types
 			metav1.ObjectMeta{},
 			metav1.TypeMeta{},

@@ -3,6 +3,78 @@
 ---@field kind string
 ---@field version string
 
+---@class admissionregistrationv1.MatchCondition
+---@field expression string
+---@field name string
+
+---@class admissionregistrationv1.MutatingWebhook
+---@field admissionReviewVersions string[]
+---@field clientConfig admissionregistrationv1.WebhookClientConfig
+---@field failurePolicy string
+---@field matchConditions admissionregistrationv1.MatchCondition[]
+---@field matchPolicy string
+---@field name string
+---@field namespaceSelector v1.LabelSelector
+---@field objectSelector v1.LabelSelector
+---@field reinvocationPolicy string
+---@field rules admissionregistrationv1.RuleWithOperations[]
+---@field sideEffects string
+---@field timeoutSeconds number
+
+---@class admissionregistrationv1.MutatingWebhookConfiguration
+---@field TypeMeta v1.TypeMeta
+---@field metadata v1.ObjectMeta
+---@field webhooks admissionregistrationv1.MutatingWebhook[]
+
+---@class admissionregistrationv1.MutatingWebhookConfigurationList
+---@field TypeMeta v1.TypeMeta
+---@field items admissionregistrationv1.MutatingWebhookConfiguration[]
+---@field metadata v1.ListMeta
+
+---@class admissionregistrationv1.Rule
+---@field apiGroups string[]
+---@field apiVersions string[]
+---@field resources string[]
+---@field scope string
+
+---@class admissionregistrationv1.RuleWithOperations
+---@field Rule admissionregistrationv1.Rule
+---@field operations string[]
+
+---@class admissionregistrationv1.ServiceReference
+---@field name string
+---@field namespace string
+---@field path string
+---@field port number
+
+---@class admissionregistrationv1.ValidatingWebhook
+---@field admissionReviewVersions string[]
+---@field clientConfig admissionregistrationv1.WebhookClientConfig
+---@field failurePolicy string
+---@field matchConditions admissionregistrationv1.MatchCondition[]
+---@field matchPolicy string
+---@field name string
+---@field namespaceSelector v1.LabelSelector
+---@field objectSelector v1.LabelSelector
+---@field rules admissionregistrationv1.RuleWithOperations[]
+---@field sideEffects string
+---@field timeoutSeconds number
+
+---@class admissionregistrationv1.ValidatingWebhookConfiguration
+---@field TypeMeta v1.TypeMeta
+---@field metadata v1.ObjectMeta
+---@field webhooks admissionregistrationv1.ValidatingWebhook[]
+
+---@class admissionregistrationv1.ValidatingWebhookConfigurationList
+---@field TypeMeta v1.TypeMeta
+---@field items admissionregistrationv1.ValidatingWebhookConfiguration[]
+---@field metadata v1.ListMeta
+
+---@class admissionregistrationv1.WebhookClientConfig
+---@field caBundle number[]
+---@field service admissionregistrationv1.ServiceReference
+---@field url string
+
 ---@class appsv1.DaemonSet
 ---@field TypeMeta v1.TypeMeta
 ---@field metadata v1.ObjectMeta
@@ -423,6 +495,25 @@
 ---@field failed string[]
 ---@field succeeded string[]
 
+---@class coordinationv1.Lease
+---@field TypeMeta v1.TypeMeta
+---@field metadata v1.ObjectMeta
+---@field spec coordinationv1.LeaseSpec
+
+---@class coordinationv1.LeaseList
+---@field TypeMeta v1.TypeMeta
+---@field items coordinationv1.Lease[]
+---@field metadata v1.ListMeta
+
+---@class coordinationv1.LeaseSpec
+---@field acquireTime v1.MicroTime
+---@field holderIdentity string
+---@field leaseDurationSeconds number
+---@field leaseTransitions number
+---@field preferredHolder string
+---@field renewTime v1.MicroTime
+---@field strategy string
+
 ---@class corev1.AWSElasticBlockStoreVolumeSource
 ---@field fsType string
 ---@field partition number
@@ -727,6 +818,10 @@
 
 ---@class corev1.EphemeralVolumeSource
 ---@field volumeClaimTemplate corev1.PersistentVolumeClaimTemplate
+
+---@class corev1.EventSource
+---@field component string
+---@field host string
 
 ---@class corev1.ExecAction
 ---@field command string[]
@@ -1676,6 +1771,76 @@
 ---@field hostProcess boolean
 ---@field runAsUserName string
 
+---@class discoveryv1.Endpoint
+---@field addresses string[]
+---@field conditions discoveryv1.EndpointConditions
+---@field deprecatedTopology table<string, string>
+---@field hints discoveryv1.EndpointHints
+---@field hostname string
+---@field nodeName string
+---@field targetRef corev1.ObjectReference
+---@field zone string
+
+---@class discoveryv1.EndpointConditions
+---@field ready boolean
+---@field serving boolean
+---@field terminating boolean
+
+---@class discoveryv1.EndpointHints
+---@field forNodes discoveryv1.ForNode[]
+---@field forZones discoveryv1.ForZone[]
+
+---@class discoveryv1.EndpointPort
+---@field appProtocol string
+---@field name string
+---@field port number
+---@field protocol string
+
+---@class discoveryv1.EndpointSlice
+---@field TypeMeta v1.TypeMeta
+---@field addressType string
+---@field endpoints discoveryv1.Endpoint[]
+---@field metadata v1.ObjectMeta
+---@field ports discoveryv1.EndpointPort[]
+
+---@class discoveryv1.EndpointSliceList
+---@field TypeMeta v1.TypeMeta
+---@field items discoveryv1.EndpointSlice[]
+---@field metadata v1.ListMeta
+
+---@class discoveryv1.ForNode
+---@field name string
+
+---@class discoveryv1.ForZone
+---@field name string
+
+---@class eventsv1.Event
+---@field TypeMeta v1.TypeMeta
+---@field action string
+---@field deprecatedCount number
+---@field deprecatedFirstTimestamp v1.Time
+---@field deprecatedLastTimestamp v1.Time
+---@field deprecatedSource corev1.EventSource
+---@field eventTime v1.MicroTime
+---@field metadata v1.ObjectMeta
+---@field note string
+---@field reason string
+---@field regarding corev1.ObjectReference
+---@field related corev1.ObjectReference
+---@field reportingController string
+---@field reportingInstance string
+---@field series eventsv1.EventSeries
+---@field type string
+
+---@class eventsv1.EventList
+---@field TypeMeta v1.TypeMeta
+---@field items eventsv1.Event[]
+---@field metadata v1.ListMeta
+
+---@class eventsv1.EventSeries
+---@field count number
+---@field lastObservedTime v1.MicroTime
+
 ---@class networkingv1.HTTPIngressPath
 ---@field backend networkingv1.IngressBackend
 ---@field path string
@@ -1997,6 +2162,41 @@
 ---@class v1.TypeMeta
 ---@field apiVersion string
 ---@field kind string
+
+---@class v1.APIService
+---@field TypeMeta v1.TypeMeta
+---@field metadata v1.ObjectMeta
+---@field spec v1.APIServiceSpec
+---@field status v1.APIServiceStatus
+
+---@class v1.APIServiceCondition
+---@field lastTransitionTime v1.Time
+---@field message string
+---@field reason string
+---@field status string
+---@field type string
+
+---@class v1.APIServiceList
+---@field TypeMeta v1.TypeMeta
+---@field items v1.APIService[]
+---@field metadata v1.ListMeta
+
+---@class v1.APIServiceSpec
+---@field caBundle number[]
+---@field group string
+---@field groupPriorityMinimum number
+---@field insecureSkipTLSVerify boolean
+---@field service v1.ServiceReference
+---@field version string
+---@field versionPriority number
+
+---@class v1.APIServiceStatus
+---@field conditions v1.APIServiceCondition[]
+
+---@class v1.ServiceReference
+---@field name string
+---@field namespace string
+---@field port number
 
 ---@meta kubernetes
 
