@@ -1,0 +1,65 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/thomas-maurice/glua-webhook-generic
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+config:
+  enableNodes: true
+  enablePods: true
+  logLevel: info
+
+service:
+  type: ClusterIP
+  port: 443
+  targetPort: 8443
+
+webhook:
+  failurePolicy: Ignore
+  namespaceSelector:
+    matchExpressions:
+      - key: glua-webhook
+        operator: NotIn
+        values:
+          - ignore
+  timeoutSeconds: 10
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# cert-manager certificate configuration
+certificate:
+  enabled: true
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+  dnsNames:
+    - glua-webhook-generic.glua-webhook-generic.svc
+    - glua-webhook-generic.glua-webhook-generic.svc.cluster.local

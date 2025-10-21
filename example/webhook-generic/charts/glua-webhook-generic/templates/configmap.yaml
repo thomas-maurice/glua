@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "glua-webhook-generic.fullname" . }}-scripts
+  labels:
+    {{- include "glua-webhook-generic.labels" . | nindent 4 }}
+data:
+  mutate_pod.lua: |
+    ---@diagnostic disable: undefined-global, lowercase-global
+    local k8s = require("kubernetes")
+    pod = k8s.init_defaults(pod)
+
+    local function hasEvenMemory(podSpec)
+      for _, container in ipairs(podSpec.containers or {}) do
+        if container.resources and container.resources.requests and container.resources.requests.memory then
+          local memStr = container.resources.requests.memory
+          local memBytes, err = k8s.parse_memory(memStr)
+          if not err and memBytes and memBytes % 2 == 0 then
+            return true
+          end
+        end
+      end
+      return false
+    end
+
+    if hasEvenMemory(pod.spec) then
+      pod = k8s.add_label(pod, "even-mem", "true")
+      table.insert(patches, {
+        op = "add",
+        path = "/metadata/labels/even-mem",
+        value = "true"
+      })
+      print(string.format("Added even-mem label to pod %s/%s",
+        pod.metadata.namespace or "default",
+        pod.metadata.name or "unknown"))
+    end
+
+  mutate_node.lua: |
+    ---@diagnostic disable: undefined-global, lowercase-global
+    local k8s = require("kubernetes")
+    node = k8s.init_defaults(node)
+    node = k8s.add_label(node, "hello", "ok")
+    table.insert(patches, {
+      op = "add",
+      path = "/metadata/labels/hello",
+      value = "ok"
+    })
+    print(string.format("Added hello=ok label to node %s", node.metadata.name or "unknown"))

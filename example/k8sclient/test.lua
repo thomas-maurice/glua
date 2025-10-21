@@ -147,7 +147,7 @@ local service = {
 			{
 				protocol = "TCP",
 				port = 80,
-				targetPort = "8080",
+				targetPort = 8080,
 				name = "http"
 			}
 		},
