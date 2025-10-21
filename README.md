@@ -55,9 +55,29 @@ Create or update `.vscode/settings.json`:
 
 ```json
 {
-  "Lua.workspace.library": ["library"]
+  "Lua.workspace.library": ["library"],
+  "Lua.diagnostics.disable": ["duplicate-doc-field"]
 }
 ```
+
+Or create a `.luarc.json` in your project root:
+
+```json
+{
+  "runtime": {
+    "version": "Lua 5.1"
+  },
+  "workspace": {
+    "library": ["library"],
+    "checkThirdParty": false
+  },
+  "diagnostics": {
+    "disable": ["duplicate-doc-field"]
+  }
+}
+```
+
+**Why disable `duplicate-doc-field`?** The Kubernetes stubs contain many classes with the same field names (e.g., different volume types each have a `volumeID` field). This is valid, but LuaLS shows false positive warnings. Disabling this diagnostic suppresses these harmless warnings.
 
 Now you'll get autocomplete for all glua modules in your Lua scripts!
 
@@ -1549,11 +1569,33 @@ decoded, err = base64.decode(encoded)
 encoded = hex.encode("hello")
 decoded, err = hex.decode(encoded)
 
--- Hash
+-- Hash strings
 md5 = hash.md5("hello")
 sha1 = hash.sha1("hello")
 sha256 = hash.sha256("hello")
 sha512 = hash.sha512("hello")
+
+-- Hash Lua tables (converted to JSON)
+hash_val, err = hash.md5_obj({name="John", age=30})
+hash_val, err = hash.sha1_obj({key="value"})
+hash_val, err = hash.sha256_obj({foo="bar", nested={data=123}})
+hash_val, err = hash.sha512_obj({items={1, 2, 3}})
+```
+
+**Object Hashing:**
+
+The `*_obj` functions convert Lua tables to JSON before hashing, making them useful for:
+
+- Content-based resource identifiers
+- Detecting configuration changes
+- Caching keys for complex data structures
+- Checksums for nested objects
+
+```lua
+-- Example: Detect if a Pod spec has changed
+local hash = require("hash")
+local pod_hash = hash.sha256_obj(pod.spec)
+-- Store/compare this hash to detect changes
 ```
 
 #### log
@@ -1592,6 +1634,156 @@ log.set_level("debug")  -- "debug", "info", "warn", "error"
 
 -- Set output format
 log.set_format("json")  -- "json" or "text"
+```
+
+#### osmod
+
+Operating system utilities for environment variables, hostname, and temp directories.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/osmod"
+
+L.PreloadModule("osmod", osmod.Loader)
+```
+
+**Lua API:**
+
+```lua
+local osmod = require("osmod")
+
+-- Environment variables
+value = osmod.getenv("PATH")
+osmod.setenv("MY_VAR", "my_value")
+osmod.unsetenv("MY_VAR")
+
+-- System information
+hostname = osmod.hostname()
+
+-- Temporary directory
+tmpdir = osmod.tmpdir()
+```
+
+#### filepath
+
+Path manipulation utilities for file and directory paths.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/filepath"
+
+L.PreloadModule("filepath", filepath.Loader)
+```
+
+**Lua API:**
+
+```lua
+local filepath = require("filepath")
+
+-- Join path components
+path = filepath.join("/usr", "local", "bin")  -- "/usr/local/bin"
+
+-- Split path into directory and file
+dir, file = filepath.split("/usr/local/bin/tool")  -- "/usr/local/bin", "tool"
+
+-- Get absolute path
+abspath, err = filepath.abs("../relative/path")
+
+-- Get file extension
+ext = filepath.ext("/path/to/file.txt")  -- ".txt"
+
+-- Get base name
+base = filepath.base("/path/to/file.txt")  -- "file.txt"
+
+-- Get directory
+dir = filepath.dir("/path/to/file.txt")  -- "/path/to"
+
+-- Clean path (simplify)
+clean = filepath.clean("/path//to/../file")  -- "/path/file"
+```
+
+#### regexp
+
+Regular expression matching and manipulation.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/regexp"
+
+L.PreloadModule("regexp", regexp.Loader)
+```
+
+**Lua API:**
+
+```lua
+local regexp = require("regexp")
+
+-- Match pattern (boolean)
+matches = regexp.match("^[a-z]+$", "hello")  -- true
+
+-- Find first match
+match, err = regexp.find("([0-9]+)", "version 123 build 456")  -- "123"
+
+-- Find all matches
+matches, err = regexp.find_all("([0-9]+)", "version 123 build 456", -1)
+-- matches = {"123", "456"}
+
+-- Replace first occurrence
+result, err = regexp.replace("([0-9]+)", "version 123", "999", 1)
+-- result = "version 999"
+
+-- Replace all occurrences
+result, err = regexp.replace_all("([0-9]+)", "version 123 build 456", "X")
+-- result = "version X build X"
+
+-- Split by pattern
+parts, err = regexp.split("\\s+", "one  two   three", -1)
+-- parts = {"one", "two", "three"}
+```
+
+#### strings
+
+String manipulation utilities.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/strings"
+
+L.PreloadModule("strings", strings.Loader)
+```
+
+**Lua API:**
+
+```lua
+local strings = require("strings")
+
+-- Prefix/suffix checking
+has = strings.has_prefix("hello world", "hello")  -- true
+has = strings.has_suffix("hello world", "world")  -- true
+
+-- Trimming
+trimmed = strings.trim("  hello  ", " ")  -- "hello"
+trimmed = strings.trim_left("  hello  ", " ")  -- "hello  "
+trimmed = strings.trim_right("  hello  ", " ")  -- "  hello"
+
+-- Split and join
+parts = strings.split("a,b,c", ",")  -- {"a", "b", "c"}
+joined = strings.join({"a", "b", "c"}, ",")  -- "a,b,c"
+
+-- Case conversion
+upper = strings.to_upper("hello")  -- "HELLO"
+lower = strings.to_lower("WORLD")  -- "world"
+
+-- Search and count
+has = strings.contains("hello world", "world")  -- true
+count = strings.count("banana", "a")  -- 3
+
+-- Replace
+result = strings.replace("hello world", "world", "there", -1)  -- "hello there"
 ```
 
 ## Features

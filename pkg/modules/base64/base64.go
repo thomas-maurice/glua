@@ -58,7 +58,7 @@ var exports = map[string]lua.LGFunction{
 //
 // @luafunc encode
 // @luaparam str string The string to encode
-// @luareturn encoded string The base64 encoded string
+// @luareturn string encoded The base64 encoded string
 //
 // Example:
 //
@@ -75,8 +75,8 @@ func encode(L *lua.LState) int {
 //
 // @luafunc decode
 // @luaparam encoded string The base64 encoded string
-// @luareturn decoded string The decoded string, or nil on error
-// @luareturn err string|nil Error message if decoding failed
+// @luareturn string decoded The decoded string, or nil on error
+// @luareturn string|nil err Error message if decoding failed
 //
 // Example:
 //
@@ -103,7 +103,7 @@ func decode(L *lua.LState) int {
 //
 // @luafunc encode_url
 // @luaparam str string The string to encode
-// @luareturn encoded string The URL-safe base64 encoded string
+// @luareturn string encoded The URL-safe base64 encoded string
 //
 // Example:
 //
@@ -119,8 +119,8 @@ func encodeURL(L *lua.LState) int {
 //
 // @luafunc decode_url
 // @luaparam encoded string The URL-safe base64 encoded string
-// @luareturn decoded string The decoded string, or nil on error
-// @luareturn err string|nil Error message if decoding failed
+// @luareturn string decoded The decoded string, or nil on error
+// @luareturn string|nil err Error message if decoding failed
 //
 // Example:
 //

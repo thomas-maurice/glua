@@ -3,6 +3,7 @@
 -- Analyzes and modifies environment variables
 
 ---@type corev1.Pod
+---@diagnostic disable-next-line: undefined-global
 local pod = myPod
 
 print("=== Environment Variables Analysis ===")

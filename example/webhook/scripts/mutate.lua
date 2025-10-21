@@ -4,6 +4,7 @@
 -- to easily mutate pods without dealing with complex JSON patch operations.
 --
 -- Global variables available:
+---@diagnostic disable: undefined-global
 --   pod: the Kubernetes Pod object as a Lua table
 --   patches: empty table to populate with JSON patch operations
 --   kubernetes: the kubernetes module with helper functions

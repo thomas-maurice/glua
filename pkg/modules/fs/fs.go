@@ -64,8 +64,8 @@ var exports = map[string]lua.LGFunction{
 //
 // @luafunc read_file
 // @luaparam path string The path to the file to read
-// @luareturn content string The file contents, or nil on error
-// @luareturn err string|nil Error message if reading failed
+// @luareturn string content The file contents, or nil on error
+// @luareturn string|nil err Error message if reading failed
 //
 // Example:
 //
@@ -95,7 +95,7 @@ func readFile(L *lua.LState) int {
 // @luafunc write_file
 // @luaparam path string The path to the file to write
 // @luaparam content string The content to write
-// @luareturn err string|nil Error message if writing failed, nil on success
+// @luareturn string|nil err Error message if writing failed, nil on success
 //
 // Example:
 //
@@ -121,7 +121,7 @@ func writeFile(L *lua.LState) int {
 //
 // @luafunc exists
 // @luaparam path string The path to check
-// @luareturn exists boolean True if the path exists, false otherwise
+// @luareturn boolean exists True if the path exists, false otherwise
 //
 // Example:
 //
@@ -140,7 +140,7 @@ func exists(L *lua.LState) int {
 //
 // @luafunc mkdir
 // @luaparam path string The directory path to create
-// @luareturn err string|nil Error message if creation failed, nil on success
+// @luareturn string|nil err Error message if creation failed, nil on success
 //
 // Example:
 //
@@ -165,7 +165,7 @@ func mkdir(L *lua.LState) int {
 //
 // @luafunc mkdir_all
 // @luaparam path string The directory path to create
-// @luareturn err string|nil Error message if creation failed, nil on success
+// @luareturn string|nil err Error message if creation failed, nil on success
 //
 // Example:
 //
@@ -190,7 +190,7 @@ func mkdirAll(L *lua.LState) int {
 //
 // @luafunc remove
 // @luaparam path string The path to remove
-// @luareturn err string|nil Error message if removal failed, nil on success
+// @luareturn string|nil err Error message if removal failed, nil on success
 //
 // Example:
 //
@@ -215,7 +215,7 @@ func remove(L *lua.LState) int {
 //
 // @luafunc remove_all
 // @luaparam path string The path to remove recursively
-// @luareturn err string|nil Error message if removal failed, nil on success
+// @luareturn string|nil err Error message if removal failed, nil on success
 //
 // Example:
 //
@@ -240,8 +240,8 @@ func removeAll(L *lua.LState) int {
 //
 // @luafunc list
 // @luaparam path string The directory path to list
-// @luareturn entries table Array of entry names, or nil on error
-// @luareturn err string|nil Error message if listing failed
+// @luareturn table entries Array of entry names, or nil on error
+// @luareturn string|nil err Error message if listing failed
 //
 // Example:
 //
@@ -277,8 +277,8 @@ func list(L *lua.LState) int {
 //
 // @luafunc stat
 // @luaparam path string The path to stat
-// @luareturn info table File info with name, size, is_dir, mode, mod_time, or nil on error
-// @luareturn err string|nil Error message if stat failed
+// @luareturn table info File info with name, size, is_dir, mode, mod_time, or nil on error
+// @luareturn string|nil err Error message if stat failed
 //
 // Example:
 //

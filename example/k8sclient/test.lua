@@ -1,4 +1,4 @@
-
+---@diagnostic disable: missing-fields
 -- k8sclient example: Complete CRUD operations demonstration
 --
 -- This script demonstrates the full lifecycle of Kubernetes resource management from Lua:
@@ -86,7 +86,6 @@ local pod = {
 			managed_by = "lua"
 		}
 	},
-	---@type PodSpec
 	spec = {
 		containers = {
 			{

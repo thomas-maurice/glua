@@ -6,5 +6,10 @@
   ],
   "diagnostics.globals": [
     "require"
-  ]
+  ],
+  "diagnostics": {
+    "disable": [
+      "duplicate-doc-field"
+    ]
+  }
 }

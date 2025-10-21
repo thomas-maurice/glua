@@ -56,7 +56,7 @@ var exports = map[string]lua.LGFunction{
 //
 // @luafunc encode
 // @luaparam str string The string to encode
-// @luareturn encoded string The hex encoded string
+// @luareturn string encoded The hex encoded string
 //
 // Example:
 //
@@ -73,8 +73,8 @@ func encode(L *lua.LState) int {
 //
 // @luafunc decode
 // @luaparam encoded string The hex encoded string
-// @luareturn decoded string The decoded string, or nil on error
-// @luareturn err string|nil Error message if decoding failed
+// @luareturn string decoded The decoded string, or nil on error
+// @luareturn string|nil err Error message if decoding failed
 //
 // Example:
 //

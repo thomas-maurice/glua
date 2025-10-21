@@ -175,8 +175,8 @@ var exports = map[string]lua.LGFunction{
 //
 // @luafunc parse_memory
 // @luaparam quantity string The memory quantity to parse (e.g., "1024Mi", "1Gi")
-// @luareturn bytes number The memory value in bytes, or nil on error
-// @luareturn err string|nil Error message if parsing failed
+// @luareturn number bytes The memory value in bytes, or nil on error
+// @luareturn string|nil err Error message if parsing failed
 //
 // Example:
 //
@@ -203,8 +203,8 @@ func parseMemory(L *lua.LState) int {
 //
 // @luafunc parse_cpu
 // @luaparam quantity string The CPU quantity to parse (e.g., "100m", "1", "2000m")
-// @luareturn millicores number The CPU value in millicores, or nil on error
-// @luareturn err string|nil Error message if parsing failed
+// @luareturn number millicores The CPU value in millicores, or nil on error
+// @luareturn string|nil err Error message if parsing failed
 //
 // Example:
 //
@@ -232,8 +232,8 @@ func parseCPU(L *lua.LState) int {
 //
 // @luafunc parse_time
 // @luaparam timestr string The time string in RFC3339 format (e.g., "2025-10-03T16:39:00Z")
-// @luareturn timestamp number The Unix timestamp, or nil on error
-// @luareturn err string|nil Error message if parsing failed
+// @luareturn number timestamp The Unix timestamp, or nil on error
+// @luareturn string|nil err Error message if parsing failed
 //
 // Example:
 //
@@ -264,8 +264,8 @@ func parseTime(L *lua.LState) int {
 //
 // @luafunc format_time
 // @luaparam timestamp number The Unix timestamp to convert
-// @luareturn timestr string The time in RFC3339 format (e.g., "2025-10-03T16:39:00Z"), or nil on error
-// @luareturn err string|nil Error message if formatting failed
+// @luareturn string timestr The time in RFC3339 format (e.g., "2025-10-03T16:39:00Z"), or nil on error
+// @luareturn string|nil err Error message if formatting failed
 //
 // Example:
 //
@@ -290,7 +290,7 @@ func formatTime(L *lua.LState) int {
 //
 // @luafunc init_defaults
 // @luaparam obj table The Kubernetes object (must have a metadata field)
-// @luareturn obj table The same object with initialized defaults (modified in-place)
+// @luareturn table obj The same object with initialized defaults (modified in-place)
 //
 // Example:
 //
@@ -335,8 +335,8 @@ func initDefaults(L *lua.LState) int {
 //
 // @luafunc parse_duration
 // @luaparam duration string The duration string to parse (e.g., "5s", "10m", "2h")
-// @luareturn seconds number The duration value in seconds, or nil on error
-// @luareturn err string|nil Error message if parsing failed
+// @luareturn number seconds The duration value in seconds, or nil on error
+// @luareturn string|nil err Error message if parsing failed
 //
 // Example:
 //
@@ -363,8 +363,8 @@ func parseDuration(L *lua.LState) int {
 //
 // @luafunc format_duration
 // @luaparam seconds number The duration in seconds to convert
-// @luareturn duration string The duration string (e.g., "5m0s", "1h30m0s"), or nil on error
-// @luareturn err string|nil Error message if formatting failed
+// @luareturn string duration The duration string (e.g., "5m0s", "1h30m0s"), or nil on error
+// @luareturn string|nil err Error message if formatting failed
 //
 // Example:
 //
@@ -387,7 +387,7 @@ func formatDuration(L *lua.LState) int {
 // @luafunc match_gvk
 // @luaparam obj table The Kubernetes object to check
 // @luaparam matcher kubernetes.GVKMatcher The GVK matcher with group, version, and kind fields
-// @luareturn matches boolean true if the GVK matches
+// @luareturn boolean matches true if the GVK matches
 //
 // Example:
 //
@@ -447,7 +447,7 @@ func matchGVK(L *lua.LState) int {
 //
 // @luafunc ensure_metadata
 // @luaparam obj table The Kubernetes object
-// @luareturn obj table The same object with initialized metadata (modified in-place)
+// @luareturn table obj The same object with initialized metadata (modified in-place)
 //
 // Example:
 //
@@ -493,7 +493,7 @@ func ensureMetadata(L *lua.LState) int {
 // @luaparam obj table The Kubernetes object
 // @luaparam key string The label key
 // @luaparam value string The label value
-// @luareturn obj table The modified object (for chaining)
+// @luareturn table obj The modified object (for chaining)
 //
 // Example:
 //
@@ -526,7 +526,7 @@ func addLabel(L *lua.LState) int {
 // @luafunc add_labels
 // @luaparam obj table The Kubernetes object
 // @luaparam labels table A table of key-value pairs to add as labels
-// @luareturn obj table The modified object (for chaining)
+// @luareturn table obj The modified object (for chaining)
 //
 // Example:
 //
@@ -562,7 +562,7 @@ func addLabels(L *lua.LState) int {
 // @luafunc remove_label
 // @luaparam obj table The Kubernetes object
 // @luaparam key string The label key to remove
-// @luareturn obj table The modified object (for chaining)
+// @luareturn table obj The modified object (for chaining)
 //
 // Example:
 //
@@ -610,7 +610,7 @@ func removeLabel(L *lua.LState) int {
 // @luafunc has_label
 // @luaparam obj table The Kubernetes object
 // @luaparam key string The label key to check
-// @luareturn exists boolean true if the label exists
+// @luareturn boolean exists true if the label exists
 //
 // Example:
 //
@@ -659,7 +659,7 @@ func hasLabel(L *lua.LState) int {
 // @luafunc get_label
 // @luaparam obj table The Kubernetes object
 // @luaparam key string The label key
-// @luareturn value string|nil The label value, or nil if not found
+// @luareturn string|nil value The label value, or nil if not found
 //
 // Example:
 //
@@ -711,7 +711,7 @@ func getLabel(L *lua.LState) int {
 // @luaparam obj table The Kubernetes object
 // @luaparam key string The annotation key
 // @luaparam value string The annotation value
-// @luareturn obj table The modified object (for chaining)
+// @luareturn table obj The modified object (for chaining)
 //
 // Example:
 //
@@ -744,7 +744,7 @@ func addAnnotation(L *lua.LState) int {
 // @luafunc add_annotations
 // @luaparam obj table The Kubernetes object
 // @luaparam annotations table A table of key-value pairs to add as annotations
-// @luareturn obj table The modified object (for chaining)
+// @luareturn table obj The modified object (for chaining)
 //
 // Example:
 //
@@ -780,7 +780,7 @@ func addAnnotations(L *lua.LState) int {
 // @luafunc remove_annotation
 // @luaparam obj table The Kubernetes object
 // @luaparam key string The annotation key to remove
-// @luareturn obj table The modified object (for chaining)
+// @luareturn table obj The modified object (for chaining)
 //
 // Example:
 //
@@ -828,7 +828,7 @@ func removeAnnotation(L *lua.LState) int {
 // @luafunc has_annotation
 // @luaparam obj table The Kubernetes object
 // @luaparam key string The annotation key to check
-// @luareturn exists boolean true if the annotation exists
+// @luareturn boolean exists true if the annotation exists
 //
 // Example:
 //
@@ -877,7 +877,7 @@ func hasAnnotation(L *lua.LState) int {
 // @luafunc get_annotation
 // @luaparam obj table The Kubernetes object
 // @luaparam key string The annotation key
-// @luareturn value string|nil The annotation value, or nil if not found
+// @luareturn string|nil value The annotation value, or nil if not found
 //
 // Example:
 //

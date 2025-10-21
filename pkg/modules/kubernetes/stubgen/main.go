@@ -29,12 +29,21 @@ import (
 
 	"github.com/thomas-maurice/glua/pkg/modules/kubernetes"
 	"github.com/thomas-maurice/glua/pkg/stubgen"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
+	eventsv1 "k8s.io/api/events/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	apiregistrationv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 )
 
 func main() {
@@ -105,6 +114,34 @@ func main() {
 			rbacv1.RoleBindingList{},
 			rbacv1.ClusterRoleBinding{},
 			rbacv1.ClusterRoleBindingList{},
+			// Autoscaling resources
+			autoscalingv2.HorizontalPodAutoscaler{},
+			autoscalingv2.HorizontalPodAutoscalerList{},
+			// Storage resources
+			storagev1.StorageClass{},
+			storagev1.StorageClassList{},
+			storagev1.VolumeAttachment{},
+			storagev1.VolumeAttachmentList{},
+			// Policy resources
+			policyv1.PodDisruptionBudget{},
+			policyv1.PodDisruptionBudgetList{},
+			// Admission registration resources
+			admissionregistrationv1.ValidatingWebhookConfiguration{},
+			admissionregistrationv1.ValidatingWebhookConfigurationList{},
+			admissionregistrationv1.MutatingWebhookConfiguration{},
+			admissionregistrationv1.MutatingWebhookConfigurationList{},
+			// API registration resources
+			apiregistrationv1.APIService{},
+			apiregistrationv1.APIServiceList{},
+			// Events resources
+			eventsv1.Event{},
+			eventsv1.EventList{},
+			// Discovery resources
+			discoveryv1.EndpointSlice{},
+			discoveryv1.EndpointSliceList{},
+			// Coordination resources
+			coordinationv1.Lease{},
+			coordinationv1.LeaseList{},
 			// Metav1 types
 			metav1.ObjectMeta{},
 			metav1.TypeMeta{},
@@ -118,10 +155,35 @@ func main() {
 			metav1.OwnerReference{},
 			metav1.LabelSelector{},
 			metav1.LabelSelectorRequirement{},
+			// IntOrString type (used for targetPort, etc.)
+			intstr.IntOrString{},
 		},
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
+	// Post-process: Add IntOrString type alias at the top
+	// IntOrString is a special Kubernetes type that can be either string or number
+	content, err := os.ReadFile(outputFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading generated file: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Prepend the type aliases
+	// IntOrString can be either a string or number (e.g., for targetPort)
+	// Time and MicroTime are time types that serialize as strings
+	aliasHeader := `---@alias intstr.IntOrString string|number
+---@alias v1.Time string
+---@alias v1.MicroTime string
+
+`
+	newContent := aliasHeader + string(content)
+
+	if err := os.WriteFile(outputFile, []byte(newContent), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing updated file: %v\n", err)
 		os.Exit(1)
 	}
 

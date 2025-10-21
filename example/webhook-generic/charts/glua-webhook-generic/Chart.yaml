@@ -1,0 +1,17 @@
+apiVersion: v2
+name: glua-webhook-generic
+description: A generic Kubernetes mutating webhook using Lua scripts for Pods and Nodes
+type: application
+version: 0.1.0
+appVersion: "1.0"
+keywords:
+  - webhook
+  - admission
+  - lua
+  - mutating
+home: https://github.com/thomas-maurice/glua
+sources:
+  - https://github.com/thomas-maurice/glua
+maintainers:
+  - name: Thomas Maurice
+    email: thomas@maurice.fr
