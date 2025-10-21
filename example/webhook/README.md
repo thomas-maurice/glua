@@ -12,10 +12,12 @@ A Kubernetes mutating admission webhook that uses Lua scripts to dynamically mod
 
 ## What This Example Does
 
-This webhook adds two annotations to any pod that has the label `thomas.maurice/mutate=true`:
+This webhook demonstrates a **streamlined approach** to Kubernetes mutations using the `kubernetes` module's helper functions. It adds two annotations to any pod that has the label `thomas.maurice/mutate=true`:
 
 1. `coucou.lil: hello` - A custom annotation demonstrating the mutation capability
 2. `glua.mutated-at: <timestamp>` - Records when the mutation occurred
+
+**Key improvement**: Uses `kubernetes` module helpers (`init_defaults()`, `add_annotation()`) instead of manual JSON patch manipulation, making the Lua code much simpler and more maintainable.
 
 ## Architecture
 
@@ -148,10 +150,37 @@ The Lua script has access to:
 
 - `pod`: The Kubernetes Pod object as a Lua table
 - `patches`: An empty table to populate with JSON patch operations
+- `kubernetes`: The kubernetes module with helper functions
 
-Example patch operation:
+**Streamlined approach using kubernetes module:**
 
 ```lua
+local k8s = require("kubernetes")
+
+-- Ensure metadata structures exist
+pod = k8s.init_defaults(pod)
+
+-- Add annotations easily - no manual path handling needed!
+pod = k8s.add_annotation(pod, "my-key", "my-value")
+pod = k8s.add_label(pod, "my-label", "my-value")
+
+-- Generate patches for the annotations
+for key, value in pairs(pod.metadata.annotations) do
+    if key == "my-key" then  -- Only patch what we added
+        local escaped_key = key:gsub("~", "~0"):gsub("/", "~1")
+        table.insert(patches, {
+            op = "add",
+            path = "/metadata/annotations/" .. escaped_key,
+            value = value
+        })
+    end
+end
+```
+
+**Traditional approach (also supported):**
+
+```lua
+-- Manual JSON patch operation
 table.insert(patches, {
   op = "add",
   path = "/metadata/annotations/my-key",
@@ -160,6 +189,8 @@ table.insert(patches, {
 ```
 
 Supported operations: `add`, `remove`, `replace`, `move`, `copy`, `test`
+
+**See also:** The [kubernetes module documentation](../../README.md#kubernetes) for all available helper functions.
 
 ## Configuration
 

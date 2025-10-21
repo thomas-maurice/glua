@@ -30,32 +30,25 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/thomas-maurice/glua/pkg/glua"
-	"github.com/thomas-maurice/glua/pkg/modules/k8sclient"
+	"github.com/thomas-maurice/glua/pkg/modules/kubernetes"
 	lua "github.com/yuin/gopher-lua"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 // Config: holds the webhook server configuration
 type Config struct {
-	Address        string
-	CertFile       string
-	KeyFile        string
-	ScriptPath     string
-	EnableK8sQuery bool
-	Kubeconfig     string
+	Address    string
+	CertFile   string
+	KeyFile    string
+	ScriptPath string
 }
 
 // WebhookServer: represents the mutating webhook server instance
 type WebhookServer struct {
-	config    *Config
-	logger    *slog.Logger
-	engine    *gin.Engine
-	k8sClient *kubernetes.Clientset
-	k8sConfig *rest.Config
+	config *Config
+	logger *slog.Logger
+	engine *gin.Engine
 }
 
 // NewWebhookServer: creates a new webhook server instance
@@ -72,36 +65,6 @@ func NewWebhookServer(cfg *Config) (*WebhookServer, error) {
 		config: cfg,
 		logger: logger,
 		engine: engine,
-	}
-
-	// Initialize Kubernetes client if enabled
-	if cfg.EnableK8sQuery {
-		var config *rest.Config
-		var err error
-
-		if cfg.Kubeconfig != "" {
-			// Out-of-cluster config (dev mode)
-			config, err = clientcmd.BuildConfigFromFlags("", cfg.Kubeconfig)
-		} else {
-			// In-cluster config (production mode)
-			config, err = rest.InClusterConfig()
-		}
-
-		if err != nil {
-			return nil, fmt.Errorf("failed to create k8s config: %w", err)
-		}
-
-		clientset, err := kubernetes.NewForConfig(config)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create k8s client: %w", err)
-		}
-
-		ws.k8sClient = clientset
-		ws.k8sConfig = config
-
-		logger.Info("Kubernetes client enabled",
-			"in_cluster", cfg.Kubeconfig == "",
-		)
 	}
 
 	// Register routes
@@ -206,15 +169,8 @@ func (ws *WebhookServer) runLuaMutation(pod *corev1.Pod) ([]map[string]interface
 
 	translator := glua.NewTranslator()
 
-	// Load k8sclient module if Kubernetes client is available
-	if ws.k8sConfig != nil {
-		L.PreloadModule("k8sclient", k8sclient.Loader(ws.k8sConfig))
-
-		// Load and set k8sclient module as global
-		if err := L.DoString(`k8sclient = require("k8sclient")`); err != nil {
-			return nil, fmt.Errorf("failed to load k8sclient module: %w", err)
-		}
-	}
+	// Preload kubernetes module for Lua scripts
+	L.PreloadModule("kubernetes", kubernetes.Loader)
 
 	// Convert pod to Lua table
 	podTable, err := translator.ToLua(L, pod)
@@ -269,12 +225,6 @@ func main() {
 			"/etc/webhook/scripts/mutate.lua",
 			"Lua mutation script path",
 		)
-		enableK8s      = flag.Bool("enable-k8s", false, "Enable Kubernetes client for Lua scripts")
-		kubeconfigPath = flag.String(
-			"kubeconfig",
-			"",
-			"Path to kubeconfig (empty = in-cluster config)",
-		)
 	)
 	flag.Parse()
 
@@ -285,12 +235,10 @@ func main() {
 	}
 
 	cfg := &Config{
-		Address:        *address,
-		CertFile:       *certFile,
-		KeyFile:        *keyFile,
-		ScriptPath:     *scriptPath,
-		EnableK8sQuery: *enableK8s,
-		Kubeconfig:     *kubeconfigPath,
+		Address:    *address,
+		CertFile:   *certFile,
+		KeyFile:    *keyFile,
+		ScriptPath: *scriptPath,
 	}
 
 	server, err := NewWebhookServer(cfg)
