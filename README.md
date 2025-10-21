@@ -1124,7 +1124,15 @@ k8s.parse_memory("256Mi")  -- Shows parameters and return types
 
 ## API Reference
 
-### Translator
+This section is split into two parts: the **Go API** (for embedding Lua in your Go application) and the **Lua Standard Modules** (available to your Lua scripts).
+
+### Go API
+
+These are the Go packages and types you use in your Go application to interact with Lua.
+
+#### Translator
+
+Bidirectional converter between Go structs and Lua tables.
 
 ```go
 type Translator struct{}
@@ -1143,7 +1151,25 @@ func (t *Translator) ToLua(L *lua.LState, o interface{}) (lua.LValue, error)
 func (t *Translator) FromLua(L *lua.LState, lv lua.LValue, output interface{}) error
 ```
 
-### TypeRegistry
+**Usage:**
+
+```go
+translator := glua.NewTranslator()
+
+// Go → Lua
+pod := &corev1.Pod{...}
+luaTable, err := translator.ToLua(L, pod)
+L.SetGlobal("myPod", luaTable)
+
+// Lua → Go
+modifiedTable := L.GetGlobal("myPod")
+var reconstructedPod corev1.Pod
+err = translator.FromLua(L, modifiedTable, &reconstructedPod)
+```
+
+#### TypeRegistry
+
+Generates Lua LSP annotations for IDE autocomplete from Go types.
 
 ```go
 type TypeRegistry struct{}
@@ -1161,7 +1187,34 @@ func (r *TypeRegistry) Process() error
 func (r *TypeRegistry) GenerateStubs() (string, error)
 ```
 
-### Kubernetes Module (Lua API)
+**Usage:**
+
+```go
+registry := glua.NewTypeRegistry()
+registry.Register(&corev1.Pod{})
+registry.Register(&corev1.Service{})
+registry.Process()
+stubs, _ := registry.GenerateStubs()
+os.WriteFile("annotations.gen.lua", []byte(stubs), 0644)
+```
+
+### Lua Standard Modules
+
+These are the modules available to your Lua scripts via `require()`. Load them in Go with `L.PreloadModule()`.
+
+#### kubernetes
+
+Utility functions for parsing and formatting Kubernetes resource quantities and timestamps.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/kubernetes"
+
+L.PreloadModule("kubernetes", kubernetes.Loader)
+```
+
+**Lua API:**
 
 ```lua
 local k8s = require("kubernetes")
@@ -1172,14 +1225,374 @@ bytes, err = k8s.parse_memory(quantity)
 -- Parse CPU: "100m" → 100 (millicores)
 millis, err = k8s.parse_cpu(quantity)
 
+-- Parse duration: "5m" → 300 (seconds)
+seconds, err = k8s.parse_duration(duration)
+
 -- Parse time: "2025-10-03T16:39:00Z" → 1759509540 (Unix timestamp)
 timestamp, err = k8s.parse_time(timestr)
 
 -- Format time: 1759509540 → "2025-10-03T16:39:00Z"
 timestr, err = k8s.format_time(timestamp)
+
+-- Format duration: 300 → "5m0s"
+duration, err = k8s.format_duration(seconds)
+
+-- Initialize defaults: ensures metadata.labels and metadata.annotations exist
+obj = k8s.init_defaults(obj)
+
+-- Add/manipulate labels and annotations
+obj = k8s.add_label(obj, "app", "nginx")
+obj = k8s.add_annotation(obj, "version", "1.0")
+has = k8s.has_label(obj, "app")
+value = k8s.get_label(obj, "app")
+obj = k8s.remove_label(obj, "app")
+
+-- Match GVK (Group/Version/Kind)
+matches = k8s.match_gvk(obj, {group="apps", version="v1", kind="Deployment"})
 ```
 
-All functions return `(value, error)` tuples.
+All functions return `(value, error)` tuples (except boolean helpers).
+
+#### k8sclient
+
+Dynamic Kubernetes client for CRUD operations on any Kubernetes resource from Lua.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/k8sclient"
+
+config, _ := clientcmd.BuildConfigFromFlags("", kubeconfig)
+L.PreloadModule("k8sclient", k8sclient.Loader(config))
+```
+
+**Lua API:**
+
+```lua
+local client = require("k8sclient")
+
+-- GVK constants (predefined)
+client.POD          -- {group="", version="v1", kind="Pod"}
+client.DEPLOYMENT   -- {group="apps", version="v1", kind="Deployment"}
+client.SERVICE      -- {group="", version="v1", kind="Service"}
+client.CONFIGMAP    -- {group="", version="v1", kind="ConfigMap"}
+-- ... and many more
+
+-- Create a resource
+created, err = client.create(resource_table)
+
+-- Get a resource
+resource, err = client.get(gvk, namespace, name)
+
+-- Update a resource
+updated, err = client.update(resource_table)
+
+-- List resources
+resources, err = client.list(gvk, namespace)
+
+-- Delete a resource
+err = client.delete(gvk, namespace, name)
+```
+
+**Example:**
+
+```lua
+local client = require("k8sclient")
+
+-- Create a ConfigMap
+local cm = {
+    apiVersion = "v1",
+    kind = "ConfigMap",
+    metadata = {name = "my-config", namespace = "default"},
+    data = {key = "value"}
+}
+local created, err = client.create(cm)
+
+-- Get it back
+local fetched, err = client.get(client.CONFIGMAP, "default", "my-config")
+
+-- Update it
+fetched.data.newkey = "newvalue"
+local updated, err = client.update(fetched)
+
+-- Delete it
+local err = client.delete(client.CONFIGMAP, "default", "my-config")
+```
+
+#### json
+
+JSON encoding and decoding.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/json"
+
+L.PreloadModule("json", json.Loader)
+```
+
+**Lua API:**
+
+```lua
+local json = require("json")
+
+-- Parse JSON string to Lua table
+table, err = json.parse('{"name":"John","age":30}')
+
+-- Stringify Lua table to JSON
+jsonstr, err = json.stringify({name="John", age=30})
+```
+
+#### yaml
+
+YAML encoding and decoding.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/yaml"
+
+L.PreloadModule("yaml", yaml.Loader)
+```
+
+**Lua API:**
+
+```lua
+local yaml = require("yaml")
+
+-- Parse YAML string to Lua table
+table, err = yaml.parse("name: John\nage: 30")
+
+-- Stringify Lua table to YAML
+yamlstr, err = yaml.stringify({name="John", age=30})
+```
+
+#### spew
+
+Pretty-printing for debugging (like Go's spew package).
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/spew"
+
+L.PreloadModule("spew", spew.Loader)
+```
+
+**Lua API:**
+
+```lua
+local spew = require("spew")
+
+-- Dump to string (returns formatted string)
+str = spew.sdump({name="John", nested={deep={value=42}}})
+
+-- Dump to stdout (prints directly)
+spew.dump({name="John", age=30})
+```
+
+#### http
+
+HTTP client for making requests.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/http"
+
+L.PreloadModule("http", http.Loader)
+```
+
+**Lua API:**
+
+```lua
+local http = require("http")
+
+-- GET request
+response, err = http.get("https://api.example.com/data")
+-- response = {status=200, body="...", headers={...}}
+
+-- POST request
+response, err = http.post("https://api.example.com/data", {
+    body = '{"key":"value"}',
+    headers = {["Content-Type"] = "application/json"}
+})
+
+-- Other methods: put, patch, delete
+```
+
+#### template
+
+Go template rendering.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/template"
+
+L.PreloadModule("template", template.Loader)
+```
+
+**Lua API:**
+
+```lua
+local template = require("template")
+
+-- Render template with data
+result, err = template.render("Hello {{.name}}, you are {{.age}} years old",
+    {name="John", age=30})
+-- result = "Hello John, you are 30 years old"
+```
+
+#### fs
+
+Filesystem operations.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/fs"
+
+L.PreloadModule("fs", fs.Loader)
+```
+
+**Lua API:**
+
+```lua
+local fs = require("fs")
+
+-- Read file
+content, err = fs.read_file("/path/to/file.txt")
+
+-- Write file
+err = fs.write_file("/path/to/file.txt", "content")
+
+-- Check existence
+exists = fs.exists("/path/to/file")
+
+-- Create directory
+err = fs.mkdir("/path/to/dir")
+err = fs.mkdir_all("/path/to/nested/dir")
+
+-- Remove
+err = fs.remove("/path/to/file")
+err = fs.remove_all("/path/to/dir")
+
+-- List directory
+files, err = fs.list("/path/to/dir")
+
+-- Get file info
+info, err = fs.stat("/path/to/file")
+-- info = {size=1234, mode="0644", mod_time=1234567890, is_dir=false}
+```
+
+#### time
+
+Time manipulation and formatting.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/time"
+
+L.PreloadModule("time", time.Loader)
+```
+
+**Lua API:**
+
+```lua
+local time = require("time")
+
+-- Current Unix timestamp
+now = time.now()
+
+-- Parse date string
+timestamp, err = time.parse("2006-01-02 15:04:05", "2025-10-21 14:30:00")
+
+-- Format timestamp
+datestr = time.format(timestamp, "2006-01-02 15:04:05")
+
+-- Sleep
+time.sleep(2)  -- sleep for 2 seconds
+```
+
+#### base64, hex, hash
+
+Encoding and hashing utilities.
+
+**Load in Go:**
+
+```go
+import (
+    "github.com/thomas-maurice/glua/pkg/modules/base64"
+    "github.com/thomas-maurice/glua/pkg/modules/hex"
+    "github.com/thomas-maurice/glua/pkg/modules/hash"
+)
+
+L.PreloadModule("base64", base64.Loader)
+L.PreloadModule("hex", hex.Loader)
+L.PreloadModule("hash", hash.Loader)
+```
+
+**Lua API:**
+
+```lua
+local base64 = require("base64")
+local hex = require("hex")
+local hash = require("hash")
+
+-- Base64
+encoded = base64.encode("hello")
+decoded, err = base64.decode(encoded)
+
+-- Hex
+encoded = hex.encode("hello")
+decoded, err = hex.decode(encoded)
+
+-- Hash
+md5 = hash.md5("hello")
+sha1 = hash.sha1("hello")
+sha256 = hash.sha256("hello")
+sha512 = hash.sha512("hello")
+```
+
+#### log
+
+Structured logging with fields (similar to logrus).
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/log"
+
+L.PreloadModule("log", log.Loader)
+```
+
+**Lua API:**
+
+```lua
+local log = require("log")
+
+-- Simple logging
+log.info("Application started")
+log.warn("Deprecated feature used")
+log.error("Connection failed")
+log.debug("Debug information")
+
+-- Structured logging with fields
+log.info("User logged in", {user_id=123, ip="1.2.3.4"})
+
+-- Logger with preset fields
+logger = log.with_fields({component="api", version="1.0"})
+logger:info("Request received", {path="/api/users"})
+-- Output includes: component=api version=1.0 path=/api/users
+
+-- Set log level
+log.set_level("debug")  -- "debug", "info", "warn", "error"
+
+-- Set output format
+log.set_format("json")  -- "json" or "text"
+```
 
 ## Features
 
