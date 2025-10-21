@@ -55,9 +55,29 @@ Create or update `.vscode/settings.json`:
 
 ```json
 {
-  "Lua.workspace.library": ["library"]
+  "Lua.workspace.library": ["library"],
+  "Lua.diagnostics.disable": ["duplicate-doc-field"]
 }
 ```
+
+Or create a `.luarc.json` in your project root:
+
+```json
+{
+  "runtime": {
+    "version": "Lua 5.1"
+  },
+  "workspace": {
+    "library": ["library"],
+    "checkThirdParty": false
+  },
+  "diagnostics": {
+    "disable": ["duplicate-doc-field"]
+  }
+}
+```
+
+**Why disable `duplicate-doc-field`?** The Kubernetes stubs contain many classes with the same field names (e.g., different volume types each have a `volumeID` field). This is valid, but LuaLS shows false positive warnings. Disabling this diagnostic suppresses these harmless warnings.
 
 Now you'll get autocomplete for all glua modules in your Lua scripts!
 
