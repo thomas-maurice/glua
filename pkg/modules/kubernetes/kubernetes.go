@@ -24,16 +24,23 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/thomas-maurice/glua/pkg/glua"
 	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
+	eventsv1 "k8s.io/api/events/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // GVKMatcher: represents a Kubernetes Group/Version/Kind matcher.
@@ -43,84 +50,111 @@ type GVKMatcher struct {
 	Kind    string `json:"kind"`
 }
 
-// typeRegistry: manages type registration for stub generation.
-var typeRegistry = glua.NewTypeRegistry()
+// stubTypes: K8s API shapes whose ---@class blocks are emitted into
+// library/kubernetes.gen.lua so Lua callers get IDE autocomplete when they
+// poke at the table<string, any> Pod/Deployment/etc. values returned by the
+// runtime. Add new entries here as the module grows.
+var stubTypes = []any{
+	// Core resources
+	corev1.Pod{},
+	corev1.PodList{},
+	corev1.Namespace{},
+	corev1.NamespaceList{},
+	corev1.Node{},
+	corev1.NodeList{},
+	corev1.ConfigMap{},
+	corev1.ConfigMapList{},
+	corev1.Secret{},
+	corev1.SecretList{},
+	corev1.Service{},
+	corev1.ServiceList{},
+	corev1.ServiceAccount{},
+	corev1.ServiceAccountList{},
+	corev1.PersistentVolume{},
+	corev1.PersistentVolumeList{},
+	corev1.PersistentVolumeClaim{},
+	corev1.PersistentVolumeClaimList{},
+	// Apps resources
+	appsv1.Deployment{},
+	appsv1.DeploymentList{},
+	appsv1.StatefulSet{},
+	appsv1.StatefulSetList{},
+	appsv1.DaemonSet{},
+	appsv1.DaemonSetList{},
+	appsv1.ReplicaSet{},
+	appsv1.ReplicaSetList{},
+	// Batch resources
+	batchv1.Job{},
+	batchv1.JobList{},
+	batchv1.CronJob{},
+	batchv1.CronJobList{},
+	// Networking resources
+	networkingv1.Ingress{},
+	networkingv1.IngressList{},
+	networkingv1.NetworkPolicy{},
+	networkingv1.NetworkPolicyList{},
+	// RBAC resources
+	rbacv1.Role{},
+	rbacv1.RoleList{},
+	rbacv1.ClusterRole{},
+	rbacv1.ClusterRoleList{},
+	rbacv1.RoleBinding{},
+	rbacv1.RoleBindingList{},
+	rbacv1.ClusterRoleBinding{},
+	rbacv1.ClusterRoleBindingList{},
+	// Autoscaling resources
+	autoscalingv2.HorizontalPodAutoscaler{},
+	autoscalingv2.HorizontalPodAutoscalerList{},
+	// Storage resources
+	storagev1.StorageClass{},
+	storagev1.StorageClassList{},
+	storagev1.VolumeAttachment{},
+	storagev1.VolumeAttachmentList{},
+	// Policy resources
+	policyv1.PodDisruptionBudget{},
+	policyv1.PodDisruptionBudgetList{},
+	// Admission registration resources
+	admissionregistrationv1.ValidatingWebhookConfiguration{},
+	admissionregistrationv1.ValidatingWebhookConfigurationList{},
+	admissionregistrationv1.MutatingWebhookConfiguration{},
+	admissionregistrationv1.MutatingWebhookConfigurationList{},
+	// Events resources
+	eventsv1.Event{},
+	eventsv1.EventList{},
+	// Discovery resources
+	discoveryv1.EndpointSlice{},
+	discoveryv1.EndpointSliceList{},
+	// Coordination resources
+	coordinationv1.Lease{},
+	coordinationv1.LeaseList{},
+	// Metav1 types
+	metav1.ObjectMeta{},
+	metav1.TypeMeta{},
+	metav1.Time{},
+	metav1.MicroTime{},
+	metav1.Duration{},
+	metav1.Status{},
+	metav1.StatusDetails{},
+	metav1.StatusCause{},
+	metav1.ListMeta{},
+	metav1.OwnerReference{},
+	metav1.LabelSelector{},
+	metav1.LabelSelectorRequirement{},
+	// IntOrString (used for targetPort, ports, rolling update parameters, etc.)
+	intstr.IntOrString{},
+}
 
-func init() {
-	// Register GVKMatcher with the type registry
-	if err := typeRegistry.Register(GVKMatcher{}); err != nil {
-		panic(fmt.Sprintf("failed to register GVKMatcher: %v", err))
-	}
-
-	// Register core Kubernetes types
-	types := []interface{}{
-		// Core resources
-		corev1.Pod{},
-		corev1.PodList{},
-		corev1.Namespace{},
-		corev1.NamespaceList{},
-		corev1.Node{},
-		corev1.NodeList{},
-		corev1.ConfigMap{},
-		corev1.ConfigMapList{},
-		corev1.Secret{},
-		corev1.SecretList{},
-		corev1.Service{},
-		corev1.ServiceList{},
-		corev1.ServiceAccount{},
-		corev1.ServiceAccountList{},
-		corev1.PersistentVolume{},
-		corev1.PersistentVolumeList{},
-		corev1.PersistentVolumeClaim{},
-		corev1.PersistentVolumeClaimList{},
-		// Apps resources
-		appsv1.Deployment{},
-		appsv1.DeploymentList{},
-		appsv1.StatefulSet{},
-		appsv1.StatefulSetList{},
-		appsv1.DaemonSet{},
-		appsv1.DaemonSetList{},
-		appsv1.ReplicaSet{},
-		appsv1.ReplicaSetList{},
-		// Batch resources
-		batchv1.Job{},
-		batchv1.JobList{},
-		batchv1.CronJob{},
-		batchv1.CronJobList{},
-		// Networking resources
-		networkingv1.Ingress{},
-		networkingv1.IngressList{},
-		networkingv1.NetworkPolicy{},
-		networkingv1.NetworkPolicyList{},
-		// RBAC resources
-		rbacv1.Role{},
-		rbacv1.RoleList{},
-		rbacv1.ClusterRole{},
-		rbacv1.ClusterRoleList{},
-		rbacv1.RoleBinding{},
-		rbacv1.RoleBindingList{},
-		rbacv1.ClusterRoleBinding{},
-		rbacv1.ClusterRoleBindingList{},
-		// Metav1 types
-		metav1.ObjectMeta{},
-		metav1.TypeMeta{},
-		metav1.Time{},
-		metav1.MicroTime{},
-		metav1.Duration{},
-		metav1.Status{},
-		metav1.StatusDetails{},
-		metav1.StatusCause{},
-		metav1.ListMeta{},
-		metav1.OwnerReference{},
-		metav1.LabelSelector{},
-		metav1.LabelSelectorRequirement{},
-	}
-
-	for _, t := range types {
-		if err := typeRegistry.Register(t); err != nil {
-			panic(fmt.Sprintf("failed to register type %T: %v", t, err))
-		}
-	}
+// stubAliases: LSP type aliases for K8s shapes that JSON-marshal to a
+// primitive (Time/MicroTime → string, Quantity → string, IntOrString →
+// string|number). Without these, fields like `lastTransitionTime` reference
+// a v1.Time class that has no useful struct shape and the LSP flags them as
+// unknown. FieldsV1 is opaque managed-fields data — surfaced as table.
+var stubAliases = []struct{ name, def, doc string }{
+	{"v1.Time", "string", "RFC3339 timestamp (metav1.Time)"},
+	{"v1.MicroTime", "string", "RFC3339 timestamp with microsecond precision (metav1.MicroTime)"},
+	{"resource.Quantity", "string", "Kubernetes resource quantity, e.g. \"100Mi\", \"500m\""},
+	{"intstr.IntOrString", "string|number", "value that can be either an int or a string"},
+	{"v1.FieldsV1", "table", "opaque managed-fields data"},
 }
 
 // ParseMemory: parses a Kubernetes memory quantity and returns bytes.
@@ -149,6 +183,41 @@ func ParseCPU(quantity string) (int64, error) {
 		return 0, fmt.Errorf("failed to parse CPU quantity: %w", err)
 	}
 	return q.MilliValue(), nil
+}
+
+// FormatMemory: converts a byte count to a canonical K8s memory string using
+// the binary-SI format (Ki/Mi/Gi/Ti). Inverse of ParseMemory.
+//
+// Example:
+//
+//	local s = k8s.format_memory(2147483648)  -- "2Gi"
+//	pod.spec.containers[1].resources.requests.memory = s
+func FormatMemory(bytes int64) string {
+	return resource.NewQuantity(bytes, resource.BinarySI).String()
+}
+
+// FormatMemorySI: converts a byte count to a canonical K8s memory string
+// using the decimal-SI format (k/M/G/T — powers of 1000, not 1024). Use this
+// when matching disk/cloud-provider conventions; prefer FormatMemory for RAM
+// since that matches kubectl output. Both formats parse identically via
+// ParseMemory — only the surface string differs.
+//
+// Example:
+//
+//	local s = k8s.format_memory_si(2000000000)  -- "2G"
+func FormatMemorySI(bytes int64) string {
+	return resource.NewQuantity(bytes, resource.DecimalSI).String()
+}
+
+// FormatCPU: converts a millicore count to a canonical K8s CPU string using
+// decimal-SI format (e.g. "500m", "1", "2500m"). Inverse of ParseCPU.
+//
+// Example:
+//
+//	local s = k8s.format_cpu(500)  -- "500m"
+//	pod.spec.containers[1].resources.requests.cpu = s
+func FormatCPU(millicores int64) string {
+	return resource.NewMilliQuantity(millicores, resource.DecimalSI).String()
 }
 
 // ParseTime: parses a Kubernetes time string (RFC3339) and returns a Unix timestamp.
@@ -403,6 +472,12 @@ func build() *luareg.Module {
 		luareg.Args("quantity"))
 	m.Fn("parse_cpu", ParseCPU, "parse a Kubernetes CPU quantity, returns millicores",
 		luareg.Args("quantity"))
+	m.Fn("format_memory", FormatMemory, "format a byte count as a canonical K8s memory string (BinarySI: Ki/Mi/Gi/Ti)",
+		luareg.Args("bytes"))
+	m.Fn("format_memory_si", FormatMemorySI, "format a byte count as a canonical K8s memory string (DecimalSI: k/M/G/T)",
+		luareg.Args("bytes"))
+	m.Fn("format_cpu", FormatCPU, "format a millicore count as a canonical K8s CPU string (DecimalSI)",
+		luareg.Args("millicores"))
 	m.Fn("parse_time", ParseTime, "parse an RFC3339 time string, returns Unix timestamp",
 		luareg.Args("timestr"))
 	m.Fn("format_time", FormatTime, "convert a Unix timestamp to RFC3339 string",
@@ -437,6 +512,10 @@ func build() *luareg.Module {
 		luareg.Args("obj", "key"))
 	m.Fn("get_annotation", GetAnnotation, "return the value of an annotation, or empty string if absent",
 		luareg.Args("obj", "key"))
+	for _, a := range stubAliases {
+		m.RegisterStubAlias(a.name, a.def, a.doc)
+	}
+	m.RegisterStubType(stubTypes...)
 	return m
 }
 

@@ -118,6 +118,18 @@ func (g *Generator) GenerateModule(m *luareg.Module) (string, error) {
 	if err := discoverStructTypes(m, classLookup, structReg); err != nil {
 		return "", fmt.Errorf("discover struct types: %w", err)
 	}
+	// Also register explicit stub types (Module.RegisterStubType). These are
+	// types the author wants stubbed even though no function signature
+	// references them — typical for K8s modules where the API surface is
+	// `table<string, any>` but autocomplete on the wrapped Go shapes is wanted.
+	for _, v := range m.StubTypes() {
+		if v == nil {
+			continue
+		}
+		if err := structReg.Register(v); err != nil {
+			return "", fmt.Errorf("register stub type %T: %w", v, err)
+		}
+	}
 	if err := structReg.Process(); err != nil {
 		return "", fmt.Errorf("process struct types: %w", err)
 	}
@@ -133,6 +145,19 @@ func (g *Generator) GenerateModule(m *luareg.Module) (string, error) {
 	// Header.
 	fmt.Fprintf(&sb, "---@meta %s\n", modName)
 	sb.WriteString("\n")
+
+	// ---@alias declarations (Module.RegisterStubAlias). Emit before any
+	// ---@class blocks so subsequent field type references resolve.
+	if aliases := m.StubAliases(); len(aliases) > 0 {
+		for _, a := range aliases {
+			if a.Doc != "" {
+				fmt.Fprintf(&sb, "---@alias %s %s %s\n", a.Name, a.Def, a.Doc)
+			} else {
+				fmt.Fprintf(&sb, "---@alias %s %s\n", a.Name, a.Def)
+			}
+		}
+		sb.WriteString("\n")
+	}
 
 	// Struct ---@class blocks (if any).
 	if structStubs != "" {

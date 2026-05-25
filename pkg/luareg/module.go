@@ -123,6 +123,17 @@ type ConstMeta struct {
 	Doc     string
 }
 
+// StubAliasMeta: a single ---@alias declaration to be emitted at the top of
+// the module's generated stub. Used for types that should not appear as a
+// ---@class block (e.g. Kubernetes' metav1.Time, which serializes as a JSON
+// string and has no useful struct fields, or intstr.IntOrString which is a
+// sum type the LSP needs to know is string|number).
+type StubAliasMeta struct {
+	Name string // LSP alias name, e.g. "v1.Time"
+	Def  string // alias definition, e.g. "string" or "string|number"
+	Doc  string // optional one-line description
+}
+
 // Module: a Lua module being assembled. Holds per-function metadata and the
 // built lua.LGFunction wrappers. Create with NewModule.
 type Module struct {
@@ -136,6 +147,9 @@ type Module struct {
 	classByType map[reflect.Type]AnyClass // type → class for auto-wrap lookup
 	consts      []ConstMeta               // ordered list of module-level constants
 	constByName map[string]struct{}       // index for duplicate const detection
+	stubTypes   []any                     // types to emit as ---@class blocks even if no function references them
+	stubAliases []StubAliasMeta           // ---@alias declarations to emit at the top of the stub
+	aliasByName map[string]struct{}       // index for duplicate alias detection
 }
 
 // NewModule: creates a new module with the given Lua module name and doc string.
@@ -152,6 +166,7 @@ func NewModule(name, doc string) *Module {
 		classByName: make(map[string]AnyClass),
 		classByType: make(map[reflect.Type]AnyClass),
 		constByName: make(map[string]struct{}),
+		aliasByName: make(map[string]struct{}),
 	}
 }
 
@@ -235,6 +250,55 @@ func (m *Module) Classes() []AnyClass { return m.classes }
 // Consts: returns all registered constant metadata in registration order.
 // Intended for use by stub generators.
 func (m *Module) Consts() []ConstMeta { return m.consts }
+
+// StubTypes: returns the types registered via RegisterStubType in registration
+// order. Intended for use by stub generators.
+func (m *Module) StubTypes() []any { return m.stubTypes }
+
+// RegisterStubType: records one or more Go values whose types should be
+// emitted as ---@class blocks in this module's generated stub, even when no
+// registered function or method references them in its signature. Pass
+// zero-value instances, e.g. corev1.Pod{}, metav1.ObjectMeta{}.
+//
+// Use this for K8s-style modules where Lua callers receive cluster objects as
+// `table<string, any>` parameters but you still want IDE autocomplete on the
+// fields of the wrapped Go types.
+//
+// Has no runtime effect — it only feeds the stub generator.
+//
+// Returns the receiver for chaining.
+func (m *Module) RegisterStubType(values ...any) *Module {
+	m.stubTypes = append(m.stubTypes, values...)
+	return m
+}
+
+// StubAliases: returns all registered alias metadata in registration order.
+// Intended for use by stub generators.
+func (m *Module) StubAliases() []StubAliasMeta { return m.stubAliases }
+
+// RegisterStubAlias: records a ---@alias declaration for the module stub.
+// Use for types that should not be emitted as a ---@class — typically things
+// that JSON-marshal to a primitive (metav1.Time → string), sum types the LSP
+// needs to know about (intstr.IntOrString → "string|number"), or opaque
+// structs you'd rather expose as `table`.
+//
+// name is the LSP alias identifier (must match how the type is referenced in
+// generated ---@field lines, e.g. "v1.Time"). def is the right-hand side of
+// the alias (e.g. "string" or "string|number"). doc is an optional summary.
+//
+// Has no runtime effect — it only feeds the stub generator.
+//
+// Panics if name was already registered as an alias on this module.
+//
+// Returns the receiver for chaining.
+func (m *Module) RegisterStubAlias(name, def, doc string) *Module {
+	if _, exists := m.aliasByName[name]; exists {
+		panic(fmt.Sprintf("luareg: module %q: duplicate stub alias %q", m.name, name))
+	}
+	m.aliasByName[name] = struct{}{}
+	m.stubAliases = append(m.stubAliases, StubAliasMeta{Name: name, Def: def, Doc: doc})
+	return m
+}
 
 // Const: records a module-level constant value. At PushTo time the value is
 // translated to a Lua value and set on the module table. At stub-gen time the
