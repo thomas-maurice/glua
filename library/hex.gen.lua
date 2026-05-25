@@ -3,13 +3,14 @@
 ---@class hex
 local hex = {}
 
----@param str string The string to encode
----@return string encoded The hex encoded string
-function hex.encode(str) end
+--- encodes a string to hexadecimal
+---@param s string
+---@return string
+function hex.encode(s) end
 
----@param encoded string The hex encoded string
----@return string decoded The decoded string, or nil on error
----@return string|nil err Error message if decoding failed
+--- decodes a hexadecimal string, raises on invalid input
+---@param encoded string
+---@return string
 function hex.decode(encoded) end
 
 return hex

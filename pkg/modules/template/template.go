@@ -26,135 +26,49 @@ import (
 	"os"
 	"text/template"
 
+	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
 )
 
-// Loader: creates and returns the template module for Lua.
-// This function should be registered with L.PreloadModule("template", template.Loader)
-//
-// @luamodule template
-//
-// Example usage in Lua:
-//
-//	local template = require("template")
-//	local result = template.render("Hello {{.Name}}", {Name = "World"})
-//	print(result)  -- prints "Hello World"
-func Loader(L *lua.LState) int {
-	// Create module table
-	mod := L.SetFuncs(L.NewTable(), exports)
-
-	// Push module onto stack
-	L.Push(mod)
-	return 1
-}
-
-// exports: maps Lua function names to Go implementations
-var exports = map[string]lua.LGFunction{
-	"render":      render,
-	"render_file": renderFile,
-}
-
-// render: renders a Go text/template with the provided data.
-//
-// @luafunc render
-// @luaparam tmpl string The template string
-// @luaparam data table The data to render with
-// @luareturn string result The rendered template, or nil on error
-// @luareturn string|nil err Error message if rendering failed
-//
-// Example:
-//
-//	local result, err = template.render("Hello {{.Name}}", {Name = "World"})
-//	if err then
-//	    print("Error: " .. err)
-//	else
-//	    print(result)  -- prints "Hello World"
-//	end
-func render(L *lua.LState) int {
-	tmplStr := L.CheckString(1)
-	data := L.CheckTable(2)
-
-	// Convert Lua table to Go map
+// render: renders a Go text/template with the provided data table; raises on
+// parse or execution failure. Uses *lua.LTable escape hatch for the data arg.
+func render(L *lua.LState, tmplStr string, data *lua.LTable) (string, error) {
 	goData := luaTableToGoMap(L, data)
-
-	// Parse template
 	tmpl, err := template.New("tmpl").Parse(tmplStr)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to parse template: %v", err)))
-		return 2
+		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
-
-	// Execute template
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, goData); err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to execute template: %v", err)))
-		return 2
+		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
-
-	L.Push(lua.LString(buf.String()))
-	L.Push(lua.LNil)
-	return 2
+	return buf.String(), nil
 }
 
-// render_file: renders a Go text/template from a file with the provided data.
-//
-// @luafunc render_file
-// @luaparam path string The path to the template file
-// @luaparam data table The data to render with
-// @luareturn string result The rendered template, or nil on error
-// @luareturn string|nil err Error message if rendering failed
-//
-// Example:
-//
-//	local result, err = template.render_file("/path/to/template.tmpl", {Name = "World"})
-//	if err then
-//	    print("Error: " .. err)
-//	else
-//	    print(result)
-//	end
-func renderFile(L *lua.LState) int {
-	path := L.CheckString(1)
-	data := L.CheckTable(2)
-
-	// Read template file
+// renderFile: renders a Go text/template from a file with the provided data
+// table; raises on read, parse, or execution failure.
+func renderFile(L *lua.LState, path string, data *lua.LTable) (string, error) {
 	tmplBytes, err := os.ReadFile(path)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to read template file: %v", err)))
-		return 2
+		return "", fmt.Errorf("failed to read template file: %w", err)
 	}
-
-	// Convert Lua table to Go map
 	goData := luaTableToGoMap(L, data)
-
-	// Parse template
 	tmpl, err := template.New("tmpl").Parse(string(tmplBytes))
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to parse template: %v", err)))
-		return 2
+		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
-
-	// Execute template
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, goData); err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to execute template: %v", err)))
-		return 2
+		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
-
-	L.Push(lua.LString(buf.String()))
-	L.Push(lua.LNil)
-	return 2
+	return buf.String(), nil
 }
 
-// luaTableToGoMap: converts a Lua table to a Go map for template rendering
+// luaTableToGoMap: converts a Lua table to a Go map for template rendering.
 func luaTableToGoMap(L *lua.LState, tbl *lua.LTable) map[string]interface{} {
 	result := make(map[string]interface{})
 	tbl.ForEach(func(key lua.LValue, val lua.LValue) {
-		keyStr := ""
+		var keyStr string
 		if k, ok := key.(lua.LString); ok {
 			keyStr = string(k)
 		} else {
@@ -165,7 +79,7 @@ func luaTableToGoMap(L *lua.LState, tbl *lua.LTable) map[string]interface{} {
 	return result
 }
 
-// luaValueToGo: converts a Lua value to a Go value
+// luaValueToGo: converts a Lua value to a Go value for template data.
 func luaValueToGo(L *lua.LState, val lua.LValue) interface{} {
 	switch v := val.(type) {
 	case *lua.LNilType:
@@ -177,7 +91,6 @@ func luaValueToGo(L *lua.LState, val lua.LValue) interface{} {
 	case lua.LString:
 		return string(v)
 	case *lua.LTable:
-		// Check if it's an array or map
 		maxN := 0
 		isArray := true
 		v.ForEach(func(key lua.LValue, val lua.LValue) {
@@ -193,7 +106,6 @@ func luaValueToGo(L *lua.LState, val lua.LValue) interface{} {
 				isArray = false
 			}
 		})
-
 		if isArray && maxN > 0 {
 			arr := make([]interface{}, maxN)
 			for i := 1; i <= maxN; i++ {
@@ -201,9 +113,28 @@ func luaValueToGo(L *lua.LState, val lua.LValue) interface{} {
 			}
 			return arr
 		}
-
 		return luaTableToGoMap(L, v)
 	default:
 		return fmt.Sprintf("%v", v)
 	}
+}
+
+// build: constructs the module definition. Reused by Loader and Register.
+func build() *luareg.Module {
+	m := luareg.NewModule("template", "Go text/template rendering utilities")
+	m.Fn("render", render, "renders a template string with data, raises on error",
+		luareg.Args("tmpl", "data"))
+	m.Fn("render_file", renderFile, "renders a template file with data, raises on error",
+		luareg.Args("path", "data"))
+	return m
+}
+
+// Loader: gopher-lua module loader. Use with L.PreloadModule("template", template.Loader).
+func Loader(L *lua.LState) int {
+	return build().PushTo(L)
+}
+
+// Register: adds this module to reg for stub generation.
+func Register(reg *luareg.Registry) {
+	build().Register(reg)
 }

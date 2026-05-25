@@ -24,213 +24,56 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
 )
 
-// Loader: creates and returns the time module for Lua.
-// This function should be registered with L.PreloadModule("time", time.Loader)
-//
-// @luamodule time
-//
-// Example usage in Lua:
-//
-//	local time = require("time")
-//	local now = time.now()
-//	local formatted = time.format(now, "2006-01-02 15:04:05")
-func Loader(L *lua.LState) int {
-	// Create module table
-	mod := L.SetFuncs(L.NewTable(), exports)
-
-	// Push module onto stack
-	L.Push(mod)
-	return 1
-}
-
-// exports: maps Lua function names to Go implementations
-var exports = map[string]lua.LGFunction{
-	"now":           now,
-	"parse":         parse,
-	"format":        format,
-	"add":           add,
-	"diff":          diff,
-	"sleep":         sleep,
-	"to_osdate":     toOsdate,
-	"from_osdate":   fromOsdate,
-	"parse_rfc3339": parseRFC3339,
-}
-
 // now: returns the current Unix timestamp.
-//
-// @luafunc now
-// @luareturn number timestamp Current Unix timestamp (seconds since epoch)
-//
-// Example:
-//
-//	local now = time.now()
-//	print(now)  -- prints current timestamp
-func now(L *lua.LState) int {
-	L.Push(lua.LNumber(time.Now().Unix()))
-	return 1
+func now() int64 {
+	return time.Now().Unix()
 }
 
-// parse: parses a time string using Go time format layout.
-//
-// @luafunc parse
-// @luaparam timestr string The time string to parse
-// @luaparam layout string The Go time layout format (e.g., "2006-01-02 15:04:05")
-// @luareturn number timestamp Unix timestamp, or nil on error
-// @luareturn string|nil err Error message if parsing failed
-//
-// Example:
-//
-//	local ts, err = time.parse("2024-03-15 14:30:00", "2006-01-02 15:04:05")
-//	if err then
-//	    print("Error: " .. err)
-//	else
-//	    print("Timestamp: " .. ts)
-//	end
-func parse(L *lua.LState) int {
-	timeStr := L.CheckString(1)
-	layout := L.CheckString(2)
-
+// parse: parses a time string with the given Go layout; raises on failure.
+func parse(timeStr, layout string) (int64, error) {
 	t, err := time.Parse(layout, timeStr)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to parse time: %v", err)))
-		return 2
+		return 0, fmt.Errorf("failed to parse time: %w", err)
 	}
-
-	L.Push(lua.LNumber(t.Unix()))
-	L.Push(lua.LNil)
-	return 2
+	return t.Unix(), nil
 }
 
-// parseRFC3339: parses an RFC3339 time string (common in Kubernetes).
-//
-// @luafunc parse_rfc3339
-// @luaparam timestr string The RFC3339 time string (e.g., "2024-03-15T14:30:00Z")
-// @luareturn number timestamp Unix timestamp, or nil on error
-// @luareturn string|nil err Error message if parsing failed
-//
-// Example:
-//
-//	local ts, err = time.parse_rfc3339("2024-03-15T14:30:00Z")
-//	if err then
-//	    print("Error: " .. err)
-//	else
-//	    print("Timestamp: " .. ts)
-//	end
-func parseRFC3339(L *lua.LState) int {
-	timeStr := L.CheckString(1)
-
+// parseRFC3339: parses an RFC3339 time string; raises on failure.
+func parseRFC3339(timeStr string) (int64, error) {
 	t, err := time.Parse(time.RFC3339, timeStr)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to parse RFC3339 time: %v", err)))
-		return 2
+		return 0, fmt.Errorf("failed to parse RFC3339 time: %w", err)
 	}
-
-	L.Push(lua.LNumber(t.Unix()))
-	L.Push(lua.LNil)
-	return 2
+	return t.Unix(), nil
 }
 
-// format: formats a Unix timestamp using Go time format layout.
-//
-// @luafunc format
-// @luaparam timestamp number Unix timestamp
-// @luaparam layout string The Go time layout format (e.g., "2006-01-02 15:04:05")
-// @luareturn string formatted Formatted time string
-//
-// Example:
-//
-//	local formatted = time.format(1710512400, "2006-01-02 15:04:05")
-//	print(formatted)  -- prints "2024-03-15 14:30:00"
-func format(L *lua.LState) int {
-	timestamp := L.CheckNumber(1)
-	layout := L.CheckString(2)
-
-	t := time.Unix(int64(timestamp), 0).UTC()
-	formatted := t.Format(layout)
-
-	L.Push(lua.LString(formatted))
-	return 1
+// format: formats a Unix timestamp using the given Go layout.
+func format(timestamp int64, layout string) string {
+	return time.Unix(timestamp, 0).UTC().Format(layout)
 }
 
 // add: adds seconds to a Unix timestamp.
-//
-// @luafunc add
-// @luaparam timestamp number Unix timestamp
-// @luaparam seconds number Number of seconds to add (can be negative)
-// @luareturn number new_timestamp New Unix timestamp
-//
-// Example:
-//
-//	local tomorrow = time.add(time.now(), 86400)  -- add 24 hours
-//	local yesterday = time.add(time.now(), -86400)  -- subtract 24 hours
-func add(L *lua.LState) int {
-	timestamp := L.CheckNumber(1)
-	seconds := L.CheckNumber(2)
-
-	t := time.Unix(int64(timestamp), 0)
-	newTime := t.Add(time.Duration(seconds) * time.Second)
-
-	L.Push(lua.LNumber(newTime.Unix()))
-	return 1
+func add(timestamp, seconds int64) int64 {
+	return time.Unix(timestamp, 0).Add(time.Duration(seconds) * time.Second).Unix()
 }
 
-// diff: calculates the difference between two Unix timestamps.
-//
-// @luafunc diff
-// @luaparam time1 number First Unix timestamp
-// @luaparam time2 number Second Unix timestamp
-// @luareturn number seconds Difference in seconds (time1 - time2)
-//
-// Example:
-//
-//	local age = time.diff(time.now(), pod_creation_time)
-//	print("Pod is " .. age .. " seconds old")
-func diff(L *lua.LState) int {
-	time1 := L.CheckNumber(1)
-	time2 := L.CheckNumber(2)
-
-	diff := int64(time1) - int64(time2)
-
-	L.Push(lua.LNumber(diff))
-	return 1
+// diff: returns the difference in seconds (t1 - t2).
+func diff(t1, t2 int64) int64 {
+	return t1 - t2
 }
 
-// sleep: pauses execution for the specified number of seconds.
-//
-// @luafunc sleep
-// @luaparam seconds number Number of seconds to sleep
-//
-// Example:
-//
-//	print("Starting...")
-//	time.sleep(2)
-//	print("2 seconds later")
-func sleep(L *lua.LState) int {
-	seconds := L.CheckNumber(1)
-	time.Sleep(time.Duration(float64(seconds) * float64(time.Second)))
-	return 0
+// sleep: pauses execution for the given number of seconds (fractional OK).
+func sleep(seconds float64) {
+	time.Sleep(time.Duration(seconds * float64(time.Second)))
 }
 
-// toOsdate: converts a Unix timestamp to Lua os.date compatible table.
-//
-// @luafunc to_osdate
-// @luaparam timestamp number Unix timestamp
-// @luareturn table date_table Table with year, month, day, hour, min, sec, wday, yday, isdst
-//
-// Example:
-//
-//	local dt = time.to_osdate(time.now())
-//	print(dt.year .. "-" .. dt.month .. "-" .. dt.day)
-func toOsdate(L *lua.LState) int {
-	timestamp := L.CheckNumber(1)
-
-	t := time.Unix(int64(timestamp), 0).UTC()
-
+// toOsdate: converts a Unix timestamp to a Lua os.date-compatible table.
+func toOsdate(L *lua.LState, timestamp int64) *lua.LTable {
+	t := time.Unix(timestamp, 0).UTC()
 	tbl := L.NewTable()
 	tbl.RawSetString("year", lua.LNumber(t.Year()))
 	tbl.RawSetString("month", lua.LNumber(t.Month()))
@@ -240,34 +83,84 @@ func toOsdate(L *lua.LState) int {
 	tbl.RawSetString("sec", lua.LNumber(t.Second()))
 	tbl.RawSetString("wday", lua.LNumber(t.Weekday()+1)) // Lua uses 1=Sunday
 	tbl.RawSetString("yday", lua.LNumber(t.YearDay()))
-	tbl.RawSetString("isdst", lua.LBool(false)) // Go doesn't track DST in time.Time
-
-	L.Push(tbl)
-	return 1
+	tbl.RawSetString("isdst", lua.LBool(false))
+	return tbl
 }
 
-// fromOsdate: converts a Lua os.date compatible table to Unix timestamp.
-//
-// @luafunc from_osdate
-// @luaparam date_table table Table with year, month, day, hour, min, sec (other fields optional)
-// @luareturn number Unix timestamp
-//
-// Example:
-//
-//	local ts = time.from_osdate({year=2024, month=3, day=15, hour=14, min=30, sec=0})
-//	print(ts)
-func fromOsdate(L *lua.LState) int {
-	tbl := L.CheckTable(1)
+// fromOsdate: converts an os.date-compatible table to a Unix timestamp.
+// Required fields: year, month, day. Optional: hour, min, sec (default 0).
+// Raises on missing or wrong-typed required fields.
+func fromOsdate(L *lua.LState, tbl *lua.LTable) (int64, error) {
+	year, err := requireNumberField(tbl, "year")
+	if err != nil {
+		return 0, err
+	}
+	month, err := requireNumberField(tbl, "month")
+	if err != nil {
+		return 0, err
+	}
+	day, err := requireNumberField(tbl, "day")
+	if err != nil {
+		return 0, err
+	}
+	hour := optionalNumberField(tbl, "hour", 0)
+	min := optionalNumberField(tbl, "min", 0)
+	sec := optionalNumberField(tbl, "sec", 0)
 
-	year := int(tbl.RawGetString("year").(lua.LNumber))
-	month := time.Month(tbl.RawGetString("month").(lua.LNumber))
-	day := int(tbl.RawGetString("day").(lua.LNumber))
-	hour := int(tbl.RawGetString("hour").(lua.LNumber))
-	min := int(tbl.RawGetString("min").(lua.LNumber))
-	sec := int(tbl.RawGetString("sec").(lua.LNumber))
+	t := time.Date(year, time.Month(month), day, hour, min, sec, 0, time.UTC)
+	return t.Unix(), nil
+}
 
-	t := time.Date(year, month, day, hour, min, sec, 0, time.UTC)
+// requireNumberField: extracts a numeric field from a Lua table; errors if
+// missing or not a number.
+func requireNumberField(tbl *lua.LTable, name string) (int, error) {
+	v := tbl.RawGetString(name)
+	n, ok := v.(lua.LNumber)
+	if !ok {
+		return 0, fmt.Errorf("field %q is required and must be a number, got %s", name, v.Type())
+	}
+	return int(n), nil
+}
 
-	L.Push(lua.LNumber(t.Unix()))
-	return 1
+// optionalNumberField: extracts an optional numeric field, returning def if
+// absent or wrong-typed.
+func optionalNumberField(tbl *lua.LTable, name string, def int) int {
+	v := tbl.RawGetString(name)
+	if n, ok := v.(lua.LNumber); ok {
+		return int(n)
+	}
+	return def
+}
+
+// build: constructs the module definition. Reused by Loader and Register.
+func build() *luareg.Module {
+	m := luareg.NewModule("time", "time and date utilities")
+	m.Fn("now", now, "returns the current Unix timestamp")
+	m.Fn("parse", parse, "parses a time string with a Go layout, raises on error",
+		luareg.Args("timestr", "layout"))
+	m.Fn("parse_rfc3339", parseRFC3339, "parses an RFC3339 time string, raises on error",
+		luareg.Args("timestr"))
+	m.Fn("format", format, "formats a Unix timestamp with a Go layout",
+		luareg.Args("timestamp", "layout"))
+	m.Fn("add", add, "adds seconds to a Unix timestamp",
+		luareg.Args("timestamp", "seconds"))
+	m.Fn("diff", diff, "returns the difference in seconds between two timestamps (t1 - t2)",
+		luareg.Args("t1", "t2"))
+	m.Fn("sleep", sleep, "pauses execution for the given number of seconds",
+		luareg.Args("seconds"))
+	m.Fn("to_osdate", toOsdate, "converts a Unix timestamp to an os.date-compatible table",
+		luareg.Args("timestamp"))
+	m.Fn("from_osdate", fromOsdate, "converts an os.date-compatible table to a Unix timestamp, raises on invalid input",
+		luareg.Args("date_table"))
+	return m
+}
+
+// Loader: gopher-lua module loader. Use with L.PreloadModule("time", time.Loader).
+func Loader(L *lua.LState) int {
+	return build().PushTo(L)
+}
+
+// Register: adds this module to reg for stub generation.
+func Register(reg *luareg.Registry) {
+	build().Register(reg)
 }

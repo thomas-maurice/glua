@@ -3,44 +3,51 @@
 ---@class time
 local time = {}
 
----@return number timestamp Current Unix timestamp (seconds since epoch)
+--- returns the current Unix timestamp
+---@return number
 function time.now() end
 
----@param timestr string The time string to parse
----@param layout string The Go time layout format (e.g., "2006-01-02 15:04:05")
----@return number timestamp Unix timestamp, or nil on error
----@return string|nil err Error message if parsing failed
+--- parses a time string with a Go layout, raises on error
+---@param timestr string
+---@param layout string
+---@return number
 function time.parse(timestr, layout) end
 
----@param timestr string The RFC3339 time string (e.g., "2024-03-15T14:30:00Z")
----@return number timestamp Unix timestamp, or nil on error
----@return string|nil err Error message if parsing failed
+--- parses an RFC3339 time string, raises on error
+---@param timestr string
+---@return number
 function time.parse_rfc3339(timestr) end
 
----@param timestamp number Unix timestamp
----@param layout string The Go time layout format (e.g., "2006-01-02 15:04:05")
----@return string formatted Formatted time string
+--- formats a Unix timestamp with a Go layout
+---@param timestamp number
+---@param layout string
+---@return string
 function time.format(timestamp, layout) end
 
----@param timestamp number Unix timestamp
----@param seconds number Number of seconds to add (can be negative)
----@return number new_timestamp New Unix timestamp
+--- adds seconds to a Unix timestamp
+---@param timestamp number
+---@param seconds number
+---@return number
 function time.add(timestamp, seconds) end
 
----@param time1 number First Unix timestamp
----@param time2 number Second Unix timestamp
----@return number seconds Difference in seconds (time1 - time2)
-function time.diff(time1, time2) end
+--- returns the difference in seconds between two timestamps (t1 - t2)
+---@param t1 number
+---@param t2 number
+---@return number
+function time.diff(t1, t2) end
 
----@param seconds number Number of seconds to sleep
+--- pauses execution for the given number of seconds
+---@param seconds number
 function time.sleep(seconds) end
 
----@param timestamp number Unix timestamp
----@return table date_table Table with year, month, day, hour, min, sec, wday, yday, isdst
+--- converts a Unix timestamp to an os.date-compatible table
+---@param timestamp number
+---@return gopher-lua.LTable
 function time.to_osdate(timestamp) end
 
----@param date_table table Table with year, month, day, hour, min, sec (other fields optional)
----@return number Unix timestamp
+--- converts an os.date-compatible table to a Unix timestamp, raises on invalid input
+---@param date_table gopher-lua.LTable
+---@return number
 function time.from_osdate(date_table) end
 
 return time

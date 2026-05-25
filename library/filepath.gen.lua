@@ -3,34 +3,40 @@
 ---@class filepath
 local filepath = {}
 
----@param ... string Path elements to join
----@return string The joined path
-function filepath.join(...) end
+--- joins a table of path elements into a single path
+---@param elem string[]
+---@return string
+function filepath.join(elem) end
 
----@param path string The path to split
----@return string The directory part
----@return string The file part
+--- splits a path into directory and file components
+---@param path string
+---@return string
+---@return string
 function filepath.split(path) end
 
----@param path string The path to make absolute
----@return string The absolute path
----@return string|nil Error message if operation failed
+--- returns the absolute form of the path, raises on error
+---@param path string
+---@return string
 function filepath.abs(path) end
 
----@param path string The file path
----@return string The file extension (including the dot)
+--- returns the file extension including the dot
+---@param path string
+---@return string
 function filepath.ext(path) end
 
----@param path string The file path
----@return string The base name
+--- returns the last element of the path
+---@param path string
+---@return string
 function filepath.base(path) end
 
----@param path string The file path
----@return string The directory path
+--- returns all but the last element of the path
+---@param path string
+---@return string
 function filepath.dir(path) end
 
----@param path string The path to clean
----@return string The cleaned path
+--- returns the shortest path equivalent to path
+---@param path string
+---@return string
 function filepath.clean(path) end
 
 return filepath

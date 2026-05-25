@@ -5,5 +5,5 @@
 -- via L.SetGlobal() before running this script.
 
 local k8s = require("kubernetes")
-local result, err = k8s.format_time(test_timestamp)
-return result, err
+local result = k8s.format_time(test_timestamp)
+return result

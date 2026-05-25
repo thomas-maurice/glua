@@ -23,100 +23,51 @@ package osmod
 import (
 	"os"
 
+	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
 )
 
-// Loader: creates the osmod Lua module
-//
-// @luamodule osmod
+// setenv: sets an environment variable; raises on error, returns true on success.
+func setenv(name, value string) (bool, error) {
+	if err := os.Setenv(name, value); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// unsetenv: unsets an environment variable; raises on error, returns true on success.
+func unsetenv(name string) (bool, error) {
+	if err := os.Unsetenv(name); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// hostname: returns the system hostname; raises on error.
+func hostname() (string, error) {
+	return os.Hostname()
+}
+
+// build: constructs the module definition. Reused by Loader and Register.
+func build() *luareg.Module {
+	m := luareg.NewModule("osmod", "operating system utilities")
+	m.Fn("getenv", os.Getenv, "returns the value of an environment variable",
+		luareg.Args("name"))
+	m.Fn("setenv", setenv, "sets an environment variable, raises on error",
+		luareg.Args("name", "value"))
+	m.Fn("unsetenv", unsetenv, "unsets an environment variable, raises on error",
+		luareg.Args("name"))
+	m.Fn("hostname", hostname, "returns the system hostname, raises on error")
+	m.Fn("tmpdir", os.TempDir, "returns the default temporary directory path")
+	return m
+}
+
+// Loader: gopher-lua module loader. Use with L.PreloadModule("osmod", osmod.Loader).
 func Loader(L *lua.LState) int {
-	mod := L.SetFuncs(L.NewTable(), exports)
-	L.Push(mod)
-	return 1
+	return build().PushTo(L)
 }
 
-var exports = map[string]lua.LGFunction{
-	"getenv":   getenv,
-	"setenv":   setenv,
-	"unsetenv": unsetenv,
-	"hostname": hostname,
-	"tmpdir":   tmpdir,
-}
-
-// getenv: gets the value of an environment variable
-//
-// @luafunc getenv
-// @luaparam name string The environment variable name
-// @luareturn string The value of the environment variable (empty string if not set)
-func getenv(L *lua.LState) int {
-	name := L.CheckString(1)
-	value := os.Getenv(name)
-	L.Push(lua.LString(value))
-	return 1
-}
-
-// setenv: sets the value of an environment variable
-//
-// @luafunc setenv
-// @luaparam name string The environment variable name
-// @luaparam value string The value to set
-// @luareturn string|nil Error message if operation failed
-func setenv(L *lua.LState) int {
-	name := L.CheckString(1)
-	value := L.CheckString(2)
-
-	err := os.Setenv(name, value)
-	if err != nil {
-		L.Push(lua.LString(err.Error()))
-		return 1
-	}
-
-	L.Push(lua.LNil)
-	return 1
-}
-
-// unsetenv: unsets an environment variable
-//
-// @luafunc unsetenv
-// @luaparam name string The environment variable name
-// @luareturn string|nil Error message if operation failed
-func unsetenv(L *lua.LState) int {
-	name := L.CheckString(1)
-
-	err := os.Unsetenv(name)
-	if err != nil {
-		L.Push(lua.LString(err.Error()))
-		return 1
-	}
-
-	L.Push(lua.LNil)
-	return 1
-}
-
-// hostname: gets the system hostname
-//
-// @luafunc hostname
-// @luareturn string The hostname
-// @luareturn string|nil Error message if operation failed
-func hostname(L *lua.LState) int {
-	hostname, err := os.Hostname()
-	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(err.Error()))
-		return 2
-	}
-
-	L.Push(lua.LString(hostname))
-	L.Push(lua.LNil)
-	return 2
-}
-
-// tmpdir: gets the system temporary directory path
-//
-// @luafunc tmpdir
-// @luareturn string The temporary directory path
-func tmpdir(L *lua.LState) int {
-	tmpdir := os.TempDir()
-	L.Push(lua.LString(tmpdir))
-	return 1
+// Register: adds this module to reg for stub generation.
+func Register(reg *luareg.Registry) {
+	build().Register(reg)
 }

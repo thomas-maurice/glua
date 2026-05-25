@@ -41,19 +41,20 @@ for i, container in ipairs(pod.spec.containers) do
         environmentVariables = {}
     }
 
-    -- Parse resources
+    -- Parse resources. Q5: parse_cpu/parse_memory raise on malformed input —
+    -- use pcall to skip a single bad container rather than abort the report.
     if container.resources.limits then
         if container.resources.limits["cpu"] then
-            local cpu, err = k8s.parse_cpu(container.resources.limits["cpu"])
-            if not err then
+            local ok, cpu = pcall(k8s.parse_cpu, container.resources.limits["cpu"])
+            if ok then
                 containerData.resources.cpu = cpu
                 report.totalResources.cpuMillicores = report.totalResources.cpuMillicores + cpu
             end
         end
 
         if container.resources.limits["memory"] then
-            local mem, err = k8s.parse_memory(container.resources.limits["memory"])
-            if not err then
+            local ok, mem = pcall(k8s.parse_memory, container.resources.limits["memory"])
+            if ok then
                 containerData.resources.memory = mem
                 report.totalResources.memoryBytes = report.totalResources.memoryBytes + mem
             end

@@ -8,11 +8,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	lua "github.com/yuin/gopher-lua"
 )
 
 func TestGet(t *testing.T) {
-	// Create test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
 			t.Errorf("Expected GET request, got %s", r.Method)
@@ -25,20 +25,15 @@ func TestGet(t *testing.T) {
 
 	L := lua.NewState()
 	defer L.Close()
-
 	L.PreloadModule("http", Loader)
 
 	code := `
 		local http = require("http")
-		local resp, err = http.get("` + server.URL + `")
-		assert(err == nil, "Expected no error: " .. tostring(err))
+		local resp = http.get("` + server.URL + `", nil)
 		assert(resp.status == 200, "Expected status 200, got " .. resp.status)
 		assert(resp.body == '{"message":"hello"}', "Expected correct body")
 	`
-
-	if err := L.DoString(code); err != nil {
-		t.Fatalf("Failed to execute Lua code: %v", err)
-	}
+	require.NoError(t, L.DoString(code))
 }
 
 func TestPost(t *testing.T) {
@@ -53,19 +48,14 @@ func TestPost(t *testing.T) {
 
 	L := lua.NewState()
 	defer L.Close()
-
 	L.PreloadModule("http", Loader)
 
 	code := `
 		local http = require("http")
-		local resp, err = http.post("` + server.URL + `", "test body", {["Content-Type"] = "text/plain"})
-		assert(err == nil, "Expected no error")
+		local resp = http.post("` + server.URL + `", "test body", {["Content-Type"] = "text/plain"})
 		assert(resp.status == 201, "Expected status 201")
 	`
-
-	if err := L.DoString(code); err != nil {
-		t.Fatalf("Failed to execute Lua code: %v", err)
-	}
+	require.NoError(t, L.DoString(code))
 }
 
 func TestHeaders(t *testing.T) {
@@ -81,19 +71,14 @@ func TestHeaders(t *testing.T) {
 
 	L := lua.NewState()
 	defer L.Close()
-
 	L.PreloadModule("http", Loader)
 
 	code := `
 		local http = require("http")
-		local resp, err = http.get("` + server.URL + `", {["Authorization"] = "Bearer token123"})
-		assert(err == nil, "Expected no error")
+		local resp = http.get("` + server.URL + `", {["Authorization"] = "Bearer token123"})
 		assert(resp.status == 200, "Expected status 200")
 	`
-
-	if err := L.DoString(code); err != nil {
-		t.Fatalf("Failed to execute Lua code: %v", err)
-	}
+	require.NoError(t, L.DoString(code))
 }
 
 func TestRequest(t *testing.T) {
@@ -107,35 +92,27 @@ func TestRequest(t *testing.T) {
 
 	L := lua.NewState()
 	defer L.Close()
-
 	L.PreloadModule("http", Loader)
 
 	code := `
 		local http = require("http")
-		local resp, err = http.request("PATCH", "` + server.URL + `", "patch body")
-		assert(err == nil, "Expected no error")
+		local resp = http.request("PATCH", "` + server.URL + `", "patch body", nil)
 		assert(resp.status == 200, "Expected status 200")
 	`
-
-	if err := L.DoString(code); err != nil {
-		t.Fatalf("Failed to execute Lua code: %v", err)
-	}
+	require.NoError(t, L.DoString(code))
 }
 
+// TestInvalidURL: invalid URL raises a Lua error.
 func TestInvalidURL(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
-
 	L.PreloadModule("http", Loader)
 
 	code := `
 		local http = require("http")
-		local resp, err = http.get("not-a-valid-url")
-		assert(resp == nil, "Expected nil response")
-		assert(err ~= nil, "Expected error")
+		local ok, err = pcall(http.get, "not-a-valid-url", nil)
+		assert(not ok, "Expected error for invalid URL")
+		assert(type(err) == "string", "Error should be a string")
 	`
-
-	if err := L.DoString(code); err != nil {
-		t.Fatalf("Failed to execute Lua code: %v", err)
-	}
+	require.NoError(t, L.DoString(code))
 }

@@ -81,18 +81,17 @@ Or create a `.luarc.json` in your project root:
 
 Now you'll get autocomplete for all glua modules in your Lua scripts!
 
-### Installing stubgen Binary (Optional)
+### Installing glua-gen (Optional)
 
-If you want to generate stubs for your own modules:
+`glua-gen` regenerates `library/*.gen.lua` for glua's own built-in modules.
+Most users embedding glua will instead write a tiny `tools/stubgen/main.go`
+in their own project (see [Embedding glua](#embedding-glua-in-your-project) below) — that
+covers both glua's modules and any custom modules you add. `glua-gen` is only
+useful if you want glua's stubs alone without writing any Go boilerplate.
 
 ```bash
-# Linux/macOS
-VERSION=v0.0.12  # Replace with the latest version
-curl -sL https://github.com/thomas-maurice/glua/releases/download/${VERSION}/stubgen_${VERSION}_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/').tar.gz | tar xz
-sudo mv stubgen /usr/local/bin/
-
-# Verify installation
-stubgen --help
+go install github.com/thomas-maurice/glua/cmd/glua-gen@latest
+glua-gen -out ./library
 ```
 
 ### Cloning the Repository
@@ -145,7 +144,7 @@ func main() {
         local k8s = require("kubernetes")
         local pod = myPod
 
-        -- Parse Kubernetes quantities
+        -- Parse Kubernetes quantities (raise on invalid input)
         local memBytes = k8s.parse_memory(pod.spec.containers[1].resources.limits["memory"])
         local cpuMillis = k8s.parse_cpu(pod.spec.containers[1].resources.limits["cpu"])
         local timestamp = k8s.parse_time(pod.metadata.creationTimestamp)
@@ -191,7 +190,7 @@ make help
 
 Built binaries:
 
-- `bin/stubgen` - Generates Lua LSP stubs for IDE autocomplete
+- `bin/glua-gen` - Generates Lua LSP stubs for IDE autocomplete
 - `bin/example` - Complete working example with all features
 
 ### Go to Lua Conversion
@@ -327,23 +326,23 @@ Use in Lua:
 local k8s = require("kubernetes")
 
 -- Parse memory quantities (returns bytes)
-local memBytes, err = k8s.parse_memory("256Mi")  -- 268435456
-local memBytes2 = k8s.parse_memory("1Gi")         -- 1073741824
+local memBytes = k8s.parse_memory("256Mi")   -- 268435456
+local memBytes2 = k8s.parse_memory("1Gi")    -- 1073741824
 
 -- Parse CPU quantities (returns millicores)
-local cpuMillis, err = k8s.parse_cpu("100m")     -- 100
-local cpuMillis2 = k8s.parse_cpu("1.5")          -- 1500
+local cpuMillis = k8s.parse_cpu("100m")      -- 100
+local cpuMillis2 = k8s.parse_cpu("1.5")      -- 1500
 
 -- Parse timestamps (returns Unix timestamp)
-local timestamp, err = k8s.parse_time("2025-10-03T16:39:00Z")  -- 1759509540
+local timestamp = k8s.parse_time("2025-10-03T16:39:00Z")  -- 1759509540
 
 -- Format timestamps (Unix timestamp → RFC3339 string)
-local timeStr, err = k8s.format_time(1759509540)  -- "2025-10-03T16:39:00Z"
+local timeStr = k8s.format_time(1759509540)  -- "2025-10-03T16:39:00Z"
 
--- All functions return (value, error) tuple
-local bytes, err = k8s.parse_memory("invalid")
-if err then
-    print("Parse error: " .. err)
+-- All functions raise on error; use pcall to handle errors gracefully
+local ok, err = pcall(k8s.parse_memory, "invalid")
+if not ok then
+    print("Parse error: " .. tostring(err))
 end
 ```
 
@@ -356,13 +355,13 @@ local pod = myPod
 for i, container in ipairs(pod.spec.containers) do
     print("Container: " .. container.name)
 
-    -- Parse memory limit
+    -- Parse memory limit (raises on invalid input)
     if container.resources.limits["memory"] then
         local memBytes = k8s.parse_memory(container.resources.limits["memory"])
         print(string.format("  Memory limit: %.2f MB", memBytes / (1024 * 1024)))
     end
 
-    -- Parse CPU limit
+    -- Parse CPU limit (raises on invalid input)
     if container.resources.limits["cpu"] then
         local cpuMillis = k8s.parse_cpu(container.resources.limits["cpu"])
         print(string.format("  CPU limit: %d millicores", cpuMillis))
@@ -386,12 +385,13 @@ L.PreloadModule("k8sclient", k8sclient.Loader(config))
 Use in Lua:
 
 ```lua
-local client = require("k8sclient")
+local k8sclient = require("k8sclient")
+local client = k8sclient.new_client()
 
--- Define GVK (Group/Version/Kind)
+-- Define GVK (or use predefined constants like k8sclient.POD)
 local pod_gvk = {group = "", version = "v1", kind = "Pod"}
 
--- Create a Pod
+-- Create a Pod (raises on error)
 local pod = {
     apiVersion = "v1",
     kind = "Pod",
@@ -403,23 +403,23 @@ local pod = {
         }}
     }
 }
-local created, err = client.create(pod)
+local created = client:create(pod)
 
--- Get a resource
-local fetched, err = client.get(pod_gvk, "default", "nginx")
+-- Get a resource (raises on error)
+local fetched = client:get(pod_gvk, "default", "nginx")
 
--- Update a resource
+-- Update a resource (raises on error)
 fetched.metadata.labels = {app = "web"}
-local updated, err = client.update(fetched)
+local updated = client:update(fetched)
 
--- List resources
-local pods, err = client.list(pod_gvk, "default")
+-- List resources (raises on error)
+local pods = client:list(pod_gvk, "default")
 for i, pod in ipairs(pods) do
     print(pod.metadata.name)
 end
 
--- Delete a resource
-local err = client.delete(pod_gvk, "default", "nginx")
+-- Delete a resource (raises on error)
+client:delete(pod_gvk, "default", "nginx")
 ```
 
 **Complete Example:** See [example/k8sclient/](./example/k8sclient) for a full working example with nginx Pod, ConfigMaps, and Kind cluster integration.
@@ -451,13 +451,14 @@ if err != nil {
 -- Lua side
 local k8s = require("kubernetes")
 
-local bytes, err = k8s.parse_memory("256Mi")
-if err then
-    print("Error: " .. err)
+-- Functions raise on error; use pcall to handle gracefully
+local ok, result = pcall(k8s.parse_memory, "256Mi")
+if not ok then
+    print("Error: " .. tostring(result))
     return
 end
 
-print("Parsed successfully: " .. bytes)
+print("Parsed successfully: " .. result)
 ```
 
 ### Round-Trip Integrity
@@ -499,569 +500,371 @@ This works for:
 
 ## Creating Custom Lua Modules
 
-### Step 1: Create Module
+A glua module is a Go package that exposes idiomatic Go functions and types to
+Lua. You write plain Go (no `lua.LState` plumbing), `luareg` handles argument
+conversion, error propagation, and UserData wrapping via reflection. The same
+metadata that wires runtime calls also drives stub generation — the LSP gets
+proper type-annotated autocomplete for free.
 
-You can create two types of Lua modules: **function-based modules** (simple) and **UserData-based modules** (for stateful objects).
+This walk-through builds one complete `widget` module that exercises every
+mechanism: plain functions, structs that cross the boundary, a stateful class
+with methods, structured errors, and module-level constants. The final form
+runs as-is; copy and adapt.
 
-#### Option A: Simple Function-Based Module
+### 1. Plain Go
 
-Create `pkg/modules/mymodule/mymodule.go`:
+Start with idiomatic Go. The module has zero awareness of Lua at this point.
 
 ```go
-package mymodule
+package widget
 
+import "errors"
+
+// Order is a value that crosses the boundary as a Lua table. The json tags
+// become Lua field names AND the field names in the generated stub.
+type Order struct {
+    ID    string  `json:"id"`
+    Total float64 `json:"total"`
+    Items int     `json:"items"`
+}
+
+// Receipt: what the script gets back from CalculateReceipt.
+type Receipt struct {
+    OrderID string  `json:"order_id"`
+    Tax     float64 `json:"tax"`
+    Grand   float64 `json:"grand_total"`
+}
+
+// CalculateReceipt: function-style. (Receipt, error) → Lua returns the
+// Receipt on success, raises on non-nil error.
+func CalculateReceipt(o Order, taxRate float64) (Receipt, error) {
+    if o.Total < 0 {
+        return Receipt{}, errors.New("negative total")
+    }
+    tax := o.Total * taxRate
+    return Receipt{OrderID: o.ID, Tax: tax, Grand: o.Total + tax}, nil
+}
+
+// Cart: a stateful object exposed as a Lua UserData class.
+type Cart struct{ items []string }
+
+func NewCart() *Cart                    { return &Cart{} }
+func (c *Cart) Add(item string)         { c.items = append(c.items, item) }
+func (c *Cart) Items() []string         { return c.items }
+func (c *Cart) Size() int               { return len(c.items) }
+func (c *Cart) Pop() (string, error) {
+    if len(c.items) == 0 {
+        // Structured error: Lua receives a {message, kind} table rather
+        // than a string. Useful so pcall callers can dispatch on err.kind.
+        return "", &luareg.Error{Kind: "Empty", Message: "cart is empty"}
+    }
+    n := len(c.items) - 1
+    last, c.items = c.items[n], c.items[:n]
+    return last, nil
+}
+```
+
+The `Cart` is intentionally a normal Go type — no `lua.LState` in any
+signature. The Lua bridge is added in step 2.
+
+### 2. Register with `luareg`
+
+```go
 import (
+    "github.com/thomas-maurice/glua/pkg/luareg"
     lua "github.com/yuin/gopher-lua"
 )
 
-// Loader: creates the mymodule Lua module
-//
-// @luamodule mymodule
-func Loader(L *lua.LState) int {
-    mod := L.SetFuncs(L.NewTable(), exports)
-    L.Push(mod)
-    return 1
+// build: constructs the module definition once. Loader and Register both
+// reuse it — Loader to push into a Lua state, Register to record metadata
+// for stub generation.
+func build() *luareg.Module {
+    m := luareg.NewModule("widget", "widget business logic")
+
+    // Module-level function. Reflection inspects CalculateReceipt's signature
+    // and generates the Lua wrapper. Args/ArgDoc/ReturnDoc enrich the stubs.
+    m.Fn("calculate_receipt", CalculateReceipt, "compute tax and grand total",
+        luareg.Args("order", "tax_rate"),
+        luareg.ArgDoc("order", "the order to bill"),
+        luareg.ArgDoc("tax_rate", "tax rate in [0,1]"),
+        luareg.ReturnDoc(0, "receipt", "the computed receipt"),
+    )
+
+    // Class registration. The [*Cart] type parameter is the receiver type;
+    // no instance is required. Methods are passed as Go method expressions.
+    cart := luareg.NewClass[*Cart]("widget.Cart", "a mutable shopping cart")
+    cart.Method("add",   (*Cart).Add,   "add an item",          luareg.Args("item"))
+    cart.Method("items", (*Cart).Items, "return all items")
+    cart.Method("size",  (*Cart).Size,  "return the number of items")
+    cart.Method("pop",   (*Cart).Pop,   "remove and return the last item; raises Empty if no items")
+    m.RegisterClass(cart)
+
+    // Factory. Returning *Cart auto-wraps the value as Lua UserData bound
+    // to the widget.Cart metatable.
+    m.Fn("new_cart", NewCart, "create a new empty cart")
+
+    // Module-level constant. Set on the Lua module table at PushTo time;
+    // also emitted as a ---@field annotation in the stub.
+    m.Const("DEFAULT_TAX_RATE", 0.2, "number", "default sales-tax rate")
+
+    return m
 }
 
-var exports = map[string]lua.LGFunction{
-    "greet": greet,
-    "add":   add,
-}
+// Loader: gopher-lua module entry point.
+//   L.PreloadModule("widget", widget.Loader)
+func Loader(L *lua.LState) int { return build().PushTo(L) }
 
-// greet: returns a personalized greeting
-//
-// @luafunc greet
-// @luaparam name string The name to greet
-// @luareturn string The greeting message
-func greet(L *lua.LState) int {
-    name := L.CheckString(1)
-    L.Push(lua.LString("Hello, " + name + "!"))
-    return 1
-}
-
-// add: adds two numbers
-//
-// @luafunc add
-// @luaparam a number First number
-// @luaparam b number Second number
-// @luareturn number Sum of a and b
-// @luareturn string|nil Error message if any
-func add(L *lua.LState) int {
-    a := L.CheckNumber(1)
-    b := L.CheckNumber(2)
-    L.Push(lua.LNumber(a + b))
-    L.Push(lua.LNil)
-    return 2
-}
+// Register: stub-generation entry point. Called by the host's tools/stubgen.
+func Register(reg *luareg.Registry) { build().Register(reg) }
 ```
 
-#### Option B: UserData-Based Module (Stateful Objects)
+Notes:
 
-For modules that need to maintain state or provide object-oriented APIs, use UserData. This example shows how to create a Logger object with methods (like the built-in `log` module):
+- `build()` is the single source of truth — both runtime and stub generation
+  use it, so they cannot drift.
+- For methods that genuinely need access to the Lua stack (e.g. true variadic
+  args), use `*lua.LState` as the second parameter after the receiver. It is
+  invisible to argument counting and stubs. See `pkg/modules/log/log.go` for
+  the `Logger:with` pattern.
+- Module-level constants are set on the module table at `PushTo` time, and
+  also appear as `---@field NAME type doc` annotations in the stub.
 
-Create `pkg/modules/counter/counter.go`:
+### 3. Use from Lua
+
+Once `widget.Loader` is preloaded into a `*lua.LState`, scripts can use it:
+
+```lua
+local widget = require("widget")
+
+-- Function-style call: struct arg in, struct result out.
+local order = {id = "A-100", total = 50.0, items = 3}
+local receipt = widget.calculate_receipt(order, widget.DEFAULT_TAX_RATE)
+print(receipt.grand_total)   -- 60.0
+
+-- UserData class with : method syntax.
+local cart = widget.new_cart()
+cart:add("apple")
+cart:add("bread")
+print(cart:size())           -- 2
+print(cart:pop())            -- bread
+
+-- Structured error: pcall returns a table the caller can dispatch on.
+cart:pop()                   -- ok
+local ok, err = pcall(function() return cart:pop() end)
+if not ok and type(err) == "table" and err.kind == "Empty" then
+    print("nothing left in the cart")
+end
+```
+
+### 4. Testing
+
+Test your module the same way glua tests its own: spin up a real `lua.LState`,
+preload the module, run a Lua snippet, assert outcomes. No mocks.
 
 ```go
-package counter
+package widget_test
 
 import (
+    "testing"
+
+    "github.com/stretchr/testify/require"
+    "github.com/thomas-maurice/glua/example/widget"
     lua "github.com/yuin/gopher-lua"
 )
 
-const counterTypeName = "counter.Counter"
+func TestCalculateReceipt(t *testing.T) {
+    L := lua.NewState()
+    defer L.Close()
+    L.PreloadModule("widget", widget.Loader)
 
-// Counter: a simple counter object
-type Counter struct {
-    value int
+    require.NoError(t, L.DoString(`
+        local widget = require("widget")
+        local r = widget.calculate_receipt({id = "X", total = 100, items = 1}, 0.2)
+        assert(r.grand_total == 120, "got " .. r.grand_total)
+    `))
 }
 
-// Loader: creates the counter Lua module
-//
-// @luamodule counter
-func Loader(L *lua.LState) int {
-    // Register the Counter type with methods
-    registerCounterType(L)
+func TestCartEmptyPopRaisesStructured(t *testing.T) {
+    L := lua.NewState()
+    defer L.Close()
+    L.PreloadModule("widget", widget.Loader)
 
-    // Create module table with functions
-    mod := L.SetFuncs(L.NewTable(), exports)
-    L.Push(mod)
-    return 1
-}
-
-var exports = map[string]lua.LGFunction{
-    "new": newCounter,
-}
-
-// registerCounterType: registers the Counter UserData type with its metatable
-func registerCounterType(L *lua.LState) {
-    mt := L.NewTypeMetatable(counterTypeName)
-    L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), counterMethods))
-}
-
-// counterMethods: map of Counter object methods
-var counterMethods = map[string]lua.LGFunction{
-    "increment": counterIncrement,
-    "decrement": counterDecrement,
-    "get":       counterGet,
-    "reset":     counterReset,
-}
-
-// wrapCounter: wraps a Counter in UserData for use in Lua
-func wrapCounter(L *lua.LState, c *Counter) *lua.LUserData {
-    ud := L.NewUserData()
-    ud.Value = c
-    L.SetMetatable(ud, L.GetTypeMetatable(counterTypeName))
-    return ud
-}
-
-// checkCounter: extracts Counter from UserData
-func checkCounter(L *lua.LState, n int) *Counter {
-    ud := L.CheckUserData(n)
-    if c, ok := ud.Value.(*Counter); ok {
-        return c
-    }
-    L.ArgError(n, "Counter expected")
-    return nil
-}
-
-// newCounter: creates a new Counter object
-//
-// @luafunc new
-// @luaparam initialValue number Optional initial value (default: 0)
-// @luareturn counter.Counter counter.Counter A new counter object
-func newCounter(L *lua.LState) int {
-    initialValue := 0
-    if L.GetTop() >= 1 {
-        initialValue = int(L.CheckNumber(1))
-    }
-
-    counter := &Counter{value: initialValue}
-    ud := wrapCounter(L, counter)
-    L.Push(ud)
-    return 1
-}
-
-// counterIncrement: increments the counter
-//
-// @luamethod counter.Counter increment
-// @luaparam self counter.Counter The counter object
-// @luaparam amount number Optional amount to add (default: 1)
-func counterIncrement(L *lua.LState) int {
-    c := checkCounter(L, 1)
-    amount := 1
-    if L.GetTop() >= 2 {
-        amount = int(L.CheckNumber(2))
-    }
-    c.value += amount
-    return 0
-}
-
-// counterDecrement: decrements the counter
-//
-// @luamethod counter.Counter decrement
-// @luaparam self counter.Counter The counter object
-// @luaparam amount number Optional amount to subtract (default: 1)
-func counterDecrement(L *lua.LState) int {
-    c := checkCounter(L, 1)
-    amount := 1
-    if L.GetTop() >= 2 {
-        amount = int(L.CheckNumber(2))
-    }
-    c.value -= amount
-    return 0
-}
-
-// counterGet: gets the current counter value
-//
-// @luamethod counter.Counter get
-// @luaparam self counter.Counter The counter object
-// @luareturn number The current counter value
-func counterGet(L *lua.LState) int {
-    c := checkCounter(L, 1)
-    L.Push(lua.LNumber(c.value))
-    return 1
-}
-
-// counterReset: resets the counter to zero
-//
-// @luamethod counter.Counter reset
-// @luaparam self counter.Counter The counter object
-func counterReset(L *lua.LState) int {
-    c := checkCounter(L, 1)
-    c.value = 0
-    return 0
+    require.NoError(t, L.DoString(`
+        local widget = require("widget")
+        local cart = widget.new_cart()
+        local ok, err = pcall(function() return cart:pop() end)
+        assert(not ok)
+        assert(type(err) == "table" and err.kind == "Empty", "expected Empty error")
+    `))
 }
 ```
 
-**Usage in Lua:**
+For a real-world example with file-glob-loaded testdata, see
+`pkg/modules/strings/strings_test.go` and `pkg/modules/strings/testdata/*.lua`.
 
-```lua
-local counter = require("counter")
+### Error handling recap
 
--- Create counter objects
-local c1 = counter.new()
-local c2 = counter.new(10)
+Go `error` returns auto-raise on the Lua side. There are two flavours:
 
--- Use object methods with : notation
-c1:increment()
-c1:increment(5)
-print(c1:get())  -- 6
+- **Plain `errors.New(...)` / `fmt.Errorf(...)`** raises a Lua string error.
+  Catch with `pcall`; `err` is a string.
+- **`*luareg.Error{Kind, Message}`** raises a Lua table `{kind=..., message=...}`.
+  Catch with `pcall`; branch on `err.kind`. Use this when callers genuinely
+  need to dispatch on the failure category (NotFound, Expired, …) rather
+  than string-match.
 
-c2:decrement()
-print(c2:get())  -- 9
+The `(value, err)` tuple-return pattern from the pre-luareg era is gone.
 
-c1:reset()
-print(c1:get())  -- 0
-```
-
-**Key concepts for UserData objects:**
-
-1. **Type Name**: Unique identifier for your UserData type (e.g., `"counter.Counter"`)
-2. **Metatable**: Defines methods available on your object via `__index`
-3. **Wrapper Function**: `wrapCounter()` creates UserData from Go struct
-4. **Checker Function**: `checkCounter()` extracts Go struct from UserData
-5. **Method Signature**: Methods use `:` notation in Lua, which implicitly passes `self` as first argument
-6. **Annotations**: Use `@luamethod ModuleName.ClassName methodName` for methods vs `@luafunc` for module functions
-
-**See also:** The built-in `log` module (`pkg/modules/log/`) is a complete real-world example of UserData objects with proper stub generation.
-
-### Step 2: Generate Stubs with stubgen
-
-The stubgen tool scans your Go code for special annotations and generates Lua LSP stubs for IDE autocomplete.
-
-**Run stubgen:**
+### Generating stubs
 
 ```bash
-# Scan pkg/modules directory and generate stubs in library/
-make stubgen
-
-# Or manually:
-go run ./cmd/stubgen -dir pkg/modules -output-dir library
-
-# For a single combined file:
-go run ./cmd/stubgen -dir pkg/modules -output mymodules.gen.lua
+# From the glua repo root:
+make gen-stubs
+# or:
+go run ./cmd/glua-gen -out library
 ```
 
-**What stubgen looks for:**
+This writes one `library/<module>.gen.lua` file per registered module. The generated files are what IDEs consume for autocomplete.
 
-The tool scans for these comment annotations in your Go code:
+### Embedding glua in your project
 
-### Module and Function Annotations
+When you embed glua in your own application as a downstream consumer and add custom modules, ship a `tools/stubgen/main.go` that merges glua's built-in modules with yours:
 
-- **`@luamodule <name>`** - Marks the Loader function (required for each module)
-  - Must be directly above the `Loader` function
-  - Example: `@luamodule mymodule`
+**Directory layout:**
 
-- **`@luafunc <name>`** - Defines a module-level function
-  - For functions like `mymodule.greet()`
-  - Example: `@luafunc greet`
-
-- **`@luamethod <ClassName> <methodName>`** - Defines a method on a UserData object
-  - For object methods like `logger:info()`
-  - Class name should be namespaced (e.g., `log.Logger`, `counter.Counter`)
-  - Example: `@luamethod log.Logger info`
-
-- **`@luaclass <ClassName>`** - Defines a data structure type with manual field annotations
-  - For table-like data structures where you want explicit control over field documentation
-  - Use with `@luafield` to define each field with custom descriptions
-  - Class name can be simple (`GVKMatcher`) or namespaced (`mymodule.Config`)
-  - Example: `@luaclass GVKMatcher`
-  - **TIP**: For complex Go structs with many nested fields, Type Registry offers automatic field discovery
-
-- **`@luafield <fieldName> <type> [description]`** - Defines a field in a `@luaclass`
-  - Must be used after `@luaclass` annotation
-  - `<fieldName>`: Name of the field
-  - `<type>`: Lua type of the field (`string`, `number`, `table`, etc.)
-  - `[description]`: Optional human-readable description
-  - Example: `@luafield group string The API group`
-
-- **`@luaconst <NAME> <type> [description]`** - Defines a module constant
-  - For constants like `k8sclient.POD`, `k8sclient.DEPLOYMENT`
-  - `<NAME>`: Constant name (typically UPPERCASE)
-  - `<type>`: Lua type of the constant (`table`, `string`, `number`, etc.)
-  - `[description]`: Optional human-readable description
-  - Can be placed anywhere in the file (not just above functions)
-  - Example: `@luaconst POD table Pod GVK constant {group="", version="v1", kind="Pod"}`
-
-### Parameter Annotations
-
-- **`@luaparam <name> <type> [description]`** - Defines a function/method parameter
-  - `<name>`: Parameter name (use `self` for the implicit object parameter in methods)
-  - `<type>`: Lua type (`string`, `number`, `boolean`, `table`, `any`, or custom type like `log.Logger`)
-  - `[description]`: Optional human-readable description
-  - Examples:
-    - `@luaparam msg string The message to log`
-    - `@luaparam count number`
-    - `@luaparam ... any Optional key-value pairs` (for variadic parameters)
-    - `@luaparam self log.Logger The logger object` (for methods)
-
-### Return Value Annotations
-
-- **`@luareturn <type> [description]`** - Defines a return value
-  - Can have multiple `@luareturn` annotations for multiple return values
-  - `<type>`: Lua type or custom type
-  - `[description]`: Optional human-readable description
-  - Type can include union types: `string|nil` for optional returns
-  - Examples:
-    - `@luareturn string The greeting message`
-    - `@luareturn log.Logger log.Logger A new logger with additional fields`
-    - `@luareturn err string|nil Error message if any`
-
-### Annotation Placement
-
-Annotations must be in **Go-style comments** (`//`) directly above the function:
-
-```go
-// functionName: brief description of what it does
-//
-// @luafunc functionName
-// @luaparam param1 string Description of param1
-// @luaparam param2 number Description of param2
-// @luareturn result string Description of return value
-// @luareturn err string|nil Error message if operation failed
-func functionName(L *lua.LState) int { ... }
+```
+myproject/
+  main.go
+  modules/
+    widget/
+      widget.go      # your module with Loader + Register
+  tools/
+    stubgen/
+      main.go        # stub generator
+  library/           # generated stubs land here
+  .luarc.json
 ```
 
-For methods:
-
-```go
-// methodName: brief description of what it does
-//
-// @luamethod ClassName methodName
-// @luaparam self ClassName The object instance
-// @luaparam param1 string Description of param1
-// @luareturn result any Description of return value
-func methodName(L *lua.LState) int { ... }
-```
-
-For standalone classes (data structures):
-
-```go
-// Loader: creates the mymodule Lua module
-//
-// @luamodule mymodule
-//
-// @luaclass GVKMatcher
-// @luafield group string The API group
-// @luafield version string The API version
-// @luafield kind string The resource kind
-func Loader(L *lua.LState) int { ... }
-```
-
-For constants (can appear anywhere in the file):
-
-```go
-// @luaconst POD table Pod GVK constant {group="", version="v1", kind="Pod"}
-
-// @luaconst DEPLOYMENT table Deployment GVK constant {group="apps", version="v1", kind="Deployment"}
-
-func setupConstants(L *lua.LState, mod *lua.LTable) {
-    L.SetField(mod, "POD", createGVKTable(L, "", "v1", "Pod"))
-    L.SetField(mod, "DEPLOYMENT", createGVKTable(L, "apps", "v1", "Deployment"))
-}
-```
-
-**Example from our code above:**
-
-```go
-// Module-level function annotation
-// @luamodule mymodule    <- Tells stubgen this is a Lua module
-func Loader(L *lua.LState) int { ... }
-
-// @luafunc greet         <- Function name in Lua
-// @luaparam name string The name to greet    <- Parameter with type and description
-// @luareturn string The greeting message     <- Return type and description
-func greet(L *lua.LState) int { ... }
-
-// UserData method annotation
-// @luamethod counter.Counter increment    <- Method on Counter class
-// @luaparam self counter.Counter The counter object
-// @luaparam amount number Optional amount to add
-func counterIncrement(L *lua.LState) int { ... }
-```
-
-**Generated output for simple module** (`library/mymodule.gen.lua`):
-
-```lua
----@meta mymodule
-
----@class mymodule
-local mymodule = {}
-
----@param name string The name to greet
----@return string The greeting message
-function mymodule.greet(name) end
-
----@param a number First number
----@param b number Second number
----@return number Sum of a and b
----@return string|nil Error message if any
-function mymodule.add(a, b) end
-
-return mymodule
-```
-
-**Generated output for UserData module** (`library/counter.gen.lua`):
-
-```lua
----@meta counter
-
----@class counter.Counter
-local Counter = {}
-
----@param amount number Optional amount to add (default: 1)
-function Counter:increment(amount) end
-
----@param amount number Optional amount to subtract (default: 1)
-function Counter:decrement(amount) end
-
----@return number The current counter value
-function Counter:get() end
-
-function Counter:reset() end
-
----@class counter
----@field Counter counter.Counter
-local counter = {}
-
----@param initialValue number Optional initial value (default: 0)
----@return counter.Counter A new counter object
-function counter.new(initialValue) end
-
-counter.Counter = Counter
-
-return counter
-```
-
-Note how the UserData class (`Counter`) is defined first with its methods, then the module (`counter`) is defined with the class as a field, and finally they're linked together with `counter.Counter = Counter`. This structure enables proper IDE autocomplete.
-
-### Choosing Between @luaclass and Type Registry
-
-Both approaches are fully supported and actively used. Choose based on your needs:
-
-**Use `@luaclass` + `@luafield` annotations when:**
-
-- You want explicit control over documentation and field descriptions
-- Defining simple table-like data structures (e.g., configuration objects)
-- You need custom field descriptions that differ from Go struct tags
-- Working with interface types or non-struct data
-- Example: `GVKMatcher` with detailed field descriptions
-
-**Use Type Registry (`typeRegistry.Register()`) when:**
-
-- You want automatic field discovery from Go struct definitions
-- Working with complex Go structs with many nested fields
-- Using third-party types (e.g., Kubernetes API types)
-- You have many similar types that need consistent documentation
-- Field names and types from JSON tags are sufficient
-- Example: Kubernetes resources, complex configuration structs
-
-**Example comparison:**
-
-```go
-// @luaclass approach - simple, manual
-// @luaclass GVKMatcher
-// @luafield group string API group
-// @luafield version string API version
-// @luafield kind string Resource kind
-
-// Type Registry approach - automatic, comprehensive
-typeRegistry.Register(corev1.Pod{})        // Auto-discovers ALL fields
-typeRegistry.Register(corev1.Service{})    // Including nested types
-typeRegistry.Register(corev1.ConfigMap{})  // With proper type references
-```
-
-The Type Registry automatically processes nested types, creates proper type hierarchies, and handles complex struct relationships. See the [Type Registry section](#type-registry-and-lsp-stub-generation) for details.
-
-**How stubgen works:**
-
-1. Stubgen scans all `.go` files in the specified directory
-2. Finds functions with `@luamodule` annotation (these are module Loaders)
-3. Finds functions with `@luafunc` annotation (these are exported Lua functions)
-4. Extracts `@luaparam` and `@luareturn` annotations for each function
-5. Generates EmmyLua-compatible annotation files that LSP servers understand
-6. Outputs one `.gen.lua` file per module (or a single combined file)
-
-**Verification:**
-
-```bash
-# Check generated files
-ls library/
-# Output: json.gen.lua  kubernetes.gen.lua  mymodule.gen.lua  spew.gen.lua
-
-# View generated stub
-cat library/mymodule.gen.lua
-```
-
-### Step 3: Register and Use
+**`tools/stubgen/main.go` template:**
 
 ```go
 package main
 
 import (
-    "your-project/pkg/modules/mymodule"
-    lua "github.com/yuin/gopher-lua"
+    "log"
+
+    "github.com/thomas-maurice/glua/pkg/luareg"
+    "github.com/thomas-maurice/glua/pkg/modules"
+    "github.com/thomas-maurice/glua/pkg/stubgen"
+    "github.com/myorg/myproject/modules/widget"
 )
 
 func main() {
-    L := lua.NewState()
-    defer L.Close()
+    reg := luareg.NewRegistry()
+    modules.RegisterAll(reg)   // glua's 17 built-in modules
+    widget.Register(reg)       // your module
 
-    // Register module
-    L.PreloadModule("mymodule", mymodule.Loader)
-
-    // Use in Lua
-    L.DoString(`
-        local m = require("mymodule")
-        print(m.greet("World"))  -- Hello, World!
-        print(m.add(5, 3))       -- 8
-    `)
+    gen := stubgen.NewGenerator()
+    files, err := gen.GenerateFromRegistry(reg, "./library")
+    if err != nil {
+        log.Fatal(err)
+    }
+    for _, f := range files {
+        log.Println("wrote", f)
+    }
 }
 ```
 
-### Stubgen Tool
-
-The `stubgen` command generates Lua LSP stubs from your Go module code.
-
-Usage:
+Run it:
 
 ```bash
-# Generate stubs for all modules (recommended)
-make stubgen
-
-# Or manually:
-go run ./cmd/stubgen -dir pkg/modules -output-dir library
-
-# Single combined file:
-go run ./cmd/stubgen -dir pkg/modules -output stubs.lua
+go run ./tools/stubgen
 ```
 
-Options:
+Both glua's stubs and your custom module stubs land in `./library/`.
 
-- `-dir`: Directory to scan for Go modules (default: ".")
-- `-output-dir`: Generate per-module files in this directory (recommended for LSP)
-- `-output`: Generate single combined file (default: "module_stubs.gen.lua")
+**`.luarc.json` (LuaLS config):**
 
-What it does:
+```json
+{
+  "runtime": {
+    "version": "Lua 5.1"
+  },
+  "workspace": {
+    "library": ["library"],
+    "checkThirdParty": false
+  },
+  "diagnostics": {
+    "disable": ["duplicate-doc-field"]
+  }
+}
+```
 
-Scans Go files for these annotations:
+**Loading your module at runtime:**
 
-- `@luamodule <name>` - Marks module Loader function
-- `@luafunc <name>` - Module-level function
-- `@luamethod <ClassName> <methodName>` - Method on UserData object (e.g., `@luamethod log.Logger info`)
-- `@luaconst <NAME> <type> [description]` - Module constant (e.g., `@luaconst POD table`)
-  - Can appear anywhere in the file
-  - Generates `---@type` annotations
-- `@luaparam <name> <type> [description]` - Function/method parameter
-  - Supports variadic: `@luaparam ... any`
-  - For methods, include: `@luaparam self ClassName`
-- `@luareturn <type> [description]` - Return value
-  - Supports multiple returns
-  - Supports union types: `string|nil`
+```go
+L.PreloadModule("widget", widget.Loader)
+```
 
-Generates Lua LSP annotation files that IDEs use for autocomplete. For UserData objects, it automatically generates the proper class structure with methods and exports the class as a module field.
+### Generated stub shape
 
-**See detailed annotation reference in the "Creating Custom Lua Modules" section above.**
+For the `widget` module from the walk-through above, `go run ./tools/stubgen`
+produces `library/widget.gen.lua`. Note that `Order` and `Receipt` get
+`---@class` blocks automatically — they were discovered as struct types in the
+function signatures, with field names taken from JSON tags. **You never wrote
+an annotation comment.**
+
+```lua
+---@meta widget
+
+---@class widget.Order
+---@field id string
+---@field items number
+---@field total number
+
+---@class widget.Receipt
+---@field grand_total number
+---@field order_id string
+---@field tax number
+
+---@class widget.Cart
+local Cart = {}
+
+--- add an item
+---@param item string
+function Cart:add(item) end
+
+--- return all items
+---@return string[]
+function Cart:items() end
+
+--- return the number of items
+---@return number
+function Cart:size() end
+
+--- remove and return the last item; raises Empty if no items
+---@return string
+function Cart:pop() end
+
+---@class widget
+---@field Cart widget.Cart
+---@field DEFAULT_TAX_RATE number default sales-tax rate
+local widget = {}
+
+--- compute tax and grand total
+---@param order widget.Order the order to bill
+---@param tax_rate number tax rate in [0,1]
+---@return widget.Receipt receipt the computed receipt
+function widget.calculate_receipt(order, tax_rate) end
+
+--- create a new empty cart
+---@return widget.Cart
+function widget.new_cart() end
+
+widget.Cart = Cart
+
+return widget
+```
 
 ## IDE Setup
 
@@ -1075,7 +878,7 @@ This section explains how to enable autocomplete for your Lua scripts.
 
 ```bash
 # Generate module stubs (for kubernetes, custom modules)
-make stubgen  # Creates library/kubernetes.gen.lua, etc.
+make gen-stubs  # Creates library/kubernetes.gen.lua, etc.
 
 # Generate type stubs (run your app that uses TypeRegistry)
 go run .  # Creates annotations.gen.lua
@@ -1107,7 +910,7 @@ go run .  # Creates annotations.gen.lua
 2. Generate stubs:
 
 ```bash
-make stubgen
+make gen-stubs
 go run .  # If using TypeRegistry
 ```
 
@@ -1240,22 +1043,22 @@ L.PreloadModule("kubernetes", kubernetes.Loader)
 local k8s = require("kubernetes")
 
 -- Parse memory: "256Mi" → 268435456 (bytes)
-bytes, err = k8s.parse_memory(quantity)
+bytes = k8s.parse_memory(quantity)
 
 -- Parse CPU: "100m" → 100 (millicores)
-millis, err = k8s.parse_cpu(quantity)
+millis = k8s.parse_cpu(quantity)
 
 -- Parse duration: "5m" → 300 (seconds)
-seconds, err = k8s.parse_duration(duration)
+seconds = k8s.parse_duration(duration)
 
 -- Parse time: "2025-10-03T16:39:00Z" → 1759509540 (Unix timestamp)
-timestamp, err = k8s.parse_time(timestr)
+timestamp = k8s.parse_time(timestr)
 
 -- Format time: 1759509540 → "2025-10-03T16:39:00Z"
-timestr, err = k8s.format_time(timestamp)
+timestr = k8s.format_time(timestamp)
 
 -- Format duration: 300 → "5m0s"
-duration, err = k8s.format_duration(seconds)
+duration = k8s.format_duration(seconds)
 
 -- Initialize defaults: ensures metadata.labels and metadata.annotations exist
 obj = k8s.init_defaults(obj)
@@ -1271,7 +1074,7 @@ obj = k8s.remove_label(obj, "app")
 matches = k8s.match_gvk(obj, {group="apps", version="v1", kind="Deployment"})
 ```
 
-All functions return `(value, error)` tuples (except boolean helpers).
+All functions raise a Lua error on invalid input. Use `pcall` to handle errors gracefully.
 
 #### k8sclient
 
@@ -1289,35 +1092,39 @@ L.PreloadModule("k8sclient", k8sclient.Loader(config))
 **Lua API:**
 
 ```lua
-local client = require("k8sclient")
+local k8sclient = require("k8sclient")
 
 -- GVK constants (predefined)
-client.POD          -- {group="", version="v1", kind="Pod"}
-client.DEPLOYMENT   -- {group="apps", version="v1", kind="Deployment"}
-client.SERVICE      -- {group="", version="v1", kind="Service"}
-client.CONFIGMAP    -- {group="", version="v1", kind="ConfigMap"}
+k8sclient.POD          -- {group="", version="v1", kind="Pod"}
+k8sclient.DEPLOYMENT   -- {group="apps", version="v1", kind="Deployment"}
+k8sclient.SERVICE      -- {group="", version="v1", kind="Service"}
+k8sclient.CONFIGMAP    -- {group="", version="v1", kind="ConfigMap"}
 -- ... and many more
 
--- Create a resource
-created, err = client.create(resource_table)
+-- Create a client (needs a config passed from Go via Loader)
+local client = k8sclient.new_client()
 
--- Get a resource
-resource, err = client.get(gvk, namespace, name)
+-- Create a resource (raises on error)
+created = client:create(resource_table)
 
--- Update a resource
-updated, err = client.update(resource_table)
+-- Get a resource (raises on error)
+resource = client:get(gvk, namespace, name)
 
--- List resources
-resources, err = client.list(gvk, namespace)
+-- Update a resource (raises on error)
+updated = client:update(resource_table)
 
--- Delete a resource
-err = client.delete(gvk, namespace, name)
+-- List resources (raises on error)
+resources = client:list(gvk, namespace)
+
+-- Delete a resource (raises on error)
+client:delete(gvk, namespace, name)
 ```
 
 **Example:**
 
 ```lua
-local client = require("k8sclient")
+local k8sclient = require("k8sclient")
+local client = k8sclient.new_client()
 
 -- Create a ConfigMap
 local cm = {
@@ -1326,17 +1133,17 @@ local cm = {
     metadata = {name = "my-config", namespace = "default"},
     data = {key = "value"}
 }
-local created, err = client.create(cm)
+local created = client:create(cm)
 
 -- Get it back
-local fetched, err = client.get(client.CONFIGMAP, "default", "my-config")
+local fetched = client:get(k8sclient.CONFIGMAP, "default", "my-config")
 
 -- Update it
 fetched.data.newkey = "newvalue"
-local updated, err = client.update(fetched)
+local updated = client:update(fetched)
 
 -- Delete it
-local err = client.delete(client.CONFIGMAP, "default", "my-config")
+client:delete(k8sclient.CONFIGMAP, "default", "my-config")
 ```
 
 #### json
@@ -1356,11 +1163,11 @@ L.PreloadModule("json", json.Loader)
 ```lua
 local json = require("json")
 
--- Parse JSON string to Lua table
-table, err = json.parse('{"name":"John","age":30}')
+-- Parse JSON string to Lua table (raises on invalid JSON)
+table = json.parse('{"name":"John","age":30}')
 
--- Stringify Lua table to JSON
-jsonstr, err = json.stringify({name="John", age=30})
+-- Stringify Lua table to JSON (raises on error)
+jsonstr = json.stringify({name="John", age=30})
 ```
 
 #### yaml
@@ -1380,11 +1187,11 @@ L.PreloadModule("yaml", yaml.Loader)
 ```lua
 local yaml = require("yaml")
 
--- Parse YAML string to Lua table
-table, err = yaml.parse("name: John\nage: 30")
+-- Parse YAML string to Lua table (raises on invalid YAML)
+table = yaml.parse("name: John\nage: 30")
 
--- Stringify Lua table to YAML
-yamlstr, err = yaml.stringify({name="John", age=30})
+-- Stringify Lua table to YAML (raises on error)
+yamlstr = yaml.stringify({name="John", age=30})
 ```
 
 #### spew
@@ -1428,12 +1235,12 @@ L.PreloadModule("http", http.Loader)
 ```lua
 local http = require("http")
 
--- GET request
-response, err = http.get("https://api.example.com/data")
+-- GET request (raises on network/HTTP error)
+response = http.get("https://api.example.com/data")
 -- response = {status=200, body="...", headers={...}}
 
--- POST request
-response, err = http.post("https://api.example.com/data", {
+-- POST request (raises on network/HTTP error)
+response = http.post("https://api.example.com/data", {
     body = '{"key":"value"}',
     headers = {["Content-Type"] = "application/json"}
 })
@@ -1458,8 +1265,8 @@ L.PreloadModule("template", template.Loader)
 ```lua
 local template = require("template")
 
--- Render template with data
-result, err = template.render("Hello {{.name}}, you are {{.age}} years old",
+-- Render template with data (raises on template parse/execute error)
+result = template.render("Hello {{.name}}, you are {{.age}} years old",
     {name="John", age=30})
 -- result = "Hello John, you are 30 years old"
 ```
@@ -1481,28 +1288,28 @@ L.PreloadModule("fs", fs.Loader)
 ```lua
 local fs = require("fs")
 
--- Read file
-content, err = fs.read_file("/path/to/file.txt")
+-- Read file (raises on error)
+content = fs.read_file("/path/to/file.txt")
 
--- Write file
-err = fs.write_file("/path/to/file.txt", "content")
+-- Write file (raises on error)
+fs.write_file("/path/to/file.txt", "content")
 
 -- Check existence
 exists = fs.exists("/path/to/file")
 
--- Create directory
-err = fs.mkdir("/path/to/dir")
-err = fs.mkdir_all("/path/to/nested/dir")
+-- Create directory (raises on error)
+fs.mkdir("/path/to/dir")
+fs.mkdir_all("/path/to/nested/dir")
 
--- Remove
-err = fs.remove("/path/to/file")
-err = fs.remove_all("/path/to/dir")
+-- Remove (raises on error)
+fs.remove("/path/to/file")
+fs.remove_all("/path/to/dir")
 
--- List directory
-files, err = fs.list("/path/to/dir")
+-- List directory (raises on error)
+files = fs.list("/path/to/dir")
 
--- Get file info
-info, err = fs.stat("/path/to/file")
+-- Get file info (raises on error)
+info = fs.stat("/path/to/file")
 -- info = {size=1234, mode="0644", mod_time=1234567890, is_dir=false}
 ```
 
@@ -1526,8 +1333,8 @@ local time = require("time")
 -- Current Unix timestamp
 now = time.now()
 
--- Parse date string
-timestamp, err = time.parse("2006-01-02 15:04:05", "2025-10-21 14:30:00")
+-- Parse date string (raises on parse error)
+timestamp = time.parse("2006-01-02 15:04:05", "2025-10-21 14:30:00")
 
 -- Format timestamp
 datestr = time.format(timestamp, "2006-01-02 15:04:05")
@@ -1563,11 +1370,11 @@ local hash = require("hash")
 
 -- Base64
 encoded = base64.encode("hello")
-decoded, err = base64.decode(encoded)
+decoded = base64.decode(encoded)  -- raises on invalid base64
 
 -- Hex
 encoded = hex.encode("hello")
-decoded, err = hex.decode(encoded)
+decoded = hex.decode(encoded)  -- raises on invalid hex
 
 -- Hash strings
 md5 = hash.md5("hello")
@@ -1575,11 +1382,11 @@ sha1 = hash.sha1("hello")
 sha256 = hash.sha256("hello")
 sha512 = hash.sha512("hello")
 
--- Hash Lua tables (converted to JSON)
-hash_val, err = hash.md5_obj({name="John", age=30})
-hash_val, err = hash.sha1_obj({key="value"})
-hash_val, err = hash.sha256_obj({foo="bar", nested={data=123}})
-hash_val, err = hash.sha512_obj({items={1, 2, 3}})
+-- Hash Lua tables (converted to JSON; raises on conversion error)
+hash_val = hash.md5_obj({name="John", age=30})
+hash_val = hash.sha1_obj({key="value"})
+hash_val = hash.sha256_obj({foo="bar", nested={data=123}})
+hash_val = hash.sha512_obj({items={1, 2, 3}})
 ```
 
 **Object Hashing:**
@@ -1688,8 +1495,8 @@ path = filepath.join("/usr", "local", "bin")  -- "/usr/local/bin"
 -- Split path into directory and file
 dir, file = filepath.split("/usr/local/bin/tool")  -- "/usr/local/bin", "tool"
 
--- Get absolute path
-abspath, err = filepath.abs("../relative/path")
+-- Get absolute path (raises on error)
+abspath = filepath.abs("../relative/path")
 
 -- Get file extension
 ext = filepath.ext("/path/to/file.txt")  -- ".txt"
@@ -1721,26 +1528,25 @@ L.PreloadModule("regexp", regexp.Loader)
 ```lua
 local regexp = require("regexp")
 
--- Match pattern (boolean)
+-- Match pattern (boolean; raises on invalid pattern)
 matches = regexp.match("^[a-z]+$", "hello")  -- true
 
--- Find first match
-match, err = regexp.find("([0-9]+)", "version 123 build 456")  -- "123"
+-- Find first match (raises on invalid pattern)
+match = regexp.find("([0-9]+)", "version 123 build 456")  -- "123"
 
--- Find all matches
-matches, err = regexp.find_all("([0-9]+)", "version 123 build 456", -1)
+-- Find all matches (raises on invalid pattern)
+matches = regexp.find_all("([0-9]+)", "version 123 build 456", -1)
 -- matches = {"123", "456"}
 
--- Replace first occurrence
-result, err = regexp.replace("([0-9]+)", "version 123", "999", 1)
+-- Replace occurrences (raises on invalid pattern)
+result = regexp.replace("([0-9]+)", "version 123", "999", 1)
 -- result = "version 999"
 
--- Replace all occurrences
-result, err = regexp.replace_all("([0-9]+)", "version 123 build 456", "X")
+result = regexp.replace_all("([0-9]+)", "version 123 build 456", "X")
 -- result = "version X build X"
 
--- Split by pattern
-parts, err = regexp.split("\\s+", "one  two   three", -1)
+-- Split by pattern (raises on invalid pattern)
+parts = regexp.split("\\s+", "one  two   three", -1)
 -- parts = {"one", "two", "three"}
 ```
 
@@ -1945,7 +1751,7 @@ Features demonstrated:
 
 To get autocomplete in the example:
 
-1. Run `make stubgen` from repo root
+1. Run `make gen-stubs` from repo root
 2. Run `go run .` from example/ directory
 3. Open `script.lua` in your IDE - autocomplete works
 
@@ -1953,7 +1759,7 @@ To get autocomplete in the example:
 
 ### Autocomplete doesn't work
 
-1. Run `make stubgen` to generate module stubs
+1. Run `make gen-stubs` to generate module stubs
 2. Check `.luarc.json` or `.vscode/settings.json` includes `"library"` directory
 3. Verify `library/kubernetes.gen.lua` exists and starts with `---@meta`
 4. Restart LSP: `:LspRestart` (Neovim) or reload window (VSCode)
@@ -1961,10 +1767,6 @@ To get autocomplete in the example:
 ### Module not found error
 
 Ensure `L.PreloadModule("mymodule", mymodule.Loader)` is called before `L.DoString()`
-
-### Stubgen finds no modules
-
-Check `@luamodule` annotation is directly above Loader function in Go code
 
 ### Round-trip data mismatch
 

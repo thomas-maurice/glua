@@ -28,23 +28,12 @@ local cm2 = {
 	}
 }
 
-local created1, err = client.create(cm1)
-if err then
-	error("Failed to create first ConfigMap: " .. err)
-end
-
-local created2, err = client.create(cm2)
-if err then
-	error("Failed to create second ConfigMap: " .. err)
-end
+client:create(cm1)
+client:create(cm2)
 
 -- List ConfigMaps
 local gvk = {group = "", version = "v1", kind = "ConfigMap"}
-local items, err = client.list(gvk, TEST_NAMESPACE)
-
-if err then
-	error("Failed to list: " .. err)
-end
+local items = client:list(gvk, TEST_NAMESPACE)
 
 -- Verify we have at least 2 items
 local count = 0

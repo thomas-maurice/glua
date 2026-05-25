@@ -34,14 +34,12 @@ print()
 print("[Policy 2] Memory Limit ≤ 2GB")
 for i, container in ipairs(pod.spec.containers) do
     if container.resources.limits and container.resources.limits["memory"] then
-        local memBytes, err = k8s.parse_memory(container.resources.limits["memory"])
-        if not err then
-            local maxBytes = 2 * 1024 * 1024 * 1024
-            if memBytes > maxBytes then
-                table.insert(violations, "Container '" .. container.name .. "' exceeds 2GB memory limit")
-            else
-                print("  ✓ " .. container.name .. " within limit")
-            end
+        local memBytes = k8s.parse_memory(container.resources.limits["memory"])
+        local maxBytes = 2 * 1024 * 1024 * 1024
+        if memBytes > maxBytes then
+            table.insert(violations, "Container '" .. container.name .. "' exceeds 2GB memory limit")
+        else
+            print("  ✓ " .. container.name .. " within limit")
         end
     end
 end
@@ -51,13 +49,11 @@ print()
 print("[Policy 3] CPU Limit ≤ 2 cores (warning)")
 for i, container in ipairs(pod.spec.containers) do
     if container.resources.limits and container.resources.limits["cpu"] then
-        local cpuMillis, err = k8s.parse_cpu(container.resources.limits["cpu"])
-        if not err then
-            if cpuMillis > 2000 then
-                table.insert(warnings, "Container '" .. container.name .. "' uses more than 2 CPU cores")
-            else
-                print("  ✓ " .. container.name .. " within limit")
-            end
+        local cpuMillis = k8s.parse_cpu(container.resources.limits["cpu"])
+        if cpuMillis > 2000 then
+            table.insert(warnings, "Container '" .. container.name .. "' uses more than 2 CPU cores")
+        else
+            print("  ✓ " .. container.name .. " within limit")
         end
     end
 end

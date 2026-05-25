@@ -24,8 +24,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
-	"github.com/thomas-maurice/glua/pkg/glua"
+	"github.com/thomas-maurice/glua/pkg/luareg"
 	"github.com/thomas-maurice/glua/pkg/modules/kubernetes"
 	lua "github.com/yuin/gopher-lua"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,8 +36,13 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// translator: handles conversion between Go and Lua values
-var translator = glua.NewTranslator()
+// defaultCallTimeout: per-call timeout applied to every apiserver request.
+const defaultCallTimeout = 30 * time.Second
+
+// callContext: returns a context with the default per-call timeout.
+func callContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), defaultCallTimeout)
+}
 
 // Client: holds the Kubernetes dynamic client
 type Client struct {
@@ -49,103 +55,185 @@ func NewClient(config *rest.Config) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
 	}
-
-	return &Client{
-		dynamic: dynamicClient,
-	}, nil
+	return &Client{dynamic: dynamicClient}, nil
 }
 
-// Loader: creates and returns the k8sclient module for Lua.
-// This function should be called with a rest.Config and then registered:
+// Get: retrieves a Kubernetes resource by GVK, namespace, and name. Raises on error.
 //
-//	loader := k8sclient.Loader(config)
-//	L.PreloadModule("k8sclient", loader)
+// Example:
 //
-// @luamodule k8sclient
-//
-// Example usage in Lua:
-//
-//	local k8sclient = require("k8sclient")
-//	local client = k8sclient.new_client()
-//	local gvk = {group = "", version = "v1", kind = "ConfigMap"}
-//	local cm, err = client:get(gvk, "default", "my-config")
-//
-// @luaclass GVKMatcher
-// @luafield group string The API group (empty string for core resources)
-// @luafield version string The API version (e.g., "v1", "v1beta1")
-// @luafield kind string The resource kind (e.g., "Pod", "Deployment")
-func Loader(config *rest.Config) lua.LGFunction {
-	return func(L *lua.LState) int {
-		// Create module table with new_client factory function
-		mod := L.NewTable()
-		L.SetField(mod, "new_client", L.NewFunction(func(L *lua.LState) int {
-			return newClientLua(L, config)
-		}))
-
-		// For backwards compatibility, also export functions at module level
-		client, err := NewClient(config)
-		if err != nil {
-			L.RaiseError("failed to create k8s client: %v", err)
-			return 0
-		}
-
-		L.SetField(mod, "get", L.NewFunction(client.get))
-		L.SetField(mod, "create", L.NewFunction(client.create))
-		L.SetField(mod, "update", L.NewFunction(client.update))
-		L.SetField(mod, "delete", L.NewFunction(client.delete))
-		L.SetField(mod, "list", L.NewFunction(client.list))
-
-		// Add GVK constants for common resources
-		addGVKConstants(L, mod)
-
-		L.Push(mod)
-		return 1
+//	local obj = client:get(k8sclient.POD, "default", "my-pod")
+func (c *Client) Get(gvk kubernetes.GVKMatcher, namespace, name string) (map[string]any, error) {
+	if gvk.Kind == "" || gvk.Version == "" {
+		return nil, fmt.Errorf("GVK requires 'kind' and 'version' fields")
 	}
+	gvr := schema.GroupVersionResource{
+		Group:    gvk.Group,
+		Version:  gvk.Version,
+		Resource: pluralize(gvk.Kind),
+	}
+	ctx, cancel := callContext()
+	defer cancel()
+	obj, err := c.dynamic.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get resource: %w", err)
+	}
+	return obj.Object, nil
 }
 
-// @luaconst POD table Pod GVK constant {group="", version="v1", kind="Pod"}
+// Create: creates a Kubernetes resource from a map. Raises on error.
+//
+// Example:
+//
+//	local created = client:create(obj)
+func (c *Client) Create(obj map[string]any) (map[string]any, error) {
+	unstrObj := &unstructured.Unstructured{Object: obj}
+	gvk := unstrObj.GroupVersionKind()
+	if gvk.Kind == "" || gvk.Version == "" {
+		return nil, fmt.Errorf("object missing apiVersion or kind")
+	}
+	gvr := schema.GroupVersionResource{
+		Group:    gvk.Group,
+		Version:  gvk.Version,
+		Resource: pluralize(gvk.Kind),
+	}
+	namespace := unstrObj.GetNamespace()
+	if namespace == "" {
+		namespace = "default"
+	}
+	ctx, cancel := callContext()
+	defer cancel()
+	created, err := c.dynamic.Resource(gvr).Namespace(namespace).Create(ctx, unstrObj, metav1.CreateOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create resource: %w", err)
+	}
+	return created.Object, nil
+}
 
-// @luaconst NAMESPACE table Namespace GVK constant {group="", version="v1", kind="Namespace"}
+// Update: updates a Kubernetes resource. Raises on error.
+//
+// Example:
+//
+//	local updated = client:update(obj)
+func (c *Client) Update(obj map[string]any) (map[string]any, error) {
+	unstrObj := &unstructured.Unstructured{Object: obj}
+	gvk := unstrObj.GroupVersionKind()
+	if gvk.Kind == "" || gvk.Version == "" {
+		return nil, fmt.Errorf("object missing apiVersion or kind")
+	}
+	gvr := schema.GroupVersionResource{
+		Group:    gvk.Group,
+		Version:  gvk.Version,
+		Resource: pluralize(gvk.Kind),
+	}
+	namespace := unstrObj.GetNamespace()
+	if namespace == "" {
+		namespace = "default"
+	}
+	ctx, cancel := callContext()
+	defer cancel()
+	updated, err := c.dynamic.Resource(gvr).Namespace(namespace).Update(ctx, unstrObj, metav1.UpdateOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to update resource: %w", err)
+	}
+	return updated.Object, nil
+}
 
-// @luaconst NODE table Node GVK constant {group="", version="v1", kind="Node"}
+// Delete: deletes a Kubernetes resource by GVK, namespace, and name. Raises on error.
+//
+// Example:
+//
+//	client:delete(k8sclient.POD, "default", "my-pod")
+func (c *Client) Delete(gvk kubernetes.GVKMatcher, namespace, name string) error {
+	if gvk.Kind == "" || gvk.Version == "" {
+		return fmt.Errorf("GVK requires 'kind' and 'version' fields")
+	}
+	gvr := schema.GroupVersionResource{
+		Group:    gvk.Group,
+		Version:  gvk.Version,
+		Resource: pluralize(gvk.Kind),
+	}
+	ctx, cancel := callContext()
+	defer cancel()
+	if err := c.dynamic.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
+		return fmt.Errorf("failed to delete resource: %w", err)
+	}
+	return nil
+}
 
-// @luaconst CONFIGMAP table ConfigMap GVK constant {group="", version="v1", kind="ConfigMap"}
+// List: lists Kubernetes resources by GVK and namespace. Raises on error.
+//
+// Example:
+//
+//	local items = client:list(k8sclient.POD, "default")
+func (c *Client) List(gvk kubernetes.GVKMatcher, namespace string) ([]map[string]any, error) {
+	if gvk.Kind == "" || gvk.Version == "" {
+		return nil, fmt.Errorf("GVK requires 'kind' and 'version' fields")
+	}
+	gvr := schema.GroupVersionResource{
+		Group:    gvk.Group,
+		Version:  gvk.Version,
+		Resource: pluralize(gvk.Kind),
+	}
+	ctx, cancel := callContext()
+	defer cancel()
+	lst, err := c.dynamic.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list resources: %w", err)
+	}
+	items := make([]map[string]any, len(lst.Items))
+	for i, item := range lst.Items {
+		items[i] = item.Object
+	}
+	return items, nil
+}
 
-// @luaconst SECRET table Secret GVK constant {group="", version="v1", kind="Secret"}
+// newClientClass: creates a fresh luareg class for *Client.
+// Each call returns a new instance to avoid duplicate-registration panics when
+// build() is called more than once.
+func newClientClass() *luareg.Class[*Client] {
+	cls := luareg.NewClass[*Client]("k8sclient.Client", "Kubernetes dynamic client")
+	cls.Method("get", (*Client).Get, "get a resource by GVK, namespace, and name",
+		luareg.Args("gvk", "namespace", "name"))
+	cls.Method("create", (*Client).Create, "create a resource from a Lua table",
+		luareg.Args("obj"))
+	cls.Method("update", (*Client).Update, "update a resource from a Lua table",
+		luareg.Args("obj"))
+	cls.Method("delete", (*Client).Delete, "delete a resource by GVK, namespace, and name",
+		luareg.Args("gvk", "namespace", "name"))
+	cls.Method("list", (*Client).List, "list resources by GVK and namespace",
+		luareg.Args("gvk", "namespace"))
+	return cls
+}
 
-// @luaconst SERVICE table Service GVK constant {group="", version="v1", kind="Service"}
+// newClientLua: module-level factory that creates a Client and wraps it in UserData.
+// Raises a Lua error if the dynamic client cannot be created.
+func newClientLua(L *lua.LState, config *rest.Config) int {
+	client, err := NewClient(config)
+	if err != nil {
+		L.RaiseError("failed to create client: %v", err)
+		return 0
+	}
 
-// @luaconst SERVICEACCOUNT table ServiceAccount GVK constant {group="", version="v1", kind="ServiceAccount"}
+	ud := L.NewUserData()
+	ud.Value = client
+	L.SetMetatable(ud, L.GetTypeMetatable("k8sclient.Client"))
+	L.Push(ud)
+	return 1
+}
 
-// @luaconst PERSISTENTVOLUME table PersistentVolume GVK constant {group="", version="v1", kind="PersistentVolume"}
+// createGVKTable: creates a Lua table representing a GVK
+func createGVKTable(L *lua.LState, group, version, kind string) *lua.LTable {
+	gvk := L.NewTable()
+	L.SetField(gvk, "group", lua.LString(group))
+	L.SetField(gvk, "version", lua.LString(version))
+	L.SetField(gvk, "kind", lua.LString(kind))
+	return gvk
+}
 
-// @luaconst PERSISTENTVOLUMECLAIM table PersistentVolumeClaim GVK constant {group="", version="v1", kind="PersistentVolumeClaim"}
-
-// @luaconst DEPLOYMENT table Deployment GVK constant {group="apps", version="v1", kind="Deployment"}
-
-// @luaconst STATEFULSET table StatefulSet GVK constant {group="apps", version="v1", kind="StatefulSet"}
-
-// @luaconst DAEMONSET table DaemonSet GVK constant {group="apps", version="v1", kind="DaemonSet"}
-
-// @luaconst REPLICASET table ReplicaSet GVK constant {group="apps", version="v1", kind="ReplicaSet"}
-
-// @luaconst JOB table Job GVK constant {group="batch", version="v1", kind="Job"}
-
-// @luaconst CRONJOB table CronJob GVK constant {group="batch", version="v1", kind="CronJob"}
-
-// @luaconst INGRESS table Ingress GVK constant {group="networking.k8s.io", version="v1", kind="Ingress"}
-
-// @luaconst NETWORKPOLICY table NetworkPolicy GVK constant {group="networking.k8s.io", version="v1", kind="NetworkPolicy"}
-
-// @luaconst ROLE table Role GVK constant {group="rbac.authorization.k8s.io", version="v1", kind="Role"}
-
-// @luaconst CLUSTERROLE table ClusterRole GVK constant {group="rbac.authorization.k8s.io", version="v1", kind="ClusterRole"}
-
-// @luaconst ROLEBINDING table RoleBinding GVK constant {group="rbac.authorization.k8s.io", version="v1", kind="RoleBinding"}
-
-// @luaconst CLUSTERROLEBINDING table ClusterRoleBinding GVK constant {group="rbac.authorization.k8s.io", version="v1", kind="ClusterRoleBinding"}
-
-// addGVKConstants: adds GVK constants for common Kubernetes resources to the module
+// addGVKConstants: adds GVK constants for common Kubernetes resources to the module table.
+// These constants cannot be expressed as luareg.Fn calls (they are table values, not
+// functions), so they are set directly on the module table after PushTo.
 func addGVKConstants(L *lua.LState, mod *lua.LTable) {
 	L.SetField(mod, "POD", createGVKTable(L, "", "v1", "Pod"))
 	L.SetField(mod, "NAMESPACE", createGVKTable(L, "", "v1", "Namespace"))
@@ -170,366 +258,70 @@ func addGVKConstants(L *lua.LState, mod *lua.LTable) {
 	L.SetField(mod, "CLUSTERROLEBINDING", createGVKTable(L, "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"))
 }
 
-// createGVKTable: creates a Lua table representing a GVK
-func createGVKTable(L *lua.LState, group, version, kind string) *lua.LTable {
-	gvk := L.NewTable()
-	L.SetField(gvk, "group", lua.LString(group))
-	L.SetField(gvk, "version", lua.LString(version))
-	L.SetField(gvk, "kind", lua.LString(kind))
-	return gvk
+// gvkConst: convenience wrapper to create a kubernetes.GVKMatcher constant.
+func gvkConst(group, version, kind string) kubernetes.GVKMatcher {
+	return kubernetes.GVKMatcher{Group: group, Version: version, Kind: kind}
 }
 
-// newClientLua: creates a new client instance in Lua
-//
-// @luafunc new_client
-// @luareturn table client The client instance with methods: get, create, update, delete, list
-// @luareturn string|nil err Error message if client creation failed
+// build: constructs the module definition. Reused by Loader and Register.
+// GVK constants are registered via m.Const so they appear in generated stubs.
+func build(config *rest.Config) *luareg.Module {
+	m := luareg.NewModule("k8sclient", "Kubernetes dynamic client module")
+	cls := newClientClass()
+	m.RegisterClass(cls)
+	// new_client factory: captures config in closure.
+	m.Fn("new_client", func(L *lua.LState) int {
+		return newClientLua(L, config)
+	}, "create a new Kubernetes client")
+
+	// GVK constants for common Kubernetes resources.
+	m.Const("POD", gvkConst("", "v1", "Pod"), "kubernetes.GVKMatcher", "Pod GVK constant")
+	m.Const("NAMESPACE", gvkConst("", "v1", "Namespace"), "kubernetes.GVKMatcher", "Namespace GVK constant")
+	m.Const("NODE", gvkConst("", "v1", "Node"), "kubernetes.GVKMatcher", "Node GVK constant")
+	m.Const("CONFIGMAP", gvkConst("", "v1", "ConfigMap"), "kubernetes.GVKMatcher", "ConfigMap GVK constant")
+	m.Const("SECRET", gvkConst("", "v1", "Secret"), "kubernetes.GVKMatcher", "Secret GVK constant")
+	m.Const("SERVICE", gvkConst("", "v1", "Service"), "kubernetes.GVKMatcher", "Service GVK constant")
+	m.Const("SERVICEACCOUNT", gvkConst("", "v1", "ServiceAccount"), "kubernetes.GVKMatcher", "ServiceAccount GVK constant")
+	m.Const("PERSISTENTVOLUME", gvkConst("", "v1", "PersistentVolume"), "kubernetes.GVKMatcher", "PersistentVolume GVK constant")
+	m.Const("PERSISTENTVOLUMECLAIM", gvkConst("", "v1", "PersistentVolumeClaim"), "kubernetes.GVKMatcher", "PersistentVolumeClaim GVK constant")
+	m.Const("DEPLOYMENT", gvkConst("apps", "v1", "Deployment"), "kubernetes.GVKMatcher", "Deployment GVK constant")
+	m.Const("STATEFULSET", gvkConst("apps", "v1", "StatefulSet"), "kubernetes.GVKMatcher", "StatefulSet GVK constant")
+	m.Const("DAEMONSET", gvkConst("apps", "v1", "DaemonSet"), "kubernetes.GVKMatcher", "DaemonSet GVK constant")
+	m.Const("REPLICASET", gvkConst("apps", "v1", "ReplicaSet"), "kubernetes.GVKMatcher", "ReplicaSet GVK constant")
+	m.Const("JOB", gvkConst("batch", "v1", "Job"), "kubernetes.GVKMatcher", "Job GVK constant")
+	m.Const("CRONJOB", gvkConst("batch", "v1", "CronJob"), "kubernetes.GVKMatcher", "CronJob GVK constant")
+	m.Const("INGRESS", gvkConst("networking.k8s.io", "v1", "Ingress"), "kubernetes.GVKMatcher", "Ingress GVK constant")
+	m.Const("NETWORKPOLICY", gvkConst("networking.k8s.io", "v1", "NetworkPolicy"), "kubernetes.GVKMatcher", "NetworkPolicy GVK constant")
+	m.Const("ROLE", gvkConst("rbac.authorization.k8s.io", "v1", "Role"), "kubernetes.GVKMatcher", "Role GVK constant")
+	m.Const("CLUSTERROLE", gvkConst("rbac.authorization.k8s.io", "v1", "ClusterRole"), "kubernetes.GVKMatcher", "ClusterRole GVK constant")
+	m.Const("ROLEBINDING", gvkConst("rbac.authorization.k8s.io", "v1", "RoleBinding"), "kubernetes.GVKMatcher", "RoleBinding GVK constant")
+	m.Const("CLUSTERROLEBINDING", gvkConst("rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"), "kubernetes.GVKMatcher", "ClusterRoleBinding GVK constant")
+
+	return m
+}
+
+// Loader: creates and returns the k8sclient module for Lua.
 //
 // Example:
 //
-//	local k8sclient = require("k8sclient")
-//	local client = k8sclient.new_client()
-//	local pod, err = client:get({group="", version="v1", kind="Pod"}, "default", "my-pod")
-func newClientLua(L *lua.LState, config *rest.Config) int {
-	client, err := NewClient(config)
-	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to create client: %v", err)))
-		return 2
+//	loader := k8sclient.Loader(config)
+//	L.PreloadModule("k8sclient", loader)
+func Loader(config *rest.Config) lua.LGFunction {
+	return func(L *lua.LState) int {
+		return build(config).PushTo(L)
 	}
-
-	// Create client table with methods
-	clientTable := L.NewTable()
-	L.SetField(clientTable, "get", L.NewFunction(client.get))
-	L.SetField(clientTable, "create", L.NewFunction(client.create))
-	L.SetField(clientTable, "update", L.NewFunction(client.update))
-	L.SetField(clientTable, "delete", L.NewFunction(client.delete))
-	L.SetField(clientTable, "list", L.NewFunction(client.list))
-
-	L.Push(clientTable)
-	L.Push(lua.LNil)
-	return 2
 }
 
-// get: retrieves a Kubernetes resource by GVK, namespace, and name.
-//
-// @luafunc get
-// @luaparam gvk GVKMatcher The GVK matcher with group, version, and kind
-// @luaparam namespace string The namespace of the resource
-// @luaparam name string The name of the resource
-// @luareturn table|nil obj The Kubernetes object, or nil on error
-// @luareturn string|nil err Error message if retrieval failed
-//
-// Example:
-//
-//	local gvk = {group = "", version = "v1", kind = "ConfigMap"}
-//	local cm, err = client.get(gvk, "default", "my-config")
-func (c *Client) get(L *lua.LState) int {
-	gvkTable := L.CheckTable(1)
-	namespace := L.CheckString(2)
-	name := L.CheckString(3)
-
-	// Parse GVK
-	var gvk kubernetes.GVKMatcher
-	if err := translator.FromLua(L, gvkTable, &gvk); err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to parse GVK: %v", err)))
-		return 2
-	}
-
-	// Validate GVK
-	if gvk.Kind == "" || gvk.Version == "" {
-		L.Push(lua.LNil)
-		L.Push(lua.LString("GVK requires 'kind' and 'version' fields"))
-		return 2
-	}
-
-	// Build GVR
-	gvr := schema.GroupVersionResource{
-		Group:    gvk.Group,
-		Version:  gvk.Version,
-		Resource: pluralize(gvk.Kind),
-	}
-
-	// Get resource
-	obj, err := c.dynamic.Resource(gvr).Namespace(namespace).Get(context.Background(), name, metav1.GetOptions{})
-	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to get resource: %v", err)))
-		return 2
-	}
-
-	// Convert to Lua
-	luaObj, err := translator.ToLua(L, obj.Object)
-	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to convert to Lua: %v", err)))
-		return 2
-	}
-
-	L.Push(luaObj)
-	L.Push(lua.LNil)
-	return 2
-}
-
-// create: creates a Kubernetes resource from a Lua table.
-//
-// @luafunc create
-// @luaparam obj table The Kubernetes object to create
-// @luareturn table|nil obj The created Kubernetes object, or nil on error
-// @luareturn string|nil err Error message if creation failed
-//
-// Example:
-//
-//	local cm = {
-//	  apiVersion = "v1",
-//	  kind = "ConfigMap",
-//	  metadata = {name = "my-config", namespace = "default"},
-//	  data = {key = "value"}
-//	}
-//	local created, err = client.create(cm)
-func (c *Client) create(L *lua.LState) int {
-	objTable := L.CheckTable(1)
-
-	// Convert to Go map
-	var objMap map[string]interface{}
-	if err := translator.FromLua(L, objTable, &objMap); err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to parse object: %v", err)))
-		return 2
-	}
-
-	// Create unstructured object
-	obj := &unstructured.Unstructured{Object: objMap}
-
-	// Extract GVK
-	gvk := obj.GroupVersionKind()
-	if gvk.Kind == "" || gvk.Version == "" {
-		L.Push(lua.LNil)
-		L.Push(lua.LString("object missing apiVersion or kind"))
-		return 2
-	}
-
-	// Build GVR
-	gvr := schema.GroupVersionResource{
-		Group:    gvk.Group,
-		Version:  gvk.Version,
-		Resource: pluralize(gvk.Kind),
-	}
-
-	// Get namespace
-	namespace := obj.GetNamespace()
-	if namespace == "" {
-		namespace = "default"
-	}
-
-	// Create resource
-	created, err := c.dynamic.Resource(gvr).Namespace(namespace).Create(context.Background(), obj, metav1.CreateOptions{})
-	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to create resource: %v", err)))
-		return 2
-	}
-
-	// Convert to Lua
-	luaObj, err := translator.ToLua(L, created.Object)
-	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to convert to Lua: %v", err)))
-		return 2
-	}
-
-	L.Push(luaObj)
-	L.Push(lua.LNil)
-	return 2
-}
-
-// update: updates a Kubernetes resource.
-//
-// @luafunc update
-// @luaparam obj table The Kubernetes object to update
-// @luareturn table|nil obj The updated Kubernetes object, or nil on error
-// @luareturn string|nil err Error message if update failed
-//
-// Example:
-//
-//	cm.data.newkey = "newvalue"
-//	local updated, err = client.update(cm)
-func (c *Client) update(L *lua.LState) int {
-	objTable := L.CheckTable(1)
-
-	// Convert to Go map
-	var objMap map[string]interface{}
-	if err := translator.FromLua(L, objTable, &objMap); err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to parse object: %v", err)))
-		return 2
-	}
-
-	// Create unstructured object
-	obj := &unstructured.Unstructured{Object: objMap}
-
-	// Extract GVK
-	gvk := obj.GroupVersionKind()
-	if gvk.Kind == "" || gvk.Version == "" {
-		L.Push(lua.LNil)
-		L.Push(lua.LString("object missing apiVersion or kind"))
-		return 2
-	}
-
-	// Build GVR
-	gvr := schema.GroupVersionResource{
-		Group:    gvk.Group,
-		Version:  gvk.Version,
-		Resource: pluralize(gvk.Kind),
-	}
-
-	// Get namespace
-	namespace := obj.GetNamespace()
-	if namespace == "" {
-		namespace = "default"
-	}
-
-	// Update resource
-	updated, err := c.dynamic.Resource(gvr).Namespace(namespace).Update(context.Background(), obj, metav1.UpdateOptions{})
-	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to update resource: %v", err)))
-		return 2
-	}
-
-	// Convert to Lua
-	luaObj, err := translator.ToLua(L, updated.Object)
-	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to convert to Lua: %v", err)))
-		return 2
-	}
-
-	L.Push(luaObj)
-	L.Push(lua.LNil)
-	return 2
-}
-
-// delete: deletes a Kubernetes resource by GVK, namespace, and name.
-//
-// @luafunc delete
-// @luaparam gvk GVKMatcher The GVK matcher with group, version, and kind
-// @luaparam namespace string The namespace of the resource
-// @luaparam name string The name of the resource
-// @luareturn string|nil err Error message if deletion failed, nil on success
-//
-// Example:
-//
-//	local gvk = {group = "", version = "v1", kind = "ConfigMap"}
-//	local err = client.delete(gvk, "default", "my-config")
-func (c *Client) delete(L *lua.LState) int {
-	gvkTable := L.CheckTable(1)
-	namespace := L.CheckString(2)
-	name := L.CheckString(3)
-
-	// Parse GVK
-	var gvk kubernetes.GVKMatcher
-	if err := translator.FromLua(L, gvkTable, &gvk); err != nil {
-		L.Push(lua.LString(fmt.Sprintf("failed to parse GVK: %v", err)))
-		return 1
-	}
-
-	// Validate GVK
-	if gvk.Kind == "" || gvk.Version == "" {
-		L.Push(lua.LString("GVK requires 'kind' and 'version' fields"))
-		return 1
-	}
-
-	// Build GVR
-	gvr := schema.GroupVersionResource{
-		Group:    gvk.Group,
-		Version:  gvk.Version,
-		Resource: pluralize(gvk.Kind),
-	}
-
-	// Delete resource
-	err := c.dynamic.Resource(gvr).Namespace(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
-	if err != nil {
-		L.Push(lua.LString(fmt.Sprintf("failed to delete resource: %v", err)))
-		return 1
-	}
-
-	L.Push(lua.LNil)
-	return 1
-}
-
-// list: lists Kubernetes resources by GVK and namespace.
-//
-// @luafunc list
-// @luaparam gvk GVKMatcher The GVK matcher with group, version, and kind
-// @luaparam namespace string The namespace to list from
-// @luareturn table[]|nil objects Array of Kubernetes objects, or nil on error
-// @luareturn string|nil err Error message if listing failed
-//
-// Example:
-//
-//	local gvk = {group = "", version = "v1", kind = "ConfigMap"}
-//	local items, err = client.list(gvk, "default")
-func (c *Client) list(L *lua.LState) int {
-	gvkTable := L.CheckTable(1)
-	namespace := L.CheckString(2)
-
-	// Parse GVK
-	var gvk kubernetes.GVKMatcher
-	if err := translator.FromLua(L, gvkTable, &gvk); err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to parse GVK: %v", err)))
-		return 2
-	}
-
-	// Validate GVK
-	if gvk.Kind == "" || gvk.Version == "" {
-		L.Push(lua.LNil)
-		L.Push(lua.LString("GVK requires 'kind' and 'version' fields"))
-		return 2
-	}
-
-	// Build GVR
-	gvr := schema.GroupVersionResource{
-		Group:    gvk.Group,
-		Version:  gvk.Version,
-		Resource: pluralize(gvk.Kind),
-	}
-
-	// List resources
-	list, err := c.dynamic.Resource(gvr).Namespace(namespace).List(context.Background(), metav1.ListOptions{})
-	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to list resources: %v", err)))
-		return 2
-	}
-
-	// Convert items to Lua array
-	items := L.CreateTable(len(list.Items), 0)
-	for i, item := range list.Items {
-		luaObj, err := translator.ToLua(L, item.Object)
-		if err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(fmt.Sprintf("failed to convert item to Lua: %v", err)))
-			return 2
-		}
-		items.RawSetInt(i+1, luaObj)
-	}
-
-	L.Push(items)
-	L.Push(lua.LNil)
-	return 2
+// Register: adds this module to reg for stub generation.
+// Passes nil config since stub generation does not make API calls.
+func Register(reg *luareg.Registry) {
+	build(nil).Register(reg)
 }
 
 // pluralize: converts a Kubernetes resource kind to its plural form.
-// Handles all resource types registered as constants in this module.
-// Kubernetes resource names are all lowercase.
 func pluralize(kind string) string {
-	// Convert to lowercase
 	lower := strings.ToLower(kind)
 
-	// Map of all registered resource kinds to their correct plural forms
 	pluralMap := map[string]string{
 		// Core resources (group="")
 		"pod":                   "pods",
@@ -542,21 +334,17 @@ func pluralize(kind string) string {
 		"persistentvolume":      "persistentvolumes",
 		"persistentvolumeclaim": "persistentvolumeclaims",
 		"endpoints":             "endpoints",
-
 		// Apps resources (group="apps")
 		"deployment":  "deployments",
 		"statefulset": "statefulsets",
 		"daemonset":   "daemonsets",
 		"replicaset":  "replicasets",
-
 		// Batch resources (group="batch")
 		"job":     "jobs",
 		"cronjob": "cronjobs",
-
 		// Networking resources (group="networking.k8s.io")
 		"ingress":       "ingresses",
 		"networkpolicy": "networkpolicies",
-
 		// RBAC resources (group="rbac.authorization.k8s.io")
 		"role":               "roles",
 		"clusterrole":        "clusterroles",
@@ -564,12 +352,10 @@ func pluralize(kind string) string {
 		"clusterrolebinding": "clusterrolebindings",
 	}
 
-	// Return exact match if found
 	if plural, ok := pluralMap[lower]; ok {
 		return plural
 	}
 
-	// Fallback: simple pluralization rules
 	if strings.HasSuffix(lower, "s") {
 		return lower + "es"
 	}

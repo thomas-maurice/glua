@@ -24,36 +24,59 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	lua "github.com/yuin/gopher-lua"
 )
 
-// TestLuaScripts: runs all Lua test scripts in testdata/ directory
+// TestLuaScripts: runs all Lua test scripts in testdata/ directory.
 func TestLuaScripts(t *testing.T) {
 	files, err := filepath.Glob("testdata/*.lua")
-	if err != nil {
-		t.Fatalf("Failed to glob testdata: %v", err)
-	}
-
-	if len(files) == 0 {
-		t.Fatal("No Lua test files found in testdata/")
-	}
+	require.NoError(t, err)
+	require.NotEmpty(t, files, "No Lua test files found in testdata/")
 
 	for _, file := range files {
 		testName := filepath.Base(file)
 		t.Run(testName, func(t *testing.T) {
 			L := lua.NewState()
 			defer L.Close()
-
 			L.PreloadModule("regexp", Loader)
-
 			if err := L.DoFile(file); err != nil {
 				t.Fatalf("Lua script failed: %v", err)
 			}
-
 			result := L.Get(-1)
 			if result != lua.LTrue {
 				t.Errorf("Test script returned %v, expected true", result)
 			}
 		})
 	}
+}
+
+// TestInvalidPatternRaises: an invalid regex pattern causes a Lua error.
+func TestInvalidPatternRaises(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	L.PreloadModule("regexp", Loader)
+
+	code := `
+		local re = require("regexp")
+		local ok, err = pcall(re.match, "[", "text")
+		assert(not ok, "Expected error for invalid pattern")
+		assert(type(err) == "string", "Error should be a string")
+	`
+	require.NoError(t, L.DoString(code))
+}
+
+// TestFindAllEmptyResult: find_all returns an empty table when there are no matches.
+func TestFindAllEmptyResult(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	L.PreloadModule("regexp", Loader)
+
+	code := `
+		local re = require("regexp")
+		local matches = re.find_all("[0-9]+", "no numbers", -1)
+		assert(type(matches) == "table", "Expected table")
+		assert(#matches == 0, "Expected 0 matches")
+	`
+	require.NoError(t, L.DoString(code))
 }

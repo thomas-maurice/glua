@@ -3,14 +3,14 @@
 ---@class json
 local json = {}
 
----@param jsonstr string The JSON string to parse
----@return table tbl The parsed JSON as a Lua table, or nil on error
----@return string|nil err Error message if parsing failed
+--- parses a JSON string into a Lua value, raises on invalid JSON
+---@param jsonstr string
+---@return any
 function json.parse(jsonstr) end
 
----@param tbl table The Lua table to convert to JSON
----@return string str The JSON string, or nil on error
----@return string|nil err Error message if conversion failed
-function json.stringify(tbl) end
+--- converts a Lua value to a JSON string, raises on error
+---@param value any
+---@return string
+function json.stringify(value) end
 
 return json

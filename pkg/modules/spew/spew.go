@@ -26,108 +26,45 @@ import (
 	"os"
 
 	"github.com/neilotoole/jsoncolor"
+	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
 )
 
-// Loader: creates and returns the spew module for Lua.
-// This function should be registered with L.PreloadModule("spew", spew.Loader)
-//
-// @luamodule spew
-//
-// Example usage in Lua:
-//
-//	local spew = require("spew")
-//	spew.dump({name="John", items={1,2,3}})
-//	local str = spew.sdump({key="value"})
-func Loader(L *lua.LState) int {
-	// Create module table
-	mod := L.SetFuncs(L.NewTable(), exports)
-
-	// Push module onto stack
-	L.Push(mod)
-	return 1
-}
-
-// exports: maps Lua function names to Go implementations
-var exports = map[string]lua.LGFunction{
-	"dump":  dump,
-	"sdump": sdump,
-}
-
-// dump: prints the contents of a Lua value to stdout with colored JSON formatting.
-// This is useful for debugging and inspecting complex table structures.
-//
-// @luafunc dump
-// @luaparam value any The Lua value to dump (table, string, number, etc.)
-//
-// Example:
-//
-//	local spew = require("spew")
-//	spew.dump({name="John", age=30, items={1,2,3}})
-//	-- Prints colored JSON representation to stdout
-func dump(L *lua.LState) int {
-	value := L.CheckAny(1)
-
-	// Convert Lua value to Go
+// dump: prints a Lua value to stdout as colored indented JSON.
+// Uses *lua.LState escape hatch to accept any Lua value type.
+func dump(L *lua.LState, value lua.LValue) {
 	goValue := luaToGo(L, value)
-
-	// Marshal to JSON with indentation
 	jsonBytes, err := json.MarshalIndent(goValue, "", "  ")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error marshaling to JSON: %v\n", err)
-		return 0
+		return
 	}
 
-	// Create encoder with default colors for terminal output
 	enc := jsoncolor.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	enc.SetColors(jsoncolor.DefaultColors())
 
-	// Decode and re-encode with colors
 	var v interface{}
 	if err := json.Unmarshal(jsonBytes, &v); err != nil {
 		fmt.Fprintf(os.Stderr, "Error unmarshaling JSON: %v\n", err)
-		return 0
+		return
 	}
-
 	if err := enc.Encode(v); err != nil {
 		fmt.Fprintf(os.Stderr, "Error encoding colored JSON: %v\n", err)
-		return 0
 	}
-
-	return 0
 }
 
 // sdump: returns a JSON string representation of a Lua value with indentation.
-// Unlike dump, this returns the string instead of printing to stdout (no colors).
-//
-// @luafunc sdump
-// @luaparam value any The Lua value to dump (table, string, number, etc.)
-// @luareturn string str A JSON string representation of the value
-//
-// Example:
-//
-//	local spew = require("spew")
-//	local str = spew.sdump({name="John", age=30})
-//	print(str)  -- Prints the JSON representation
-func sdump(L *lua.LState) int {
-	value := L.CheckAny(1)
-
-	// Convert Lua value to Go
+func sdump(L *lua.LState, value lua.LValue) string {
 	goValue := luaToGo(L, value)
-
-	// Marshal to JSON with indentation
 	jsonBytes, err := json.MarshalIndent(goValue, "", "  ")
 	if err != nil {
-		L.Push(lua.LString(fmt.Sprintf("Error: %v", err)))
-		return 1
+		return fmt.Sprintf("Error: %v", err)
 	}
-
-	L.Push(lua.LString(string(jsonBytes)))
-	return 1
+	return string(jsonBytes)
 }
 
-// luaToGo: converts a Lua value to a Go value for spew dumping
+// luaToGo: converts a Lua value to a Go value for JSON marshalling.
 func luaToGo(L *lua.LState, value lua.LValue) interface{} {
 	switch v := value.(type) {
 	case *lua.LNilType:
@@ -149,18 +86,16 @@ func luaToGo(L *lua.LState, value lua.LValue) interface{} {
 	}
 }
 
-// convertLuaTable: converts a Lua table to either a Go slice or map based on key structure
+// convertLuaTable: converts a Lua table to a Go slice or map.
 func convertLuaTable(L *lua.LState, table *lua.LTable) interface{} {
 	maxN, isArray, hasElements := analyzeTableStructure(table)
-
 	if isArray && maxN > 0 && hasElements {
 		return convertTableToArray(L, table, maxN)
 	}
-
 	return convertTableToMap(L, table)
 }
 
-// analyzeTableStructure: determines if a Lua table should be treated as an array or map
+// analyzeTableStructure: determines if a Lua table is an array or map.
 func analyzeTableStructure(table *lua.LTable) (maxN int, isArray bool, hasElements bool) {
 	isArray = true
 	table.ForEach(func(key lua.LValue, val lua.LValue) {
@@ -180,7 +115,7 @@ func analyzeTableStructure(table *lua.LTable) (maxN int, isArray bool, hasElemen
 	return
 }
 
-// convertTableToArray: converts a Lua table with numeric indices to a Go slice
+// convertTableToArray: converts an array-like Lua table to a Go slice.
 func convertTableToArray(L *lua.LState, table *lua.LTable, maxN int) []interface{} {
 	arr := make([]interface{}, maxN)
 	for i := 1; i <= maxN; i++ {
@@ -189,7 +124,7 @@ func convertTableToArray(L *lua.LState, table *lua.LTable, maxN int) []interface
 	return arr
 }
 
-// convertTableToMap: converts a Lua table with string keys to a Go map
+// convertTableToMap: converts a map-like Lua table to a Go map.
 func convertTableToMap(L *lua.LState, table *lua.LTable) map[string]interface{} {
 	obj := make(map[string]interface{})
 	table.ForEach(func(key lua.LValue, val lua.LValue) {
@@ -202,4 +137,24 @@ func convertTableToMap(L *lua.LState, table *lua.LTable) map[string]interface{} 
 		obj[keyStr] = luaToGo(L, val)
 	})
 	return obj
+}
+
+// build: constructs the module definition. Reused by Loader and Register.
+func build() *luareg.Module {
+	m := luareg.NewModule("spew", "debug dump utilities for Lua values")
+	m.Fn("dump", dump, "prints a Lua value to stdout as colored indented JSON",
+		luareg.Args("value"))
+	m.Fn("sdump", sdump, "returns a JSON string representation of a Lua value",
+		luareg.Args("value"))
+	return m
+}
+
+// Loader: gopher-lua module loader. Use with L.PreloadModule("spew", spew.Loader).
+func Loader(L *lua.LState) int {
+	return build().PushTo(L)
+}
+
+// Register: adds this module to reg for stub generation.
+func Register(reg *luareg.Registry) {
+	build().Register(reg)
 }

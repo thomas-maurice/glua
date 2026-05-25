@@ -3,24 +3,28 @@
 ---@class osmod
 local osmod = {}
 
----@param name string The environment variable name
----@return string The value of the environment variable (empty string if not set)
+--- returns the value of an environment variable
+---@param name string
+---@return string
 function osmod.getenv(name) end
 
----@param name string The environment variable name
----@param value string The value to set
----@return string|nil Error message if operation failed
+--- sets an environment variable, raises on error
+---@param name string
+---@param value string
+---@return boolean
 function osmod.setenv(name, value) end
 
----@param name string The environment variable name
----@return string|nil Error message if operation failed
+--- unsets an environment variable, raises on error
+---@param name string
+---@return boolean
 function osmod.unsetenv(name) end
 
----@return string The hostname
----@return string|nil Error message if operation failed
+--- returns the system hostname, raises on error
+---@return string
 function osmod.hostname() end
 
----@return string The temporary directory path
+--- returns the default temporary directory path
+---@return string
 function osmod.tmpdir() end
 
 return osmod

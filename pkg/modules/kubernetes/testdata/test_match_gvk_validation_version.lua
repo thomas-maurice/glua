@@ -1,7 +1,8 @@
 
 -- Test: match_gvk validation - missing version
 --
--- Verifies that match_gvk errors when version field is missing.
+-- Verifies that match_gvk returns false when version field is missing
+-- (an incomplete matcher cannot match any resource).
 
 local k8s = require("kubernetes")
 
@@ -10,18 +11,12 @@ local pod = {
 	kind = "Pod",
 }
 
--- Missing 'version' field should error
+-- Missing 'version' field: incomplete matcher should return false
 local matcher = {group = "", kind = "Pod"}
-local status, err = pcall(function()
-	k8s.match_gvk(pod, matcher)
-end)
+local result = k8s.match_gvk(pod, matcher)
 
-if status then
-	error("Expected error for missing 'version' field, but got success")
-end
-
-if not string.find(err, "requires 'version' field") then
-	error("Expected error message about 'version' field, got: " .. tostring(err))
+if result then
+	error("Expected false for incomplete matcher (missing 'version' field)")
 end
 
 return true

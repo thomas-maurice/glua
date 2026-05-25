@@ -3,16 +3,16 @@
 ---@class template
 local template = {}
 
----@param tmpl string The template string
----@param data table The data to render with
----@return string result The rendered template, or nil on error
----@return string|nil err Error message if rendering failed
+--- renders a template string with data, raises on error
+---@param tmpl string
+---@param data gopher-lua.LTable
+---@return string
 function template.render(tmpl, data) end
 
----@param path string The path to the template file
----@param data table The data to render with
----@return string result The rendered template, or nil on error
----@return string|nil err Error message if rendering failed
+--- renders a template file with data, raises on error
+---@param path string
+---@param data gopher-lua.LTable
+---@return string
 function template.render_file(path, data) end
 
 return template

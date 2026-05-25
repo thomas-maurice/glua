@@ -21,193 +21,104 @@
 package regexp
 
 import (
+	"fmt"
 	"regexp"
 
+	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
 )
 
-// Loader: creates the regexp Lua module
-//
-// @luamodule regexp
+// match: reports whether pattern matches text; raises on invalid pattern.
+func match(pattern, text string) (bool, error) {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return false, fmt.Errorf("invalid pattern: %w", err)
+	}
+	return re.MatchString(text), nil
+}
+
+// find: returns the first match of pattern in text, or empty string; raises on
+// invalid pattern.
+func find(pattern, text string) (string, error) {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return "", fmt.Errorf("invalid pattern: %w", err)
+	}
+	return re.FindString(text), nil
+}
+
+// findAll: returns up to n matches of pattern in text as a []string; raises on
+// invalid pattern.
+func findAll(pattern, text string, n int) ([]string, error) {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("invalid pattern: %w", err)
+	}
+	matches := re.FindAllString(text, n)
+	if matches == nil {
+		return []string{}, nil
+	}
+	return matches, nil
+}
+
+// replace: replaces the first match of pattern in text with replacement; raises
+// on invalid pattern.
+func replace(pattern, text, replacement string) (string, error) {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return "", fmt.Errorf("invalid pattern: %w", err)
+	}
+	// Replace only the first match.
+	loc := re.FindStringIndex(text)
+	if loc == nil {
+		return text, nil
+	}
+	return text[:loc[0]] + replacement + text[loc[1]:], nil
+}
+
+// replaceAll: replaces all matches of pattern in text with replacement; raises
+// on invalid pattern.
+func replaceAll(pattern, text, replacement string) (string, error) {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return "", fmt.Errorf("invalid pattern: %w", err)
+	}
+	return re.ReplaceAllLiteralString(text, replacement), nil
+}
+
+// split: splits text by pattern into at most n parts; raises on invalid pattern.
+func split(pattern, text string, n int) ([]string, error) {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("invalid pattern: %w", err)
+	}
+	return re.Split(text, n), nil
+}
+
+// build: constructs the module definition. Reused by Loader and Register.
+func build() *luareg.Module {
+	m := luareg.NewModule("regexp", "regular expression utilities")
+	m.Fn("match", match, "reports whether pattern matches text, raises on invalid pattern",
+		luareg.Args("pattern", "text"))
+	m.Fn("find", find, "returns the first match of pattern in text, raises on invalid pattern",
+		luareg.Args("pattern", "text"))
+	m.Fn("find_all", findAll, "returns all matches of pattern in text up to n, raises on invalid pattern",
+		luareg.Args("pattern", "text", "n"))
+	m.Fn("replace", replace, "replaces the first match of pattern with replacement, raises on invalid pattern",
+		luareg.Args("pattern", "text", "replacement"))
+	m.Fn("replace_all", replaceAll, "replaces all matches of pattern with replacement, raises on invalid pattern",
+		luareg.Args("pattern", "text", "replacement"))
+	m.Fn("split", split, "splits text by pattern into at most n parts, raises on invalid pattern",
+		luareg.Args("pattern", "text", "n"))
+	return m
+}
+
+// Loader: gopher-lua module loader. Use with L.PreloadModule("regexp", regexp.Loader).
 func Loader(L *lua.LState) int {
-	mod := L.SetFuncs(L.NewTable(), exports)
-	L.Push(mod)
-	return 1
+	return build().PushTo(L)
 }
 
-var exports = map[string]lua.LGFunction{
-	"match":       matchFunc,
-	"find":        findFunc,
-	"find_all":    findAllFunc,
-	"replace":     replaceFunc,
-	"replace_all": replaceAllFunc,
-	"split":       splitFunc,
-}
-
-// matchFunc: checks if pattern matches text
-//
-// @luafunc match
-// @luaparam pattern string The regular expression pattern
-// @luaparam text string The text to match against
-// @luareturn boolean True if pattern matches, false otherwise
-// @luareturn string|nil Error message if pattern is invalid
-func matchFunc(L *lua.LState) int {
-	pattern := L.CheckString(1)
-	text := L.CheckString(2)
-
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		L.Push(lua.LFalse)
-		L.Push(lua.LString(err.Error()))
-		return 2
-	}
-
-	matched := re.MatchString(text)
-	L.Push(lua.LBool(matched))
-	L.Push(lua.LNil)
-	return 2
-}
-
-// findFunc: finds first match of pattern in text
-//
-// @luafunc find
-// @luaparam pattern string The regular expression pattern
-// @luaparam text string The text to search
-// @luareturn string The first match (empty string if no match)
-// @luareturn string|nil Error message if pattern is invalid
-func findFunc(L *lua.LState) int {
-	pattern := L.CheckString(1)
-	text := L.CheckString(2)
-
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		L.Push(lua.LString(""))
-		L.Push(lua.LString(err.Error()))
-		return 2
-	}
-
-	match := re.FindString(text)
-	L.Push(lua.LString(match))
-	L.Push(lua.LNil)
-	return 2
-}
-
-// findAllFunc: finds all matches of pattern in text
-//
-// @luafunc find_all
-// @luaparam pattern string The regular expression pattern
-// @luaparam text string The text to search
-// @luaparam limit number Maximum number of matches (-1 for all)
-// @luareturn table Array of matches
-// @luareturn string|nil Error message if pattern is invalid
-func findAllFunc(L *lua.LState) int {
-	pattern := L.CheckString(1)
-	text := L.CheckString(2)
-	limit := L.CheckInt(3)
-
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		L.Push(L.NewTable())
-		L.Push(lua.LString(err.Error()))
-		return 2
-	}
-
-	matches := re.FindAllString(text, limit)
-
-	table := L.NewTable()
-	for i, match := range matches {
-		table.RawSetInt(i+1, lua.LString(match))
-	}
-
-	L.Push(table)
-	L.Push(lua.LNil)
-	return 2
-}
-
-// replaceFunc: replaces first match of pattern with replacement
-//
-// @luafunc replace
-// @luaparam pattern string The regular expression pattern
-// @luaparam text string The text to search
-// @luaparam replacement string The replacement string
-// @luareturn string The text with first match replaced
-// @luareturn string|nil Error message if pattern is invalid
-func replaceFunc(L *lua.LState) int {
-	pattern := L.CheckString(1)
-	text := L.CheckString(2)
-	replacement := L.CheckString(3)
-
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		L.Push(lua.LString(text))
-		L.Push(lua.LString(err.Error()))
-		return 2
-	}
-
-	// For single replacement, we need to limit to 1
-	result := re.ReplaceAllStringFunc(text, func(s string) string {
-		return replacement
-	})
-
-	L.Push(lua.LString(result))
-	L.Push(lua.LNil)
-	return 2
-}
-
-// replaceAllFunc: replaces all matches of pattern with replacement
-//
-// @luafunc replace_all
-// @luaparam pattern string The regular expression pattern
-// @luaparam text string The text to search
-// @luaparam replacement string The replacement string
-// @luareturn string The text with all matches replaced
-// @luareturn string|nil Error message if pattern is invalid
-func replaceAllFunc(L *lua.LState) int {
-	pattern := L.CheckString(1)
-	text := L.CheckString(2)
-	replacement := L.CheckString(3)
-
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		L.Push(lua.LString(text))
-		L.Push(lua.LString(err.Error()))
-		return 2
-	}
-
-	result := re.ReplaceAllLiteralString(text, replacement)
-	L.Push(lua.LString(result))
-	L.Push(lua.LNil)
-	return 2
-}
-
-// splitFunc: splits text by pattern
-//
-// @luafunc split
-// @luaparam pattern string The regular expression pattern
-// @luaparam text string The text to split
-// @luaparam limit number Maximum number of splits (-1 for all)
-// @luareturn table Array of split parts
-// @luareturn string|nil Error message if pattern is invalid
-func splitFunc(L *lua.LState) int {
-	pattern := L.CheckString(1)
-	text := L.CheckString(2)
-	limit := L.CheckInt(3)
-
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		L.Push(L.NewTable())
-		L.Push(lua.LString(err.Error()))
-		return 2
-	}
-
-	parts := re.Split(text, limit)
-
-	table := L.NewTable()
-	for i, part := range parts {
-		table.RawSetInt(i+1, lua.LString(part))
-	}
-
-	L.Push(table)
-	L.Push(lua.LNil)
-	return 2
+// Register: adds this module to reg for stub generation.
+func Register(reg *luareg.Registry) {
+	build().Register(reg)
 }

@@ -18,29 +18,22 @@ local totalMemory = 0
 for i, container in ipairs(pod.spec.containers) do
     print("Container: " .. container.name)
 
-    -- Parse CPU limits
+    -- Parse CPU limits. Q5: parse_cpu raises on a malformed value; wrap in
+    -- pcall if you want to keep going past a bad container.
     if container.resources.limits and container.resources.limits["cpu"] then
-        local cpuMillis, err = k8s.parse_cpu(container.resources.limits["cpu"])
-        if err then
-            print("  ERROR parsing CPU: " .. err)
-        else
-            print("  CPU Limit: " .. cpuMillis .. " millicores")
-            totalCPU = totalCPU + cpuMillis
-        end
+        local cpuMillis = k8s.parse_cpu(container.resources.limits["cpu"])
+        print("  CPU Limit: " .. cpuMillis .. " millicores")
+        totalCPU = totalCPU + cpuMillis
     else
         print("  CPU Limit: NOT SET")
     end
 
-    -- Parse memory limits
+    -- Parse memory limits.
     if container.resources.limits and container.resources.limits["memory"] then
-        local memBytes, err = k8s.parse_memory(container.resources.limits["memory"])
-        if err then
-            print("  ERROR parsing memory: " .. err)
-        else
-            local memMB = memBytes / (1024 * 1024)
-            print(string.format("  Memory Limit: %.2f MB", memMB))
-            totalMemory = totalMemory + memBytes
-        end
+        local memBytes = k8s.parse_memory(container.resources.limits["memory"])
+        local memMB = memBytes / (1024 * 1024)
+        print(string.format("  Memory Limit: %.2f MB", memMB))
+        totalMemory = totalMemory + memBytes
     else
         print("  Memory Limit: NOT SET")
     end

@@ -57,11 +57,8 @@ print("\n[Lua] Parsing creationTimestamp...")
 local timestampStr = pod.metadata.creationTimestamp
 print("  Input: " .. timestampStr)
 
-local timestamp, err = k8s.parse_time(timestampStr)
-if err then
-	error("Failed to parse timestamp: " .. err)
-end
-
+-- Q5: parse_time raises on malformed input; happy-path code stays clean.
+local timestamp = k8s.parse_time(timestampStr)
 print(string.format("  Output: %d (Unix timestamp)", timestamp))
 assert(timestamp > 0, "Timestamp should be positive")
 
@@ -80,21 +77,13 @@ print("  Container: " .. container.name)
 local cpuLimitStr = container.resources.limits["cpu"]
 print("  CPU limit (raw): " .. cpuLimitStr)
 
-local cpuMillis, err = k8s.parse_cpu(cpuLimitStr)
-if err then
-	error("Failed to parse CPU: " .. err)
-end
-
+local cpuMillis = k8s.parse_cpu(cpuLimitStr)
 print(string.format("  CPU limit (parsed): %d millicores", cpuMillis))
 assert(cpuMillis > 0, "CPU should be positive")
 
 -- Parse CPU requests
 local cpuRequestStr = container.resources.requests["cpu"]
-local cpuReqMillis, err = k8s.parse_cpu(cpuRequestStr)
-if err then
-	error("Failed to parse CPU request: " .. err)
-end
-
+local cpuReqMillis = k8s.parse_cpu(cpuRequestStr)
 print(string.format("  CPU request (parsed): %d millicores", cpuReqMillis))
 
 ---@diagnostic disable-next-line: lowercase-global
@@ -110,21 +99,13 @@ print("\n[Lua] Parsing memory resources...")
 local memLimitStr = container.resources.limits["memory"]
 print("  Memory limit (raw): " .. memLimitStr)
 
-local memBytes, err = k8s.parse_memory(memLimitStr)
-if err then
-	error("Failed to parse memory: " .. err)
-end
-
+local memBytes = k8s.parse_memory(memLimitStr)
 local memMB = memBytes / (1024 * 1024)
 print(string.format("  Memory limit (parsed): %d bytes (%.2f MB)", memBytes, memMB))
 
 -- Parse memory requests
 local memRequestStr = container.resources.requests["memory"]
-local memReqBytes, err = k8s.parse_memory(memRequestStr)
-if err then
-	error("Failed to parse memory request: " .. err)
-end
-
+local memReqBytes = k8s.parse_memory(memRequestStr)
 local memReqMB = memReqBytes / (1024 * 1024)
 print(string.format("  Memory request (parsed): %d bytes (%.2f MB)", memReqBytes, memReqMB))
 ---@diagnostic disable-next-line: lowercase-global

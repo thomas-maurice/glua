@@ -23,110 +23,35 @@ package yaml
 import (
 	"fmt"
 
+	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
 	"gopkg.in/yaml.v3"
 )
 
-// Loader: creates and returns the yaml module for Lua.
-// This function should be registered with L.PreloadModule("yaml", yaml.Loader)
-//
-// @luamodule yaml
-//
-// Example usage in Lua:
-//
-//	local yaml = require("yaml")
-//	local tbl = yaml.parse('name: John\nage: 30')
-//	local str = yaml.stringify({name="Jane", age=25})
-func Loader(L *lua.LState) int {
-	// Create module table
-	mod := L.SetFuncs(L.NewTable(), exports)
-
-	// Push module onto stack
-	L.Push(mod)
-	return 1
-}
-
-// exports: maps Lua function names to Go implementations
-var exports = map[string]lua.LGFunction{
-	"parse":     parse,
-	"stringify": stringify,
-}
-
-// parse: parses a YAML string and returns a Lua table.
-// Returns nil and error message on failure.
-//
-// @luafunc parse
-// @luaparam yamlstr string The YAML string to parse
-// @luareturn table tbl The parsed YAML as a Lua table, or nil on error
-// @luareturn string|nil err Error message if parsing failed
-//
-// Example:
-//
-//	local tbl, err = yaml.parse('name: John\nage: 30')
-//	if err then
-//	    print("Error: " .. err)
-//	else
-//	    print(tbl.name)  -- prints "John"
-//	end
-func parse(L *lua.LState) int {
-	yamlStr := L.CheckString(1)
-
-	// Parse YAML into a generic map
+// parse: parses a YAML string into a Lua value; raises on malformed YAML.
+func parse(L *lua.LState, yamlStr string) (lua.LValue, error) {
 	var data interface{}
 	if err := yaml.Unmarshal([]byte(yamlStr), &data); err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to parse YAML: %v", err)))
-		return 2
+		return lua.LNil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
-
-	// Convert to Lua value
-	luaValue := goToLua(L, data)
-	L.Push(luaValue)
-	L.Push(lua.LNil)
-	return 2
+	return goToLua(L, data), nil
 }
 
-// stringify: converts a Lua table to a YAML string.
-// Returns nil and error message on failure.
-//
-// @luafunc stringify
-// @luaparam tbl table The Lua table to convert to YAML
-// @luareturn string str The YAML string, or nil on error
-// @luareturn string|nil err Error message if conversion failed
-//
-// Example:
-//
-//	local str, err = yaml.stringify({name="Jane", age=25})
-//	if err then
-//	    print("Error: " .. err)
-//	else
-//	    print(str)  -- prints 'age: 25\nname: Jane\n'
-//	end
-func stringify(L *lua.LState) int {
-	luaValue := L.CheckAny(1)
-
-	// Convert Lua value to Go
-	goValue := luaToGo(L, luaValue)
-
-	// Marshal to YAML
-	yamlBytes, err := yaml.Marshal(goValue)
+// stringify: converts a Lua value to a YAML string; raises on marshal failure.
+func stringify(L *lua.LState, value lua.LValue) (string, error) {
+	goValue := luaToGo(L, value)
+	b, err := yaml.Marshal(goValue)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to stringify to YAML: %v", err)))
-		return 2
+		return "", fmt.Errorf("failed to stringify to YAML: %w", err)
 	}
-
-	L.Push(lua.LString(string(yamlBytes)))
-	L.Push(lua.LNil)
-	return 2
+	return string(b), nil
 }
 
-// goToLua: converts a Go value (from yaml.Unmarshal) to a Lua value
+// goToLua: converts a Go value (from yaml.Unmarshal) to a Lua value.
 func goToLua(L *lua.LState, value interface{}) lua.LValue {
 	if value == nil {
 		return lua.LNil
 	}
-
 	switch v := value.(type) {
 	case bool:
 		return lua.LBool(v)
@@ -139,34 +64,30 @@ func goToLua(L *lua.LState, value interface{}) lua.LValue {
 	case string:
 		return lua.LString(v)
 	case []interface{}:
-		// Convert array to Lua table (1-indexed)
 		tbl := L.NewTable()
 		for i, item := range v {
 			tbl.RawSetInt(i+1, goToLua(L, item))
 		}
 		return tbl
 	case map[string]interface{}:
-		// Convert object to Lua table
 		tbl := L.NewTable()
 		for key, val := range v {
 			tbl.RawSetString(key, goToLua(L, val))
 		}
 		return tbl
 	case map[interface{}]interface{}:
-		// YAML can have non-string keys, convert to string keys
+		// YAML can produce non-string keys; convert to string.
 		tbl := L.NewTable()
 		for key, val := range v {
-			keyStr := fmt.Sprintf("%v", key)
-			tbl.RawSetString(keyStr, goToLua(L, val))
+			tbl.RawSetString(fmt.Sprintf("%v", key), goToLua(L, val))
 		}
 		return tbl
 	default:
-		// Fallback: convert to string
 		return lua.LString(fmt.Sprintf("%v", v))
 	}
 }
 
-// luaToGo: converts a Lua value to a Go value (for yaml.Marshal)
+// luaToGo: converts a Lua value to a Go value for yaml.Marshal.
 func luaToGo(L *lua.LState, value lua.LValue) interface{} {
 	switch v := value.(type) {
 	case *lua.LNilType:
@@ -178,7 +99,6 @@ func luaToGo(L *lua.LState, value lua.LValue) interface{} {
 	case lua.LString:
 		return string(v)
 	case *lua.LTable:
-		// Determine if table is an array or object
 		maxN := 0
 		isArray := true
 		v.ForEach(func(key lua.LValue, val lua.LValue) {
@@ -194,8 +114,6 @@ func luaToGo(L *lua.LState, value lua.LValue) interface{} {
 				isArray = false
 			}
 		})
-
-		// If it's an array (consecutive integer keys starting from 1)
 		if isArray && maxN > 0 {
 			arr := make([]interface{}, maxN)
 			for i := 1; i <= maxN; i++ {
@@ -203,20 +121,36 @@ func luaToGo(L *lua.LState, value lua.LValue) interface{} {
 			}
 			return arr
 		}
-
-		// Otherwise, treat as object
 		obj := make(map[string]interface{})
 		v.ForEach(func(key lua.LValue, val lua.LValue) {
 			if keyStr, ok := key.(lua.LString); ok {
 				obj[string(keyStr)] = luaToGo(L, val)
 			} else {
-				// Convert non-string keys to strings
 				obj[fmt.Sprintf("%v", key)] = luaToGo(L, val)
 			}
 		})
 		return obj
 	default:
-		// Fallback: convert to string
 		return fmt.Sprintf("%v", v)
 	}
+}
+
+// build: constructs the module definition. Reused by Loader and Register.
+func build() *luareg.Module {
+	m := luareg.NewModule("yaml", "YAML serialisation and deserialisation utilities")
+	m.Fn("parse", parse, "parses a YAML string into a Lua value, raises on invalid YAML",
+		luareg.Args("yamlstr"))
+	m.Fn("stringify", stringify, "converts a Lua value to a YAML string, raises on error",
+		luareg.Args("value"))
+	return m
+}
+
+// Loader: gopher-lua module loader. Use with L.PreloadModule("yaml", yaml.Loader).
+func Loader(L *lua.LState) int {
+	return build().PushTo(L)
+}
+
+// Register: adds this module to reg for stub generation.
+func Register(reg *luareg.Registry) {
+	build().Register(reg)
 }

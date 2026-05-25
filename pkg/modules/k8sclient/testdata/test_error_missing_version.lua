@@ -1,13 +1,15 @@
 
 -- Test: error handling - missing version
 --
--- Tests that get fails when GVK is missing version field.
+-- Tests that get raises an error when GVK is missing version field.
 
 local gvk = {group = "", kind = "ConfigMap"}  -- Missing version
-local result, err = client.get(gvk, TEST_NAMESPACE, TEST_CONFIG_NAME)
+local ok, err = pcall(function()
+	return client:get(gvk, TEST_NAMESPACE, TEST_CONFIG_NAME)
+end)
 
-if not err then
-	error("Expected error for missing version, got nil")
+if ok then
+	error("Expected error for missing version, but got success")
 end
 
 return true

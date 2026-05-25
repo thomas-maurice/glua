@@ -63,10 +63,7 @@ http {
 	}
 }
 
-local created_cm, err = client.create(configmap)
-if err then
-	error("Failed to create ConfigMap: " .. err)
-end
+local created_cm = client:create(configmap)
 
 print("   ✓ ConfigMap created: " .. created_cm.metadata.name)
 print("   ✓ UID: " .. created_cm.metadata.uid)
@@ -117,10 +114,7 @@ local pod = {
 	}
 }
 
-local created_pod, err = client.create(pod)
-if err then
-	error("Failed to create Pod: " .. err)
-end
+local created_pod = client:create(pod)
 
 print("   ✓ Pod created: " .. created_pod.metadata.name)
 print("   ✓ UID: " .. created_pod.metadata.uid)
@@ -155,10 +149,7 @@ local service = {
 	}
 }
 
-local created_svc, err = client.create(service)
-if err then
-	error("Failed to create Service: " .. err)
-end
+local created_svc = client:create(service)
 
 print("   ✓ Service created: " .. created_svc.metadata.name)
 print("   ✓ Type: " .. created_svc.spec.type)
@@ -168,10 +159,7 @@ print("   ✓ Selects pods with: app=" .. created_svc.spec.selector.app)
 -- Step 3: Get the Pod
 print("\n3. Retrieving Pod...")
 
-local fetched_pod, err = client.get(pod_gvk, "default", "nginx-example")
-if err then
-	error("Failed to get Pod: " .. err)
-end
+local fetched_pod = client:get(pod_gvk, "default", "nginx-example")
 
 print("   ✓ Pod retrieved: " .. fetched_pod.metadata.name)
 print("   ✓ Image: " .. fetched_pod.spec.containers[1].image)
@@ -184,10 +172,7 @@ print("\n4. Updating Pod (adding annotation)...")
 os.execute("sleep 0.5")
 
 -- Refetch the pod to get the latest version (avoid conflicts)
-local latest_pod, err = client.get(pod_gvk, "default", "nginx-example")
-if err then
-	error("Failed to refetch Pod: " .. err)
-end
+local latest_pod = client:get(pod_gvk, "default", "nginx-example")
 
 if not latest_pod.metadata.annotations then
 	latest_pod.metadata.annotations = {}
@@ -195,10 +180,7 @@ end
 latest_pod.metadata.annotations.updated_by = "lua-script"
 latest_pod.metadata.annotations.update_time = os.date("%Y-%m-%d %H:%M:%S")
 
-local updated_pod, err = client.update(latest_pod)
-if err then
-	error("Failed to update Pod: " .. err)
-end
+local updated_pod = client:update(latest_pod)
 
 print("   ✓ Pod updated with annotations:")
 print("   ✓ updated_by: " .. (updated_pod.metadata.annotations.updated_by or "none"))
@@ -207,10 +189,7 @@ print("   ✓ update_time: " .. (updated_pod.metadata.annotations.update_time or
 -- Step 5: List Pods
 print("\n5. Listing Pods in default namespace...")
 
-local pods, err = client.list(pod_gvk, "default")
-if err then
-	error("Failed to list Pods: " .. err)
-end
+local pods = client:list(pod_gvk, "default")
 
 print("   ✓ Found " .. #pods .. " Pod(s):")
 for i, p in ipairs(pods) do
@@ -226,10 +205,7 @@ end
 -- Step 6: List ConfigMaps
 print("\n6. Listing ConfigMaps in default namespace...")
 
-local configmaps, err = client.list(configmap_gvk, "default")
-if err then
-	error("Failed to list ConfigMaps: " .. err)
-end
+local configmaps = client:list(configmap_gvk, "default")
 
 print("   ✓ Found " .. #configmaps .. " ConfigMap(s):")
 for i, cm in ipairs(configmaps) do
@@ -245,21 +221,21 @@ end
 -- Step 7: Delete the Pod
 print("\n7. Deleting Pod...")
 
-local err = client.delete(pod_gvk, "default", "nginx-example")
-if err then
-	error("Failed to delete Pod: " .. err)
-end
+client:delete(pod_gvk, "default", "nginx-example")
 
 print("   ✓ Pod deleted successfully")
 
 -- Step 8: Verify Pod deletion (note: pod may be in Terminating state)
 print("\n8. Verifying Pod deletion...")
 
-local deleted_pod, err = client.get(pod_gvk, "default", "nginx-example")
-if err then
-	print("   ✓ Pod confirmed deleted (expected error: " .. err .. ")")
-elseif deleted_pod.metadata.deletionTimestamp then
-	print("   ✓ Pod is terminating (deletionTimestamp: " .. deleted_pod.metadata.deletionTimestamp .. ")")
+local ok, result = pcall(function()
+	return client:get(pod_gvk, "default", "nginx-example")
+end)
+
+if not ok then
+	print("   ✓ Pod confirmed deleted (expected error: " .. tostring(result) .. ")")
+elseif result and result.metadata and result.metadata.deletionTimestamp then
+	print("   ✓ Pod is terminating (deletionTimestamp: " .. result.metadata.deletionTimestamp .. ")")
 else
 	print("   ⚠ Pod still exists but deletion was requested")
 end
@@ -267,44 +243,31 @@ end
 -- Step 9: Delete the Service
 print("\n9. Deleting Service...")
 
-local err = client.delete(service_gvk, "default", "nginx-service")
-if err then
-	error("Failed to delete Service: " .. err)
-end
+client:delete(service_gvk, "default", "nginx-service")
 
 print("   ✓ Service deleted successfully")
 
 -- Step 10: Delete the ConfigMap
 print("\n10. Deleting ConfigMap...")
 
-local err = client.delete(configmap_gvk, "default", "nginx-config")
-if err then
-	error("Failed to delete ConfigMap: " .. err)
-end
+client:delete(configmap_gvk, "default", "nginx-config")
 
 print("   ✓ ConfigMap deleted successfully")
 
 -- Step 11: Final verification
 print("\n11. Final verification - listing all resources...")
 
-local final_pods, err = client.list(pod_gvk, "default")
-if err then
-	error("Failed to list Pods: " .. err)
-end
-
-local final_cms, err = client.list(configmap_gvk, "default")
-if err then
-	error("Failed to list ConfigMaps: " .. err)
-end
+local final_pods = client:list(pod_gvk, "default")
+local final_cms = client:list(configmap_gvk, "default")
 
 -- Count non-system resources
 local user_pods = 0
 local user_cms = 0
 
-for _, pod in ipairs(final_pods) do
+for _, p in ipairs(final_pods) do
 	-- Count terminating pods separately
-	if pod.metadata.deletionTimestamp then
-		print("   ℹ Pod '" .. pod.metadata.name .. "' is terminating")
+	if p.metadata.deletionTimestamp then
+		print("   ℹ Pod '" .. p.metadata.name .. "' is terminating")
 	else
 		user_pods = user_pods + 1
 	end

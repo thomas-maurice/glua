@@ -1,4 +1,4 @@
-.PHONY: all build test test-unit test-verbose test-short test-k8sclient bench bench-update clean help stubgen example gen-stubs fmt
+.PHONY: all build test test-unit test-verbose test-short test-k8sclient bench bench-update clean help glua-gen example gen-stubs fmt
 .PHONY: act-test act-test-unit act-lint act-build act-list act-check
 
 # Default target - runs ALL tests (unit + integration)
@@ -17,8 +17,8 @@ help:
 	@echo "  bench-update     - Run benchmarks and update benchmarks/README.md with results"
 	@echo "  build            - Build all binaries (runs fmt automatically)"
 	@echo "  fmt              - Format all Go code with go fmt"
-	@echo "  stubgen          - Build stubgen code generator"
-	@echo "  gen-stubs        - Generate Lua stubs for all modules (kubernetes, json, spew, k8sclient)"
+	@echo "  glua-gen         - Build the glua-gen stub generator CLI"
+	@echo "  gen-stubs        - Regenerate library/*.gen.lua from registered modules"
 	@echo "  example          - Build example application"
 	@echo "  clean            - Remove built binaries"
 	@echo "  act-check        - Check if act (GitHub Actions local runner) is installed"
@@ -131,26 +131,22 @@ fmt:
 	@echo "✓ Code formatted"
 
 # Build all binaries
-build: fmt stubgen example
+build: fmt glua-gen example
 	@echo ""
 	@echo "✓ All binaries built successfully"
 
-# Build stubgen code generator
-stubgen:
-	@echo "=== Building stubgen ==="
-	go build -o bin/stubgen ./cmd/stubgen
-	@echo "✓ stubgen built -> bin/stubgen"
+# Build the registry-based stub generator CLI
+glua-gen:
+	@echo "=== Building glua-gen ==="
+	go build -o bin/glua-gen ./cmd/glua-gen
+	@echo "✓ glua-gen built -> bin/glua-gen"
 
-# Generate Lua stubs for all modules
-gen-stubs:
-	@echo "=== Generating Lua stubs for all modules ==="
-	@go run ./pkg/modules/kubernetes/stubgen/main.go -output library
-	@go run ./pkg/modules/json/stubgen/main.go -output library
-	@go run ./pkg/modules/spew/stubgen/main.go -output library
-	@go run ./pkg/modules/k8sclient/stubgen/main.go -output library
-	@go run ./pkg/modules/log/stubgen/main.go -output library
-	@echo ""
-	@echo "✓ All module stubs generated in library/"
+# Regenerate Lua stubs for every module shipped with glua.
+# Runs glua-gen, which calls modules.RegisterAll(reg) and writes library/*.gen.lua.
+gen-stubs: glua-gen
+	@echo "=== Regenerating Lua stubs ==="
+	./bin/glua-gen -out library
+	@echo "✓ Stubs regenerated in library/"
 
 # Build example application
 example:

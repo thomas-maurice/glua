@@ -79,7 +79,7 @@ func (r *TypeRegistry) Register(obj interface{}) error {
 // Handles Kubernetes API objects specially (e.g., corev1.Pod instead of v1.Pod).
 func (r *TypeRegistry) getTypeName(t reflect.Type) string {
 	// Handle pointers
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 
@@ -132,7 +132,7 @@ func (r *TypeRegistry) getTypeName(t reflect.Type) string {
 // This prevents duplicate type registration and handles circular dependencies.
 func (r *TypeRegistry) getTypeKey(t reflect.Type) string {
 	// Handle pointers
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 
@@ -174,7 +174,7 @@ func (r *TypeRegistry) processType(t reflect.Type) string {
 
 // unwrapPointer: unwraps pointer types
 func (r *TypeRegistry) unwrapPointer(t reflect.Type) reflect.Type {
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		return t.Elem()
 	}
 	return t
@@ -298,7 +298,7 @@ func (r *TypeRegistry) GenerateStubs() (string, error) {
 			continue
 		}
 
-		sb.WriteString(fmt.Sprintf("---@class %s\n", typeInfo.Name))
+		fmt.Fprintf(&sb, "---@class %s\n", typeInfo.Name)
 
 		// Sort field names for consistent output
 		var fieldNames []string
@@ -310,7 +310,7 @@ func (r *TypeRegistry) GenerateStubs() (string, error) {
 		// Generate field annotations
 		for _, fieldName := range fieldNames {
 			field := typeInfo.Fields[fieldName]
-			sb.WriteString(fmt.Sprintf("---@field %s %s\n", field.Name, field.TypeKey))
+			fmt.Fprintf(&sb, "---@field %s %s\n", field.Name, field.TypeKey)
 		}
 
 		sb.WriteString("\n")

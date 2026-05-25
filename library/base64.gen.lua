@@ -3,22 +3,24 @@
 ---@class base64
 local base64 = {}
 
----@param str string The string to encode
----@return string encoded The base64 encoded string
-function base64.encode(str) end
+--- encodes a string to standard base64
+---@param s string
+---@return string
+function base64.encode(s) end
 
----@param encoded string The base64 encoded string
----@return string decoded The decoded string, or nil on error
----@return string|nil err Error message if decoding failed
+--- decodes a standard base64 string, raises on invalid input
+---@param encoded string
+---@return string
 function base64.decode(encoded) end
 
----@param str string The string to encode
----@return string encoded The URL-safe base64 encoded string
-function base64.encode_url(str) end
+--- encodes a string to URL-safe base64
+---@param s string
+---@return string
+function base64.encode_url(s) end
 
----@param encoded string The URL-safe base64 encoded string
----@return string decoded The decoded string, or nil on error
----@return string|nil err Error message if decoding failed
+--- decodes a URL-safe base64 string, raises on invalid input
+---@param encoded string
+---@return string
 function base64.decode_url(encoded) end
 
 return base64

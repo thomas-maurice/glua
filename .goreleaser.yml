@@ -1,39 +1,23 @@
 # goreleaser configuration for glua
+#
+# We do NOT ship a glua-gen binary release. The binary is small enough
+# (and only useful for regenerating glua's own stubs) that `go install` is
+# the right distribution channel. The release ships just the Lua stub
+# tarball, which is the genuinely useful artefact for IDE autocomplete in
+# Lua scripts that consume glua's built-in modules.
 version: 2
 
 before:
   hooks:
-    # Generate all Lua stubs before building
+    # Regenerate all Lua stubs from the current code before packaging.
     - make gen-stubs
 
+# No builds: section. Releases contain artefacts only (stubs tarball + checksums).
 builds:
-  - id: stubgen
-    main: ./cmd/stubgen
-    binary: stubgen
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
-    ldflags:
-      - -s -w
-      - -X main.version={{.Version}}
-      - -X main.commit={{.Commit}}
-      - -X main.date={{.Date}}
+  - id: noop
+    skip: true
 
 archives:
-  - id: stubgen-archive
-    name_template: "stubgen_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    builds:
-      - stubgen
-    files:
-      - README.md
-      - LICENSE
-
   - id: lua-stubs
     name_template: "glua-stubs_{{ .Version }}"
     meta: true
@@ -66,25 +50,20 @@ release:
   header: |
     ## glua {{.Version}}
 
-    ### Downloads
+    ### Download
 
-    - **stubgen binary**: Download the appropriate binary for your platform below
-    - **Lua stubs**: Download `glua-stubs_{{.Version}}.tar.gz` for IDE autocomplete support
+    - **Lua stubs**: `glua-stubs_{{.Version}}.tar.gz` — drop into your project for IDE autocomplete on glua's built-in Lua modules (`strings`, `regexp`, `log`, `k8sclient`, …).
+
+    The `glua-gen` CLI is not bundled in releases. Install it with:
+
+    ```bash
+    go install github.com/thomas-maurice/glua/cmd/glua-gen@{{.Tag}}
+    ```
+
+    Most users embedding glua write their own ~15-line `tools/stubgen/main.go` — see the README.
 
   footer: |
     ## Installation
-
-    ### Install stubgen binary
-
-    ```bash
-    # Linux/macOS
-    tar -xzf stubgen_{{.Version}}_<os>_<arch>.tar.gz
-    sudo mv stubgen /usr/local/bin/
-
-    # Windows
-    unzip stubgen_{{.Version}}_windows_<arch>.zip
-    # Move stubgen.exe to your PATH
-    ```
 
     ### Install Lua stubs for IDE autocomplete
 

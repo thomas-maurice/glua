@@ -71,8 +71,8 @@ jobs:
       with:
         go-version: '1.24'
 
-    - name: Build stubgen
-      run: go build -v ./cmd/stubgen
+    - name: Build glua-gen
+      run: go build -v ./cmd/glua-gen
 
     - name: Build example
       working-directory: ./example
@@ -99,9 +99,18 @@ jobs:
 
     - name: Generate stubs
       run: |
-        go run ./cmd/stubgen -dir pkg/modules -output-dir /tmp/library
+        go run ./cmd/glua-gen -out /tmp/library
         test -f /tmp/library/kubernetes.gen.lua || (echo "kubernetes.gen.lua not generated" && exit 1)
         echo "✓ Stub generation successful"
+
+    - name: Verify checked-in stubs are up to date
+      run: |
+        go run ./cmd/glua-gen -out library
+        if ! git diff --exit-code library/; then
+          echo "library/*.gen.lua is out of date — run 'make gen-stubs' and commit the result"
+          exit 1
+        fi
+        echo "✓ Checked-in stubs match generator output"
 
   k8sclient:
     name: K8s Client Example Test

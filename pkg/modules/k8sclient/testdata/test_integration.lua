@@ -16,10 +16,7 @@ local cm = {
 	}
 }
 
-local created, err = client.create(cm)
-if err then
-	error("Failed to create: " .. err)
-end
+local created = client:create(cm)
 
 if created.metadata.name ~= TEST_INTEGRATION_NAME then
 	error("Created object has wrong name: " .. (created.metadata.name or "nil"))
@@ -27,11 +24,7 @@ end
 
 -- Get the ConfigMap
 local gvk = {group = "", version = "v1", kind = "ConfigMap"}
-local fetched, err = client.get(gvk, TEST_NAMESPACE, TEST_INTEGRATION_NAME)
-
-if err then
-	error("Failed to get: " .. err)
-end
+local fetched = client:get(gvk, TEST_NAMESPACE, TEST_INTEGRATION_NAME)
 
 if fetched.data[TEST_INITIAL_KEY] ~= TEST_INITIAL_VALUE then
 	error("Fetched object has wrong data: " .. (fetched.data[TEST_INITIAL_KEY] or "nil"))
@@ -39,11 +32,7 @@ end
 
 -- Update the ConfigMap
 fetched.data[TEST_UPDATE_KEY] = TEST_UPDATE_VALUE
-local updated, err = client.update(fetched)
-
-if err then
-	error("Failed to update: " .. err)
-end
+local updated = client:update(fetched)
 
 if updated.data[TEST_UPDATE_KEY] ~= TEST_UPDATE_VALUE then
 	error("Updated object doesn't have new data")
@@ -54,11 +43,7 @@ if updated.data[TEST_INITIAL_KEY] ~= TEST_INITIAL_VALUE then
 end
 
 -- List to verify it exists
-local items, err = client.list(gvk, TEST_NAMESPACE)
-
-if err then
-	error("Failed to list: " .. err)
-end
+local items = client:list(gvk, TEST_NAMESPACE)
 
 local found = false
 for i, item in ipairs(items) do
@@ -73,17 +58,15 @@ if not found then
 end
 
 -- Delete the ConfigMap
-local err = client.delete(gvk, TEST_NAMESPACE, TEST_INTEGRATION_NAME)
-
-if err then
-	error("Failed to delete: " .. err)
-end
+client:delete(gvk, TEST_NAMESPACE, TEST_INTEGRATION_NAME)
 
 -- Verify it's gone
-local deleted, err = client.get(gvk, TEST_NAMESPACE, TEST_INTEGRATION_NAME)
+local ok, err = pcall(function()
+	return client:get(gvk, TEST_NAMESPACE, TEST_INTEGRATION_NAME)
+end)
 
-if not err then
-	error("Expected error getting deleted resource, got nil")
+if ok then
+	error("Expected error getting deleted resource, but succeeded")
 end
 
 return true

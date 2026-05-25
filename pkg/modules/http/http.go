@@ -26,154 +26,20 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
 )
 
-// Loader: creates and returns the http module for Lua.
-// This function should be registered with L.PreloadModule("http", http.Loader)
-//
-// @luamodule http
-//
-// Example usage in Lua:
-//
-//	local http = require("http")
-//	local response = http.get("https://api.example.com/data")
-//	print(response.status)
-//	print(response.body)
-func Loader(L *lua.LState) int {
-	// Create module table
-	mod := L.SetFuncs(L.NewTable(), exports)
-
-	// Push module onto stack
-	L.Push(mod)
-	return 1
+// Response: represents an HTTP response returned to Lua callers.
+type Response struct {
+	Status  int               `json:"status"`
+	Body    string            `json:"body"`
+	Headers map[string]string `json:"headers"`
 }
 
-// exports: maps Lua function names to Go implementations
-var exports = map[string]lua.LGFunction{
-	"get":     get,
-	"post":    post,
-	"put":     put,
-	"delete":  delete_,
-	"request": request,
-}
-
-// get: performs an HTTP GET request.
-//
-// @luafunc get
-// @luaparam url string The URL to request
-// @luaparam headers table|nil Optional headers table
-// @luareturn table response Response table with status, body, headers, or nil on error
-// @luareturn string|nil Error message if request failed
-//
-// Example:
-//
-//	local resp, err = http.get("https://api.example.com/data", {
-//	    ["Authorization"] = "Bearer token"
-//	})
-//	if err then
-//	    print("Error: " .. err)
-//	else
-//	    print("Status: " .. resp.status)
-//	    print("Body: " .. resp.body)
-//	end
-func get(L *lua.LState) int {
-	url := L.CheckString(1)
-	headers := L.OptTable(2, nil)
-	return doRequest(L, "GET", url, "", headers)
-}
-
-// post: performs an HTTP POST request.
-//
-// @luafunc post
-// @luaparam url string The URL to request
-// @luaparam body string The request body
-// @luaparam headers table|nil Optional headers table
-// @luareturn table response Response table with status, body, headers, or nil on error
-// @luareturn string|nil Error message if request failed
-//
-// Example:
-//
-//	local json = require("json")
-//	local resp, err = http.post(
-//	    "https://api.example.com/data",
-//	    json.stringify({key = "value"}),
-//	    {["Content-Type"] = "application/json"}
-//	)
-func post(L *lua.LState) int {
-	url := L.CheckString(1)
-	body := L.CheckString(2)
-	headers := L.OptTable(3, nil)
-	return doRequest(L, "POST", url, body, headers)
-}
-
-// put: performs an HTTP PUT request.
-//
-// @luafunc put
-// @luaparam url string The URL to request
-// @luaparam body string The request body
-// @luaparam headers table|nil Optional headers table
-// @luareturn table response Response table with status, body, headers, or nil on error
-// @luareturn string|nil Error message if request failed
-//
-// Example:
-//
-//	local resp, err = http.put(
-//	    "https://api.example.com/resource/123",
-//	    json.stringify({key = "new_value"}),
-//	    {["Content-Type"] = "application/json"}
-//	)
-func put(L *lua.LState) int {
-	url := L.CheckString(1)
-	body := L.CheckString(2)
-	headers := L.OptTable(3, nil)
-	return doRequest(L, "PUT", url, body, headers)
-}
-
-// delete_: performs an HTTP DELETE request.
-//
-// @luafunc delete
-// @luaparam url string The URL to request
-// @luaparam headers table|nil Optional headers table
-// @luareturn table response Response table with status, body, headers, or nil on error
-// @luareturn string|nil Error message if request failed
-//
-// Example:
-//
-//	local resp, err = http.delete("https://api.example.com/resource/123")
-func delete_(L *lua.LState) int {
-	url := L.CheckString(1)
-	headers := L.OptTable(2, nil)
-	return doRequest(L, "DELETE", url, "", headers)
-}
-
-// request: performs a generic HTTP request with custom method.
-//
-// @luafunc request
-// @luaparam method string The HTTP method (GET, POST, PUT, DELETE, PATCH, etc.)
-// @luaparam url string The URL to request
-// @luaparam body string|nil Optional request body
-// @luaparam headers table|nil Optional headers table
-// @luareturn table response Response table with status, body, headers, or nil on error
-// @luareturn string|nil Error message if request failed
-//
-// Example:
-//
-//	local resp, err = http.request("PATCH", "https://api.example.com/resource/123",
-//	    json.stringify({key = "value"}),
-//	    {["Content-Type"] = "application/json"}
-//	)
-func request(L *lua.LState) int {
-	method := L.CheckString(1)
-	url := L.CheckString(2)
-	body := L.OptString(3, "")
-	headers := L.OptTable(4, nil)
-	return doRequest(L, method, url, body, headers)
-}
-
-// doRequest: internal function to perform the HTTP request
-func doRequest(L *lua.LState, method, url, body string, headers *lua.LTable) int {
-	// Create request
+// doRequest: executes an HTTP request and returns a *Response or an error.
+// The optional headers table is read directly from the Lua stack via L.
+func doRequest(L *lua.LState, method, url, body string, headers *lua.LTable) (*Response, error) {
 	var bodyReader io.Reader
 	if body != "" {
 		bodyReader = bytes.NewBufferString(body)
@@ -181,12 +47,9 @@ func doRequest(L *lua.LState, method, url, body string, headers *lua.LTable) int
 
 	req, err := http.NewRequest(method, url, bodyReader)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to create request: %v", err)))
-		return 2
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Add headers
 	if headers != nil {
 		headers.ForEach(func(key lua.LValue, val lua.LValue) {
 			if keyStr, ok := key.(lua.LString); ok {
@@ -197,41 +60,113 @@ func doRequest(L *lua.LState, method, url, body string, headers *lua.LTable) int
 		})
 	}
 
-	// Perform request
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("request failed: %v", err)))
-		return 2
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
+	defer func() { _ = resp.Body.Close() }()
 
-	// Read response body
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to read response body: %v", err)))
-		return 2
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// Build response table
-	respTable := L.NewTable()
-	respTable.RawSetString("status", lua.LNumber(resp.StatusCode))
-	respTable.RawSetString("body", lua.LString(string(respBody)))
-
-	// Add response headers
-	headersTable := L.NewTable()
-	for key, values := range resp.Header {
-		if len(values) > 0 {
-			headersTable.RawSetString(key, lua.LString(values[0]))
+	hdrs := make(map[string]string, len(resp.Header))
+	for k, vals := range resp.Header {
+		if len(vals) > 0 {
+			hdrs[k] = vals[0]
 		}
 	}
-	respTable.RawSetString("headers", headersTable)
 
-	L.Push(respTable)
-	L.Push(lua.LNil)
-	return 2
+	return &Response{
+		Status:  resp.StatusCode,
+		Body:    string(respBody),
+		Headers: hdrs,
+	}, nil
+}
+
+// responseToLua: converts a Response to a Lua table. Used by all request
+// wrappers to produce a consistent response shape.
+func responseToLua(L *lua.LState, r *Response) *lua.LTable {
+	tbl := L.NewTable()
+	tbl.RawSetString("status", lua.LNumber(r.Status))
+	tbl.RawSetString("body", lua.LString(r.Body))
+	hdrs := L.NewTable()
+	for k, v := range r.Headers {
+		hdrs.RawSetString(k, lua.LString(v))
+	}
+	tbl.RawSetString("headers", hdrs)
+	return tbl
+}
+
+// get: performs an HTTP GET request with optional headers table.
+func get(L *lua.LState, url string, headers *lua.LTable) (lua.LValue, error) {
+	r, err := doRequest(L, "GET", url, "", headers)
+	if err != nil {
+		return lua.LNil, err
+	}
+	return responseToLua(L, r), nil
+}
+
+// post: performs an HTTP POST request with optional headers table.
+func post(L *lua.LState, url, body string, headers *lua.LTable) (lua.LValue, error) {
+	r, err := doRequest(L, "POST", url, body, headers)
+	if err != nil {
+		return lua.LNil, err
+	}
+	return responseToLua(L, r), nil
+}
+
+// put: performs an HTTP PUT request with optional headers table.
+func put(L *lua.LState, url, body string, headers *lua.LTable) (lua.LValue, error) {
+	r, err := doRequest(L, "PUT", url, body, headers)
+	if err != nil {
+		return lua.LNil, err
+	}
+	return responseToLua(L, r), nil
+}
+
+// delete_: performs an HTTP DELETE request with optional headers table.
+func delete_(L *lua.LState, url string, headers *lua.LTable) (lua.LValue, error) {
+	r, err := doRequest(L, "DELETE", url, "", headers)
+	if err != nil {
+		return lua.LNil, err
+	}
+	return responseToLua(L, r), nil
+}
+
+// request: performs an HTTP request with a custom method.
+func request(L *lua.LState, method, url, body string, headers *lua.LTable) (lua.LValue, error) {
+	r, err := doRequest(L, method, url, body, headers)
+	if err != nil {
+		return lua.LNil, err
+	}
+	return responseToLua(L, r), nil
+}
+
+// build: constructs the module definition. Reused by Loader and Register.
+func build() *luareg.Module {
+	m := luareg.NewModule("http", "HTTP client utilities")
+	m.Fn("get", get, "performs an HTTP GET request, raises on network error",
+		luareg.Args("url", "headers"))
+	m.Fn("post", post, "performs an HTTP POST request, raises on network error",
+		luareg.Args("url", "body", "headers"))
+	m.Fn("put", put, "performs an HTTP PUT request, raises on network error",
+		luareg.Args("url", "body", "headers"))
+	m.Fn("delete", delete_, "performs an HTTP DELETE request, raises on network error",
+		luareg.Args("url", "headers"))
+	m.Fn("request", request, "performs an HTTP request with a custom method, raises on network error",
+		luareg.Args("method", "url", "body", "headers"))
+	return m
+}
+
+// Loader: gopher-lua module loader. Use with L.PreloadModule("http", http.Loader).
+func Loader(L *lua.LState) int {
+	return build().PushTo(L)
+}
+
+// Register: adds this module to reg for stub generation.
+func Register(reg *luareg.Registry) {
+	build().Register(reg)
 }

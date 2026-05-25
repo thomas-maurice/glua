@@ -44,6 +44,8 @@ func TestKubernetesModuleLoading(t *testing.T) {
 		assert(type(k8s.parse_memory) == "function", "parse_memory is not a function")
 		assert(type(k8s.parse_cpu) == "function", "parse_cpu is not a function")
 		assert(type(k8s.parse_time) == "function", "parse_time is not a function")
+		assert(type(k8s.add_label) == "function", "add_label is not a function")
+		assert(type(k8s.match_gvk) == "function", "match_gvk is not a function")
 	`
 
 	if err := L.DoString(luaCode); err != nil {
@@ -83,15 +85,15 @@ func TestKubernetesParseMemory(t *testing.T) {
 			if tt.wantErr {
 				luaCode = `
 					local k8s = require("kubernetes")
-					local result, err = k8s.parse_memory(input)
-					assert(err ~= nil, "expected error but got nil")
-					assert(result == nil, "expected nil result on error")
+					local ok, err = pcall(function()
+						return k8s.parse_memory(input)
+					end)
+					assert(not ok, "expected error but got success")
 				`
 			} else {
 				luaCode = `
 					local k8s = require("kubernetes")
-					local result, err = k8s.parse_memory(input)
-					assert(err == nil, "unexpected error: " .. tostring(err))
+					local result = k8s.parse_memory(input)
 					assert(result == expected, string.format("expected %d, got %d", expected, result))
 				`
 			}
@@ -135,15 +137,15 @@ func TestKubernetesParseCPU(t *testing.T) {
 			if tt.wantErr {
 				luaCode = `
 					local k8s = require("kubernetes")
-					local result, err = k8s.parse_cpu(input)
-					assert(err ~= nil, "expected error but got nil")
-					assert(result == nil, "expected nil result on error")
+					local ok, err = pcall(function()
+						return k8s.parse_cpu(input)
+					end)
+					assert(not ok, "expected error but got success")
 				`
 			} else {
 				luaCode = `
 					local k8s = require("kubernetes")
-					local result, err = k8s.parse_cpu(input)
-					assert(err == nil, "unexpected error: " .. tostring(err))
+					local result = k8s.parse_cpu(input)
 					assert(result == expected, string.format("expected %d, got %d", expected, result))
 				`
 			}
@@ -183,15 +185,15 @@ func TestKubernetesParseTime(t *testing.T) {
 			if tt.wantErr {
 				luaCode = `
 					local k8s = require("kubernetes")
-					local result, err = k8s.parse_time(input)
-					assert(err ~= nil, "expected error but got nil")
-					assert(result == nil, "expected nil result on error")
+					local ok, err = pcall(function()
+						return k8s.parse_time(input)
+					end)
+					assert(not ok, "expected error but got success")
 				`
 			} else {
 				luaCode = `
 					local k8s = require("kubernetes")
-					local result, err = k8s.parse_time(input)
-					assert(err == nil, "unexpected error: " .. tostring(err))
+					local result = k8s.parse_time(input)
 					assert(result == expected, string.format("expected %d, got %d", expected, result))
 				`
 			}
@@ -254,33 +256,27 @@ func TestKubernetesModuleWithPodData(t *testing.T) {
 
 	L.SetGlobal("pod", luaPod)
 
-	// Test parsing in Lua
 	luaCode := `
 		local k8s = require("kubernetes")
 
 		-- Parse CPU limit (should be 1000m)
-		local cpu_limit, err = k8s.parse_cpu(pod.spec.containers[1].resources.limits.cpu)
-		assert(err == nil, "failed to parse CPU limit: " .. tostring(err))
+		local cpu_limit = k8s.parse_cpu(pod.spec.containers[1].resources.limits.cpu)
 		assert(cpu_limit == 1000, string.format("CPU limit should be 1000m, got %d", cpu_limit))
 
 		-- Parse CPU request (should be 250m)
-		local cpu_request, err = k8s.parse_cpu(pod.spec.containers[1].resources.requests.cpu)
-		assert(err == nil, "failed to parse CPU request: " .. tostring(err))
+		local cpu_request = k8s.parse_cpu(pod.spec.containers[1].resources.requests.cpu)
 		assert(cpu_request == 250, string.format("CPU request should be 250m, got %d", cpu_request))
 
 		-- Parse memory limit (should be 1Gi = 1073741824 bytes)
-		local mem_limit, err = k8s.parse_memory(pod.spec.containers[1].resources.limits.memory)
-		assert(err == nil, "failed to parse memory limit: " .. tostring(err))
+		local mem_limit = k8s.parse_memory(pod.spec.containers[1].resources.limits.memory)
 		assert(mem_limit == 1073741824, string.format("Memory limit should be 1073741824, got %d", mem_limit))
 
 		-- Parse memory request (should be 256Mi = 268435456 bytes)
-		local mem_request, err = k8s.parse_memory(pod.spec.containers[1].resources.requests.memory)
-		assert(err == nil, "failed to parse memory request: " .. tostring(err))
+		local mem_request = k8s.parse_memory(pod.spec.containers[1].resources.requests.memory)
 		assert(mem_request == 268435456, string.format("Memory request should be 268435456, got %d", mem_request))
 
 		-- Parse timestamp
-		local timestamp, err = k8s.parse_time(pod.metadata.creationTimestamp)
-		assert(err == nil, "failed to parse timestamp: " .. tostring(err))
+		local timestamp = k8s.parse_time(pod.metadata.creationTimestamp)
 		assert(timestamp == 1759509540, string.format("Timestamp should be 1759509540, got %d", timestamp))
 
 		-- Calculate some metrics
@@ -290,7 +286,6 @@ func TestKubernetesModuleWithPodData(t *testing.T) {
 		local mem_ratio = mem_limit / mem_request
 		assert(mem_ratio == 4, string.format("Memory ratio should be 4, got %f", mem_ratio))
 
-		-- Return success
 		return true
 	`
 
@@ -379,10 +374,7 @@ func TestComplexLuaOperations(t *testing.T) {
 			for j, container in ipairs(pod.spec.containers) do
 				local mem_str = container.resources.requests.memory
 				if mem_str then
-					local mem_bytes, err = k8s.parse_memory(mem_str)
-					if err then
-						error("Failed to parse memory: " .. err)
-					end
+					local mem_bytes = k8s.parse_memory(mem_str)
 					total_memory = total_memory + mem_bytes
 				end
 			end
@@ -407,7 +399,8 @@ func TestComplexLuaOperations(t *testing.T) {
 	}
 }
 
-// TestEnsureMetadata: tests the ensure_metadata function
+// TestEnsureMetadata: tests the ensure_metadata function.
+// Note: returns the updated object — the caller must assign.
 func TestEnsureMetadata(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
@@ -420,8 +413,8 @@ func TestEnsureMetadata(t *testing.T) {
 		-- Create empty pod
 		local pod = {kind = "Pod"}
 
-		-- Ensure metadata
-		k8s.ensure_metadata(pod)
+		-- Ensure metadata (must assign return value)
+		pod = k8s.ensure_metadata(pod)
 
 		assert(pod.metadata ~= nil, "metadata should not be nil")
 		assert(pod.metadata.labels ~= nil, "labels should not be nil")
@@ -440,7 +433,8 @@ func TestEnsureMetadata(t *testing.T) {
 	}
 }
 
-// TestAddLabel: tests the add_label function
+// TestAddLabel: tests the add_label function.
+// Note: returns the updated object — the caller must assign.
 func TestAddLabel(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
@@ -452,12 +446,12 @@ func TestAddLabel(t *testing.T) {
 
 		local pod = {kind = "Pod"}
 
-		-- Add single label
-		k8s.add_label(pod, "app", "nginx")
-		k8s.add_label(pod, "version", "1.0")
+		-- Add single labels (must assign return value each time)
+		pod = k8s.add_label(pod, "app", "nginx")
+		pod = k8s.add_label(pod, "version", "1.0")
 
-		assert(pod.metadata.labels.app == "nginx", "app label should be nginx")
-		assert(pod.metadata.labels.version == "1.0", "version label should be 1.0")
+		assert(k8s.get_label(pod, "app") == "nginx", "app label should be nginx")
+		assert(k8s.get_label(pod, "version") == "1.0", "version label should be 1.0")
 
 		return true
 	`
@@ -472,7 +466,8 @@ func TestAddLabel(t *testing.T) {
 	}
 }
 
-// TestAddLabels: tests the add_labels function
+// TestAddLabels: tests the add_labels function.
+// Note: returns the updated object — the caller must assign.
 func TestAddLabels(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
@@ -484,16 +479,16 @@ func TestAddLabels(t *testing.T) {
 
 		local pod = {kind = "Pod"}
 
-		-- Add multiple labels
-		k8s.add_labels(pod, {
+		-- Add multiple labels (must assign return value)
+		pod = k8s.add_labels(pod, {
 			app = "nginx",
 			version = "1.0",
 			tier = "frontend"
 		})
 
-		assert(pod.metadata.labels.app == "nginx", "app label should be nginx")
-		assert(pod.metadata.labels.version == "1.0", "version label should be 1.0")
-		assert(pod.metadata.labels.tier == "frontend", "tier label should be frontend")
+		assert(k8s.get_label(pod, "app") == "nginx", "app label should be nginx")
+		assert(k8s.get_label(pod, "version") == "1.0", "version label should be 1.0")
+		assert(k8s.get_label(pod, "tier") == "frontend", "tier label should be frontend")
 
 		return true
 	`
@@ -508,7 +503,8 @@ func TestAddLabels(t *testing.T) {
 	}
 }
 
-// TestRemoveLabel: tests the remove_label function
+// TestRemoveLabel: tests the remove_label function.
+// Note: returns the updated object — the caller must assign.
 func TestRemoveLabel(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
@@ -520,14 +516,14 @@ func TestRemoveLabel(t *testing.T) {
 
 		local pod = {kind = "Pod"}
 
-		-- Add labels
-		k8s.add_labels(pod, {app = "nginx", version = "1.0"})
+		-- Add labels (must assign return value)
+		pod = k8s.add_labels(pod, {app = "nginx", version = "1.0"})
 
-		-- Remove one label
-		k8s.remove_label(pod, "version")
+		-- Remove one label (must assign return value)
+		pod = k8s.remove_label(pod, "version")
 
-		assert(pod.metadata.labels.app == "nginx", "app label should still exist")
-		assert(pod.metadata.labels.version == nil, "version label should be removed")
+		assert(k8s.get_label(pod, "app") == "nginx", "app label should still exist")
+		assert(k8s.has_label(pod, "version") == false, "version label should be removed")
 
 		return true
 	`
@@ -542,7 +538,7 @@ func TestRemoveLabel(t *testing.T) {
 	}
 }
 
-// TestHasLabel: tests the has_label function
+// TestHasLabel: tests the has_label function.
 func TestHasLabel(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
@@ -553,7 +549,7 @@ func TestHasLabel(t *testing.T) {
 		local k8s = require("kubernetes")
 
 		local pod = {kind = "Pod"}
-		k8s.add_label(pod, "app", "nginx")
+		pod = k8s.add_label(pod, "app", "nginx")
 
 		assert(k8s.has_label(pod, "app") == true, "should have app label")
 		assert(k8s.has_label(pod, "missing") == false, "should not have missing label")
@@ -571,7 +567,7 @@ func TestHasLabel(t *testing.T) {
 	}
 }
 
-// TestGetLabel: tests the get_label function
+// TestGetLabel: tests the get_label function.
 func TestGetLabel(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
@@ -582,13 +578,13 @@ func TestGetLabel(t *testing.T) {
 		local k8s = require("kubernetes")
 
 		local pod = {kind = "Pod"}
-		k8s.add_label(pod, "app", "nginx")
+		pod = k8s.add_label(pod, "app", "nginx")
 
 		local app = k8s.get_label(pod, "app")
 		assert(app == "nginx", "app label value should be nginx")
 
 		local missing = k8s.get_label(pod, "missing")
-		assert(missing == nil, "missing label should return nil")
+		assert(missing == "", "missing label should return empty string")
 
 		return true
 	`
@@ -603,7 +599,8 @@ func TestGetLabel(t *testing.T) {
 	}
 }
 
-// TestAddAnnotation: tests the add_annotation function
+// TestAddAnnotation: tests the add_annotation function.
+// Note: returns the updated object — the caller must assign.
 func TestAddAnnotation(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
@@ -615,12 +612,12 @@ func TestAddAnnotation(t *testing.T) {
 
 		local pod = {kind = "Pod"}
 
-		-- Add single annotation
-		k8s.add_annotation(pod, "description", "My nginx pod")
-		k8s.add_annotation(pod, "owner", "team-backend")
+		-- Add single annotations (must assign return value each time)
+		pod = k8s.add_annotation(pod, "description", "My nginx pod")
+		pod = k8s.add_annotation(pod, "owner", "team-backend")
 
-		assert(pod.metadata.annotations.description == "My nginx pod", "description annotation should match")
-		assert(pod.metadata.annotations.owner == "team-backend", "owner annotation should match")
+		assert(k8s.get_annotation(pod, "description") == "My nginx pod", "description annotation should match")
+		assert(k8s.get_annotation(pod, "owner") == "team-backend", "owner annotation should match")
 
 		return true
 	`
@@ -635,7 +632,8 @@ func TestAddAnnotation(t *testing.T) {
 	}
 }
 
-// TestAddAnnotations: tests the add_annotations function
+// TestAddAnnotations: tests the add_annotations function.
+// Note: returns the updated object — the caller must assign.
 func TestAddAnnotations(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
@@ -647,16 +645,16 @@ func TestAddAnnotations(t *testing.T) {
 
 		local pod = {kind = "Pod"}
 
-		-- Add multiple annotations
-		k8s.add_annotations(pod, {
+		-- Add multiple annotations (must assign return value)
+		pod = k8s.add_annotations(pod, {
 			description = "My nginx pod",
 			owner = "team-backend",
 			version = "1.2.3"
 		})
 
-		assert(pod.metadata.annotations.description == "My nginx pod", "description annotation should match")
-		assert(pod.metadata.annotations.owner == "team-backend", "owner annotation should match")
-		assert(pod.metadata.annotations.version == "1.2.3", "version annotation should match")
+		assert(k8s.get_annotation(pod, "description") == "My nginx pod", "description annotation should match")
+		assert(k8s.get_annotation(pod, "owner") == "team-backend", "owner annotation should match")
+		assert(k8s.get_annotation(pod, "version") == "1.2.3", "version annotation should match")
 
 		return true
 	`
@@ -671,7 +669,8 @@ func TestAddAnnotations(t *testing.T) {
 	}
 }
 
-// TestRemoveAnnotation: tests the remove_annotation function
+// TestRemoveAnnotation: tests the remove_annotation function.
+// Note: returns the updated object — the caller must assign.
 func TestRemoveAnnotation(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
@@ -683,14 +682,14 @@ func TestRemoveAnnotation(t *testing.T) {
 
 		local pod = {kind = "Pod"}
 
-		-- Add annotations
-		k8s.add_annotations(pod, {description = "My pod", owner = "team"})
+		-- Add annotations (must assign return value)
+		pod = k8s.add_annotations(pod, {description = "My pod", owner = "team"})
 
-		-- Remove one annotation
-		k8s.remove_annotation(pod, "owner")
+		-- Remove one annotation (must assign return value)
+		pod = k8s.remove_annotation(pod, "owner")
 
-		assert(pod.metadata.annotations.description == "My pod", "description should still exist")
-		assert(pod.metadata.annotations.owner == nil, "owner annotation should be removed")
+		assert(k8s.get_annotation(pod, "description") == "My pod", "description should still exist")
+		assert(k8s.has_annotation(pod, "owner") == false, "owner annotation should be removed")
 
 		return true
 	`
@@ -705,7 +704,7 @@ func TestRemoveAnnotation(t *testing.T) {
 	}
 }
 
-// TestHasAnnotation: tests the has_annotation function
+// TestHasAnnotation: tests the has_annotation function.
 func TestHasAnnotation(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
@@ -716,7 +715,7 @@ func TestHasAnnotation(t *testing.T) {
 		local k8s = require("kubernetes")
 
 		local pod = {kind = "Pod"}
-		k8s.add_annotation(pod, "description", "My pod")
+		pod = k8s.add_annotation(pod, "description", "My pod")
 
 		assert(k8s.has_annotation(pod, "description") == true, "should have description annotation")
 		assert(k8s.has_annotation(pod, "missing") == false, "should not have missing annotation")
@@ -734,7 +733,7 @@ func TestHasAnnotation(t *testing.T) {
 	}
 }
 
-// TestGetAnnotation: tests the get_annotation function
+// TestGetAnnotation: tests the get_annotation function.
 func TestGetAnnotation(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
@@ -745,13 +744,13 @@ func TestGetAnnotation(t *testing.T) {
 		local k8s = require("kubernetes")
 
 		local pod = {kind = "Pod"}
-		k8s.add_annotation(pod, "description", "My nginx pod")
+		pod = k8s.add_annotation(pod, "description", "My nginx pod")
 
 		local desc = k8s.get_annotation(pod, "description")
 		assert(desc == "My nginx pod", "description value should match")
 
 		local missing = k8s.get_annotation(pod, "missing")
-		assert(missing == nil, "missing annotation should return nil")
+		assert(missing == "", "missing annotation should return empty string")
 
 		return true
 	`
@@ -766,7 +765,7 @@ func TestGetAnnotation(t *testing.T) {
 	}
 }
 
-// TestLabelAndAnnotationChaining: tests that functions can be chained
+// TestLabelAndAnnotationChaining: tests that functions can be chained with assignment.
 func TestLabelAndAnnotationChaining(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
@@ -778,9 +777,9 @@ func TestLabelAndAnnotationChaining(t *testing.T) {
 
 		local pod = {kind = "Pod"}
 
-		-- Test chaining (though Lua doesn't use return values for this pattern)
-		k8s.add_label(pod, "app", "nginx")
-		k8s.add_annotation(pod, "description", "Web server")
+		-- Functions return updated objects; must assign
+		pod = k8s.add_label(pod, "app", "nginx")
+		pod = k8s.add_annotation(pod, "description", "Web server")
 
 		assert(k8s.has_label(pod, "app"), "should have app label")
 		assert(k8s.has_annotation(pod, "description"), "should have description annotation")

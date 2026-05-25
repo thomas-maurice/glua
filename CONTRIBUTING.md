@@ -16,7 +16,7 @@ This command runs:
 
 - Unit tests with race detection and coverage
 - k8sclient integration tests with Kind cluster
-- Builds all binaries (stubgen, example)
+- Builds all binaries (glua-gen, example)
 
 **Your PR will be rejected if tests fail.**
 

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/thomas-maurice/glua/pkg/glua"
+	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -42,12 +43,8 @@ type GVKMatcher struct {
 	Kind    string `json:"kind"`
 }
 
-var (
-	// translator: handles Go-Lua type conversion
-	translator = glua.NewTranslator()
-	// typeRegistry: manages type registration for stub generation
-	typeRegistry = glua.NewTypeRegistry()
-)
+// typeRegistry: manages type registration for stub generation.
+var typeRegistry = glua.NewTypeRegistry()
 
 func init() {
 	// Register GVKMatcher with the type registry
@@ -126,305 +123,98 @@ func init() {
 	}
 }
 
-// Loader: creates and returns the kubernetes module for Lua.
-// This function should be registered with L.PreloadModule("kubernetes", kubernetes.Loader)
-//
-// @luamodule kubernetes
-//
-// Example usage in Lua:
-//
-//	local k8s = require("kubernetes")
-//	local bytes = k8s.parse_memory("1024Mi")
-//	local millicores = k8s.parse_cpu("100m")
-//	local timestamp = k8s.parse_time("2025-10-03T16:39:00Z")
-//	local timestr = k8s.format_time(1759509540)
-func Loader(L *lua.LState) int {
-	// Create module table
-	mod := L.SetFuncs(L.NewTable(), exports)
-
-	// Push module onto stack
-	L.Push(mod)
-	return 1
-}
-
-// exports: maps Lua function names to Go implementations
-var exports = map[string]lua.LGFunction{
-	"parse_memory":      parseMemory,
-	"parse_cpu":         parseCPU,
-	"parse_time":        parseTime,
-	"format_time":       formatTime,
-	"init_defaults":     initDefaults,
-	"parse_duration":    parseDuration,
-	"format_duration":   formatDuration,
-	"match_gvk":         matchGVK,
-	"add_label":         addLabel,
-	"add_labels":        addLabels,
-	"remove_label":      removeLabel,
-	"has_label":         hasLabel,
-	"get_label":         getLabel,
-	"add_annotation":    addAnnotation,
-	"add_annotations":   addAnnotations,
-	"remove_annotation": removeAnnotation,
-	"has_annotation":    hasAnnotation,
-	"get_annotation":    getAnnotation,
-	"ensure_metadata":   ensureMetadata,
-}
-
-// parseMemory: parses a Kubernetes memory quantity (e.g., "1024Mi", "1Gi", "512M") and returns bytes as a number.
-// Returns nil and error message on failure.
-//
-// @luafunc parse_memory
-// @luaparam quantity string The memory quantity to parse (e.g., "1024Mi", "1Gi")
-// @luareturn number bytes The memory value in bytes, or nil on error
-// @luareturn string|nil err Error message if parsing failed
+// ParseMemory: parses a Kubernetes memory quantity and returns bytes.
+// Raises a Lua error on invalid input.
 //
 // Example:
 //
 //	local bytes = k8s.parse_memory("1024Mi")  -- returns 1073741824
-func parseMemory(L *lua.LState) int {
-	str := L.CheckString(1)
-
-	quantity, err := resource.ParseQuantity(str)
+func ParseMemory(quantity string) (int64, error) {
+	q, err := resource.ParseQuantity(quantity)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to parse memory quantity: %v", err)))
-		return 2
+		return 0, fmt.Errorf("failed to parse memory quantity: %w", err)
 	}
-
-	// Get value in bytes
-	bytes := quantity.Value()
-
-	L.Push(lua.LNumber(bytes))
-	return 1
+	return q.Value(), nil
 }
 
-// parseCPU: parses a Kubernetes CPU quantity (e.g., "100m", "1", "2000m") and returns millicores as a number.
-// Returns nil and error message on failure.
-//
-// @luafunc parse_cpu
-// @luaparam quantity string The CPU quantity to parse (e.g., "100m", "1", "2000m")
-// @luareturn number millicores The CPU value in millicores, or nil on error
-// @luareturn string|nil err Error message if parsing failed
+// ParseCPU: parses a Kubernetes CPU quantity and returns millicores.
+// Raises a Lua error on invalid input.
 //
 // Example:
 //
 //	local millicores = k8s.parse_cpu("100m")  -- returns 100
-//	local millicores = k8s.parse_cpu("1")     -- returns 1000
-func parseCPU(L *lua.LState) int {
-	str := L.CheckString(1)
-
-	quantity, err := resource.ParseQuantity(str)
+func ParseCPU(quantity string) (int64, error) {
+	q, err := resource.ParseQuantity(quantity)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to parse CPU quantity: %v", err)))
-		return 2
+		return 0, fmt.Errorf("failed to parse CPU quantity: %w", err)
 	}
-
-	// Get value in millicores
-	millicores := quantity.MilliValue()
-
-	L.Push(lua.LNumber(millicores))
-	return 1
+	return q.MilliValue(), nil
 }
 
-// parseTime: parses a Kubernetes time string (RFC3339 format like "2025-10-03T16:39:00Z") and returns a Unix timestamp.
-// Returns nil and error message on failure.
-//
-// @luafunc parse_time
-// @luaparam timestr string The time string in RFC3339 format (e.g., "2025-10-03T16:39:00Z")
-// @luareturn number timestamp The Unix timestamp, or nil on error
-// @luareturn string|nil err Error message if parsing failed
+// ParseTime: parses a Kubernetes time string (RFC3339) and returns a Unix timestamp.
+// Raises a Lua error on invalid input.
 //
 // Example:
 //
-//	local timestamp = k8s.parse_time("2025-10-03T16:39:00Z")  -- returns Unix timestamp
-func parseTime(L *lua.LState) int {
-	str := L.CheckString(1)
-
-	// Parse using Kubernetes Time format
+//	local ts = k8s.parse_time("2025-10-03T16:39:00Z")
+func ParseTime(timestr string) (int64, error) {
 	var k8sTime metav1.Time
-	if err := k8sTime.UnmarshalJSON([]byte(fmt.Sprintf(`"%s"`, str))); err != nil {
-		// Try standard RFC3339 parsing as fallback
-		t, parseErr := time.Parse(time.RFC3339, str)
+	if err := k8sTime.UnmarshalJSON([]byte(fmt.Sprintf(`"%s"`, timestr))); err != nil {
+		t, parseErr := time.Parse(time.RFC3339, timestr)
 		if parseErr != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(fmt.Sprintf("failed to parse time: %v", err)))
-			return 2
+			return 0, fmt.Errorf("failed to parse time: %w", err)
 		}
 		k8sTime = metav1.NewTime(t)
 	}
-
-	// Return Unix timestamp
-	L.Push(lua.LNumber(k8sTime.Unix()))
-	return 1
+	return k8sTime.Unix(), nil
 }
 
-// formatTime: converts a Unix timestamp (int64) to a Kubernetes time string in RFC3339 format.
-// Returns nil and error message on failure.
-//
-// @luafunc format_time
-// @luaparam timestamp number The Unix timestamp to convert
-// @luareturn string timestr The time in RFC3339 format (e.g., "2025-10-03T16:39:00Z"), or nil on error
-// @luareturn string|nil err Error message if formatting failed
+// FormatTime: converts a Unix timestamp to a Kubernetes time string in RFC3339 format.
 //
 // Example:
 //
 //	local timestr = k8s.format_time(1759509540)  -- returns "2025-10-03T16:39:00Z"
-func formatTime(L *lua.LState) int {
-	timestamp := L.CheckNumber(1)
-
-	// Convert to time.Time
-	t := time.Unix(int64(timestamp), 0).UTC()
-
-	// Format as RFC3339 (Kubernetes standard format)
-	formatted := t.Format(time.RFC3339)
-
-	L.Push(lua.LString(formatted))
-	L.Push(lua.LNil)
-	return 2
+func FormatTime(timestamp int64) string {
+	return time.Unix(timestamp, 0).UTC().Format(time.RFC3339)
 }
 
-// initDefaults: initializes default empty tables for metadata.labels and metadata.annotations
-// if they are nil. This is useful for ensuring these fields are tables instead of nil,
-// making it easier to add labels/annotations in Lua without checking for nil first.
-//
-// @luafunc init_defaults
-// @luaparam obj table The Kubernetes object (must have a metadata field)
-// @luareturn table obj The same object with initialized defaults (modified in-place)
-//
-// Example:
-//
-//	local k8s = require("kubernetes")
-//	k8s.init_defaults(myPod)
-//	myPod.metadata.labels.app = "myapp"  -- safe even if labels was nil before
-func initDefaults(L *lua.LState) int {
-	obj := L.CheckTable(1)
-
-	// Get metadata field
-	metadata := L.GetField(obj, "metadata")
-	if metadata == lua.LNil {
-		// If metadata doesn't exist, create it
-		metadata = L.NewTable()
-		L.SetField(obj, "metadata", metadata)
-	}
-
-	metadataTable, ok := metadata.(*lua.LTable)
-	if !ok {
-		L.Push(obj)
-		return 1
-	}
-
-	// Initialize labels if nil
-	labels := L.GetField(metadataTable, "labels")
-	if labels == lua.LNil {
-		L.SetField(metadataTable, "labels", L.NewTable())
-	}
-
-	// Initialize annotations if nil
-	annotations := L.GetField(metadataTable, "annotations")
-	if annotations == lua.LNil {
-		L.SetField(metadataTable, "annotations", L.NewTable())
-	}
-
-	L.Push(obj)
-	return 1
-}
-
-// parseDuration: parses a Kubernetes duration string (e.g., "5s", "10m", "2h") and returns seconds as a number.
-// Returns nil and error message on failure.
-//
-// @luafunc parse_duration
-// @luaparam duration string The duration string to parse (e.g., "5s", "10m", "2h")
-// @luareturn number seconds The duration value in seconds, or nil on error
-// @luareturn string|nil err Error message if parsing failed
+// ParseDuration: parses a duration string and returns seconds.
+// Raises a Lua error on invalid input.
 //
 // Example:
 //
 //	local seconds = k8s.parse_duration("5m")  -- returns 300
-//	local seconds = k8s.parse_duration("1h30m")  -- returns 5400
-func parseDuration(L *lua.LState) int {
-	str := L.CheckString(1)
-
-	duration, err := time.ParseDuration(str)
+func ParseDuration(durationStr string) (float64, error) {
+	d, err := time.ParseDuration(durationStr)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to parse duration: %v", err)))
-		return 2
+		return 0, fmt.Errorf("failed to parse duration: %w", err)
 	}
-
-	// Return duration in seconds
-	L.Push(lua.LNumber(duration.Seconds()))
-	L.Push(lua.LNil)
-	return 2
+	return d.Seconds(), nil
 }
 
-// formatDuration: converts seconds to a Kubernetes duration string.
-// Returns nil and error message on failure.
-//
-// @luafunc format_duration
-// @luaparam seconds number The duration in seconds to convert
-// @luareturn string duration The duration string (e.g., "5m0s", "1h30m0s"), or nil on error
-// @luareturn string|nil err Error message if formatting failed
+// FormatDuration: converts seconds to a duration string.
 //
 // Example:
 //
-//	local duration_str = k8s.format_duration(300)  -- returns "5m0s"
-//	local duration_str = k8s.format_duration(5400)  -- returns "1h30m0s"
-func formatDuration(L *lua.LState) int {
-	seconds := L.CheckNumber(1)
-
-	duration := time.Duration(seconds) * time.Second
-	formatted := duration.String()
-
-	L.Push(lua.LString(formatted))
-	L.Push(lua.LNil)
-	return 2
+//	local s = k8s.format_duration(300)  -- returns "5m0s"
+func FormatDuration(seconds float64) string {
+	return (time.Duration(seconds) * time.Second).String()
 }
 
-// matchGVK: checks if a Kubernetes object matches the specified Group/Version/Kind matcher.
-// Returns true if the object's apiVersion and kind match the matcher's values.
-//
-// @luafunc match_gvk
-// @luaparam obj table The Kubernetes object to check
-// @luaparam matcher kubernetes.GVKMatcher The GVK matcher with group, version, and kind fields
-// @luareturn boolean matches true if the GVK matches
-//
-// Example:
-//
-//	local matcher = {group = "", version = "v1", kind = "Pod"}
-//	local matches = k8s.match_gvk(pod, matcher)  -- returns true for a Pod
-func matchGVK(L *lua.LState) int {
-	obj := L.CheckTable(1)
-	matcherTable := L.CheckTable(2)
-
-	// Convert Lua table to GVKMatcher
-	var matcher GVKMatcher
-	if err := translator.FromLua(L, matcherTable, &matcher); err != nil {
-		L.RaiseError("failed to parse GVKMatcher: %v", err)
-		return 0
+// MatchGVK: checks if a Kubernetes object (as a map) matches a GVKMatcher.
+// The obj map must have "apiVersion" and "kind" keys.
+func MatchGVK(obj map[string]any, matcher GVKMatcher) bool {
+	if matcher.Kind == "" || matcher.Version == "" {
+		return false
 	}
 
-	// Validate required fields
-	if matcher.Kind == "" {
-		L.RaiseError("GVKMatcher requires 'kind' field")
-		return 0
-	}
-	if matcher.Version == "" {
-		L.RaiseError("GVKMatcher requires 'version' field")
-		return 0
-	}
+	apiVersion, _ := obj["apiVersion"].(string)
+	objKind, _ := obj["kind"].(string)
 
-	// Get apiVersion and kind from the object
-	apiVersion := L.GetField(obj, "apiVersion").String()
-	objKind := L.GetField(obj, "kind").String()
-
-	// Check kind first
 	if objKind != matcher.Kind {
-		L.Push(lua.LFalse)
-		return 1
+		return false
 	}
 
-	// Build expected apiVersion
 	var expectedAPIVersion string
 	if matcher.Group == "" {
 		expectedAPIVersion = matcher.Version
@@ -432,492 +222,230 @@ func matchGVK(L *lua.LState) int {
 		expectedAPIVersion = matcher.Group + "/" + matcher.Version
 	}
 
-	// Check apiVersion
-	if apiVersion == expectedAPIVersion {
-		L.Push(lua.LTrue)
-	} else {
-		L.Push(lua.LFalse)
-	}
-
-	return 1
+	return apiVersion == expectedAPIVersion
 }
 
-// ensureMetadata: ensures that metadata, labels, and annotations tables exist on an object.
-// This is a helper function to avoid nil checks when working with metadata fields.
-//
-// @luafunc ensure_metadata
-// @luaparam obj table The Kubernetes object
-// @luareturn table obj The same object with initialized metadata (modified in-place)
-//
-// Example:
-//
-//	local k8s = require("kubernetes")
-//	k8s.ensure_metadata(myPod)
-//	myPod.metadata.labels.app = "myapp"  -- safe, labels table exists
-func ensureMetadata(L *lua.LState) int {
-	obj := L.CheckTable(1)
-
-	// Get or create metadata
-	metadata := L.GetField(obj, "metadata")
-	if metadata == lua.LNil {
-		metadata = L.NewTable()
-		L.SetField(obj, "metadata", metadata)
+// ensureMetadata: ensures metadata, labels, and annotations keys exist in a map.
+// Returns the updated map.
+func ensureMetadata(obj map[string]any) map[string]any {
+	if obj == nil {
+		obj = make(map[string]any)
 	}
-
-	metadataTable, ok := metadata.(*lua.LTable)
-	if !ok {
-		L.Push(obj)
-		return 1
+	meta, _ := obj["metadata"].(map[string]any)
+	if meta == nil {
+		meta = make(map[string]any)
+		obj["metadata"] = meta
 	}
-
-	// Initialize labels if nil
-	labels := L.GetField(metadataTable, "labels")
-	if labels == lua.LNil {
-		L.SetField(metadataTable, "labels", L.NewTable())
+	if _, ok := meta["labels"]; !ok {
+		meta["labels"] = make(map[string]any)
 	}
-
-	// Initialize annotations if nil
-	annotations := L.GetField(metadataTable, "annotations")
-	if annotations == lua.LNil {
-		L.SetField(metadataTable, "annotations", L.NewTable())
+	if _, ok := meta["annotations"]; !ok {
+		meta["annotations"] = make(map[string]any)
 	}
-
-	L.Push(obj)
-	return 1
+	return obj
 }
 
-// addLabel: adds a single label to a Kubernetes object's metadata.
-// Automatically initializes metadata and labels tables if they don't exist.
+// EnsureMetadata: ensures metadata.labels and metadata.annotations exist.
+// Returns the updated obj. Callers must assign the return value:
 //
-// @luafunc add_label
-// @luaparam obj table The Kubernetes object
-// @luaparam key string The label key
-// @luaparam value string The label value
-// @luareturn table obj The modified object (for chaining)
-//
-// Example:
-//
-//	local k8s = require("kubernetes")
-//	k8s.add_label(pod, "app", "nginx")
-//	k8s.add_label(pod, "version", "1.0")
-func addLabel(L *lua.LState) int {
-	obj := L.CheckTable(1)
-	key := L.CheckString(2)
-	value := L.CheckString(3)
-
-	// Ensure metadata exists
-	ensureMetadata(L)
-	L.Pop(1) // Remove the returned object from ensureMetadata
-
-	// Get metadata and labels
-	metadata := L.GetField(obj, "metadata").(*lua.LTable)
-	labels := L.GetField(metadata, "labels").(*lua.LTable)
-
-	// Set the label
-	L.SetField(labels, key, lua.LString(value))
-
-	L.Push(obj)
-	return 1
+//	obj = k8s.ensure_metadata(obj)
+func EnsureMetadata(obj map[string]any) map[string]any {
+	return ensureMetadata(obj)
 }
 
-// addLabels: adds multiple labels to a Kubernetes object's metadata from a table.
-// Automatically initializes metadata and labels tables if they don't exist.
+// InitDefaults: alias for EnsureMetadata. Returns the updated obj.
 //
-// @luafunc add_labels
-// @luaparam obj table The Kubernetes object
-// @luaparam labels table A table of key-value pairs to add as labels
-// @luareturn table obj The modified object (for chaining)
-//
-// Example:
-//
-//	local k8s = require("kubernetes")
-//	k8s.add_labels(pod, {
-//	  app = "nginx",
-//	  version = "1.0",
-//	  tier = "frontend"
-//	})
-func addLabels(L *lua.LState) int {
-	obj := L.CheckTable(1)
-	labelsToAdd := L.CheckTable(2)
-
-	// Ensure metadata exists
-	ensureMetadata(L)
-	L.Pop(1) // Remove the returned object from ensureMetadata
-
-	// Get metadata and labels
-	metadata := L.GetField(obj, "metadata").(*lua.LTable)
-	labels := L.GetField(metadata, "labels").(*lua.LTable)
-
-	// Add all labels
-	labelsToAdd.ForEach(func(k, v lua.LValue) {
-		L.SetField(labels, k.String(), v)
-	})
-
-	L.Push(obj)
-	return 1
+//	obj = k8s.init_defaults(obj)
+func InitDefaults(obj map[string]any) map[string]any {
+	return ensureMetadata(obj)
 }
 
-// removeLabel: removes a label from a Kubernetes object's metadata.
+// AddLabel: adds a label to obj.metadata.labels and returns the updated obj.
 //
-// @luafunc remove_label
-// @luaparam obj table The Kubernetes object
-// @luaparam key string The label key to remove
-// @luareturn table obj The modified object (for chaining)
-//
-// Example:
-//
-//	local k8s = require("kubernetes")
-//	k8s.remove_label(pod, "old-label")
-func removeLabel(L *lua.LState) int {
-	obj := L.CheckTable(1)
-	key := L.CheckString(2)
-
-	// Get metadata
-	metadata := L.GetField(obj, "metadata")
-	if metadata == lua.LNil {
-		L.Push(obj)
-		return 1
-	}
-
-	metadataTable, ok := metadata.(*lua.LTable)
-	if !ok {
-		L.Push(obj)
-		return 1
-	}
-
-	// Get labels
-	labels := L.GetField(metadataTable, "labels")
-	if labels == lua.LNil {
-		L.Push(obj)
-		return 1
-	}
-
-	labelsTable, ok := labels.(*lua.LTable)
-	if !ok {
-		L.Push(obj)
-		return 1
-	}
-
-	// Remove the label
-	L.SetField(labelsTable, key, lua.LNil)
-
-	L.Push(obj)
-	return 1
+//	obj = k8s.add_label(obj, "app", "nginx")
+func AddLabel(obj map[string]any, key, value string) map[string]any {
+	obj = ensureMetadata(obj)
+	meta := obj["metadata"].(map[string]any)
+	labels := meta["labels"].(map[string]any)
+	labels[key] = value
+	return obj
 }
 
-// hasLabel: checks if a Kubernetes object has a specific label.
+// AddLabels: adds multiple labels from a table and returns the updated obj.
 //
-// @luafunc has_label
-// @luaparam obj table The Kubernetes object
-// @luaparam key string The label key to check
-// @luareturn boolean exists true if the label exists
-//
-// Example:
-//
-//	local k8s = require("kubernetes")
-//	if k8s.has_label(pod, "app") then
-//	  print("Pod has app label")
-//	end
-func hasLabel(L *lua.LState) int {
-	obj := L.CheckTable(1)
-	key := L.CheckString(2)
-
-	// Get metadata
-	metadata := L.GetField(obj, "metadata")
-	if metadata == lua.LNil {
-		L.Push(lua.LFalse)
-		return 1
+//	obj = k8s.add_labels(obj, {app="nginx", env="prod"})
+func AddLabels(obj map[string]any, toAdd map[string]any) map[string]any {
+	obj = ensureMetadata(obj)
+	meta := obj["metadata"].(map[string]any)
+	labels := meta["labels"].(map[string]any)
+	for k, v := range toAdd {
+		labels[k] = v
 	}
-
-	metadataTable, ok := metadata.(*lua.LTable)
-	if !ok {
-		L.Push(lua.LFalse)
-		return 1
-	}
-
-	// Get labels
-	labels := L.GetField(metadataTable, "labels")
-	if labels == lua.LNil {
-		L.Push(lua.LFalse)
-		return 1
-	}
-
-	labelsTable, ok := labels.(*lua.LTable)
-	if !ok {
-		L.Push(lua.LFalse)
-		return 1
-	}
-
-	// Check if label exists
-	value := L.GetField(labelsTable, key)
-	L.Push(lua.LBool(value != lua.LNil))
-	return 1
+	return obj
 }
 
-// getLabel: gets the value of a specific label from a Kubernetes object.
+// RemoveLabel: removes a label from obj.metadata.labels and returns the updated obj.
 //
-// @luafunc get_label
-// @luaparam obj table The Kubernetes object
-// @luaparam key string The label key
-// @luareturn string|nil value The label value, or nil if not found
-//
-// Example:
-//
-//	local k8s = require("kubernetes")
-//	local app = k8s.get_label(pod, "app")
-//	if app then
-//	  print("App: " .. app)
-//	end
-func getLabel(L *lua.LState) int {
-	obj := L.CheckTable(1)
-	key := L.CheckString(2)
-
-	// Get metadata
-	metadata := L.GetField(obj, "metadata")
-	if metadata == lua.LNil {
-		L.Push(lua.LNil)
-		return 1
+//	obj = k8s.remove_label(obj, "app")
+func RemoveLabel(obj map[string]any, key string) map[string]any {
+	meta, _ := obj["metadata"].(map[string]any)
+	if meta == nil {
+		return obj
 	}
-
-	metadataTable, ok := metadata.(*lua.LTable)
-	if !ok {
-		L.Push(lua.LNil)
-		return 1
+	labels, _ := meta["labels"].(map[string]any)
+	if labels == nil {
+		return obj
 	}
-
-	// Get labels
-	labels := L.GetField(metadataTable, "labels")
-	if labels == lua.LNil {
-		L.Push(lua.LNil)
-		return 1
-	}
-
-	labelsTable, ok := labels.(*lua.LTable)
-	if !ok {
-		L.Push(lua.LNil)
-		return 1
-	}
-
-	// Get label value
-	value := L.GetField(labelsTable, key)
-	L.Push(value)
-	return 1
+	delete(labels, key)
+	return obj
 }
 
-// addAnnotation: adds a single annotation to a Kubernetes object's metadata.
-// Automatically initializes metadata and annotations tables if they don't exist.
-//
-// @luafunc add_annotation
-// @luaparam obj table The Kubernetes object
-// @luaparam key string The annotation key
-// @luaparam value string The annotation value
-// @luareturn table obj The modified object (for chaining)
-//
-// Example:
-//
-//	local k8s = require("kubernetes")
-//	k8s.add_annotation(pod, "description", "My nginx pod")
-//	k8s.add_annotation(pod, "owner", "team-backend")
-func addAnnotation(L *lua.LState) int {
-	obj := L.CheckTable(1)
-	key := L.CheckString(2)
-	value := L.CheckString(3)
-
-	// Ensure metadata exists
-	ensureMetadata(L)
-	L.Pop(1) // Remove the returned object from ensureMetadata
-
-	// Get metadata and annotations
-	metadata := L.GetField(obj, "metadata").(*lua.LTable)
-	annotations := L.GetField(metadata, "annotations").(*lua.LTable)
-
-	// Set the annotation
-	L.SetField(annotations, key, lua.LString(value))
-
-	L.Push(obj)
-	return 1
+// HasLabel: returns true if obj.metadata.labels contains key.
+func HasLabel(obj map[string]any, key string) bool {
+	meta, _ := obj["metadata"].(map[string]any)
+	if meta == nil {
+		return false
+	}
+	labels, _ := meta["labels"].(map[string]any)
+	if labels == nil {
+		return false
+	}
+	_, ok := labels[key]
+	return ok
 }
 
-// addAnnotations: adds multiple annotations to a Kubernetes object's metadata from a table.
-// Automatically initializes metadata and annotations tables if they don't exist.
-//
-// @luafunc add_annotations
-// @luaparam obj table The Kubernetes object
-// @luaparam annotations table A table of key-value pairs to add as annotations
-// @luareturn table obj The modified object (for chaining)
-//
-// Example:
-//
-//	local k8s = require("kubernetes")
-//	k8s.add_annotations(pod, {
-//	  description = "My nginx pod",
-//	  owner = "team-backend",
-//	  version = "1.2.3"
-//	})
-func addAnnotations(L *lua.LState) int {
-	obj := L.CheckTable(1)
-	annotationsToAdd := L.CheckTable(2)
-
-	// Ensure metadata exists
-	ensureMetadata(L)
-	L.Pop(1) // Remove the returned object from ensureMetadata
-
-	// Get metadata and annotations
-	metadata := L.GetField(obj, "metadata").(*lua.LTable)
-	annotations := L.GetField(metadata, "annotations").(*lua.LTable)
-
-	// Add all annotations
-	annotationsToAdd.ForEach(func(k, v lua.LValue) {
-		L.SetField(annotations, k.String(), v)
-	})
-
-	L.Push(obj)
-	return 1
+// GetLabel: returns the value of label key, or "" if absent.
+func GetLabel(obj map[string]any, key string) string {
+	meta, _ := obj["metadata"].(map[string]any)
+	if meta == nil {
+		return ""
+	}
+	labels, _ := meta["labels"].(map[string]any)
+	if labels == nil {
+		return ""
+	}
+	v, _ := labels[key].(string)
+	return v
 }
 
-// removeAnnotation: removes an annotation from a Kubernetes object's metadata.
+// AddAnnotation: adds an annotation to obj.metadata.annotations and returns the updated obj.
 //
-// @luafunc remove_annotation
-// @luaparam obj table The Kubernetes object
-// @luaparam key string The annotation key to remove
-// @luareturn table obj The modified object (for chaining)
-//
-// Example:
-//
-//	local k8s = require("kubernetes")
-//	k8s.remove_annotation(pod, "old-annotation")
-func removeAnnotation(L *lua.LState) int {
-	obj := L.CheckTable(1)
-	key := L.CheckString(2)
-
-	// Get metadata
-	metadata := L.GetField(obj, "metadata")
-	if metadata == lua.LNil {
-		L.Push(obj)
-		return 1
-	}
-
-	metadataTable, ok := metadata.(*lua.LTable)
-	if !ok {
-		L.Push(obj)
-		return 1
-	}
-
-	// Get annotations
-	annotations := L.GetField(metadataTable, "annotations")
-	if annotations == lua.LNil {
-		L.Push(obj)
-		return 1
-	}
-
-	annotationsTable, ok := annotations.(*lua.LTable)
-	if !ok {
-		L.Push(obj)
-		return 1
-	}
-
-	// Remove the annotation
-	L.SetField(annotationsTable, key, lua.LNil)
-
-	L.Push(obj)
-	return 1
+//	obj = k8s.add_annotation(obj, "kubectl.kubernetes.io/last-applied-configuration", "...")
+func AddAnnotation(obj map[string]any, key, value string) map[string]any {
+	obj = ensureMetadata(obj)
+	meta := obj["metadata"].(map[string]any)
+	annotations := meta["annotations"].(map[string]any)
+	annotations[key] = value
+	return obj
 }
 
-// hasAnnotation: checks if a Kubernetes object has a specific annotation.
+// AddAnnotations: adds multiple annotations from a table and returns the updated obj.
 //
-// @luafunc has_annotation
-// @luaparam obj table The Kubernetes object
-// @luaparam key string The annotation key to check
-// @luareturn boolean exists true if the annotation exists
-//
-// Example:
-//
-//	local k8s = require("kubernetes")
-//	if k8s.has_annotation(pod, "description") then
-//	  print("Pod has description")
-//	end
-func hasAnnotation(L *lua.LState) int {
-	obj := L.CheckTable(1)
-	key := L.CheckString(2)
-
-	// Get metadata
-	metadata := L.GetField(obj, "metadata")
-	if metadata == lua.LNil {
-		L.Push(lua.LFalse)
-		return 1
+//	obj = k8s.add_annotations(obj, {["app.io/version"]="1.0"})
+func AddAnnotations(obj map[string]any, toAdd map[string]any) map[string]any {
+	obj = ensureMetadata(obj)
+	meta := obj["metadata"].(map[string]any)
+	annotations := meta["annotations"].(map[string]any)
+	for k, v := range toAdd {
+		annotations[k] = v
 	}
-
-	metadataTable, ok := metadata.(*lua.LTable)
-	if !ok {
-		L.Push(lua.LFalse)
-		return 1
-	}
-
-	// Get annotations
-	annotations := L.GetField(metadataTable, "annotations")
-	if annotations == lua.LNil {
-		L.Push(lua.LFalse)
-		return 1
-	}
-
-	annotationsTable, ok := annotations.(*lua.LTable)
-	if !ok {
-		L.Push(lua.LFalse)
-		return 1
-	}
-
-	// Check if annotation exists
-	value := L.GetField(annotationsTable, key)
-	L.Push(lua.LBool(value != lua.LNil))
-	return 1
+	return obj
 }
 
-// getAnnotation: gets the value of a specific annotation from a Kubernetes object.
+// RemoveAnnotation: removes an annotation and returns the updated obj.
 //
-// @luafunc get_annotation
-// @luaparam obj table The Kubernetes object
-// @luaparam key string The annotation key
-// @luareturn string|nil value The annotation value, or nil if not found
-//
-// Example:
-//
-//	local k8s = require("kubernetes")
-//	local desc = k8s.get_annotation(pod, "description")
-//	if desc then
-//	  print("Description: " .. desc)
-//	end
-func getAnnotation(L *lua.LState) int {
-	obj := L.CheckTable(1)
-	key := L.CheckString(2)
-
-	// Get metadata
-	metadata := L.GetField(obj, "metadata")
-	if metadata == lua.LNil {
-		L.Push(lua.LNil)
-		return 1
+//	obj = k8s.remove_annotation(obj, "kubectl.kubernetes.io/last-applied-configuration")
+func RemoveAnnotation(obj map[string]any, key string) map[string]any {
+	meta, _ := obj["metadata"].(map[string]any)
+	if meta == nil {
+		return obj
 	}
-
-	metadataTable, ok := metadata.(*lua.LTable)
-	if !ok {
-		L.Push(lua.LNil)
-		return 1
+	annotations, _ := meta["annotations"].(map[string]any)
+	if annotations == nil {
+		return obj
 	}
+	delete(annotations, key)
+	return obj
+}
 
-	// Get annotations
-	annotations := L.GetField(metadataTable, "annotations")
-	if annotations == lua.LNil {
-		L.Push(lua.LNil)
-		return 1
+// HasAnnotation: returns true if obj.metadata.annotations contains key.
+func HasAnnotation(obj map[string]any, key string) bool {
+	meta, _ := obj["metadata"].(map[string]any)
+	if meta == nil {
+		return false
 	}
-
-	annotationsTable, ok := annotations.(*lua.LTable)
-	if !ok {
-		L.Push(lua.LNil)
-		return 1
+	annotations, _ := meta["annotations"].(map[string]any)
+	if annotations == nil {
+		return false
 	}
+	_, ok := annotations[key]
+	return ok
+}
 
-	// Get annotation value
-	value := L.GetField(annotationsTable, key)
-	L.Push(value)
-	return 1
+// GetAnnotation: returns the value of annotation key, or "" if absent.
+func GetAnnotation(obj map[string]any, key string) string {
+	meta, _ := obj["metadata"].(map[string]any)
+	if meta == nil {
+		return ""
+	}
+	annotations, _ := meta["annotations"].(map[string]any)
+	if annotations == nil {
+		return ""
+	}
+	v, _ := annotations[key].(string)
+	return v
+}
+
+// build: constructs the module definition. Reused by Loader and Register.
+func build() *luareg.Module {
+	m := luareg.NewModule("kubernetes", "Kubernetes utility functions")
+	m.Fn("parse_memory", ParseMemory, "parse a Kubernetes memory quantity, returns bytes",
+		luareg.Args("quantity"))
+	m.Fn("parse_cpu", ParseCPU, "parse a Kubernetes CPU quantity, returns millicores",
+		luareg.Args("quantity"))
+	m.Fn("parse_time", ParseTime, "parse an RFC3339 time string, returns Unix timestamp",
+		luareg.Args("timestr"))
+	m.Fn("format_time", FormatTime, "convert a Unix timestamp to RFC3339 string",
+		luareg.Args("timestamp"))
+	m.Fn("parse_duration", ParseDuration, "parse a duration string, returns seconds",
+		luareg.Args("duration"))
+	m.Fn("format_duration", FormatDuration, "convert seconds to a duration string",
+		luareg.Args("seconds"))
+	m.Fn("match_gvk", MatchGVK, "check if a Kubernetes object matches a GVK matcher",
+		luareg.Args("obj", "matcher"))
+	m.Fn("ensure_metadata", EnsureMetadata, "ensure metadata.labels and annotations exist, returns updated obj",
+		luareg.Args("obj"))
+	m.Fn("init_defaults", InitDefaults, "ensure metadata.labels and annotations exist, returns updated obj",
+		luareg.Args("obj"))
+	m.Fn("add_label", AddLabel, "add a label and return the updated obj",
+		luareg.Args("obj", "key", "value"))
+	m.Fn("add_labels", AddLabels, "add multiple labels and return the updated obj",
+		luareg.Args("obj", "labels"))
+	m.Fn("remove_label", RemoveLabel, "remove a label and return the updated obj",
+		luareg.Args("obj", "key"))
+	m.Fn("has_label", HasLabel, "return true if the label exists",
+		luareg.Args("obj", "key"))
+	m.Fn("get_label", GetLabel, "return the value of a label, or empty string if absent",
+		luareg.Args("obj", "key"))
+	m.Fn("add_annotation", AddAnnotation, "add an annotation and return the updated obj",
+		luareg.Args("obj", "key", "value"))
+	m.Fn("add_annotations", AddAnnotations, "add multiple annotations and return the updated obj",
+		luareg.Args("obj", "annotations"))
+	m.Fn("remove_annotation", RemoveAnnotation, "remove an annotation and return the updated obj",
+		luareg.Args("obj", "key"))
+	m.Fn("has_annotation", HasAnnotation, "return true if the annotation exists",
+		luareg.Args("obj", "key"))
+	m.Fn("get_annotation", GetAnnotation, "return the value of an annotation, or empty string if absent",
+		luareg.Args("obj", "key"))
+	return m
+}
+
+// Loader: gopher-lua module loader. Use with L.PreloadModule("kubernetes", kubernetes.Loader).
+func Loader(L *lua.LState) int {
+	return build().PushTo(L)
+}
+
+// Register: adds this module to reg for stub generation.
+func Register(reg *luareg.Registry) {
+	build().Register(reg)
 }
