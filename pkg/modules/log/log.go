@@ -29,13 +29,15 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/thomas-maurice/glua/pkg/glua"
+	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
 )
 
-const (
-	loggerTypeName = "Logger"
-	loggerKey      = "__logger__"
-)
+// loggerInjectedKey: Lua global name used to store an injected *log.Logger.
+const loggerInjectedKey = "__log_injected_logger__"
+
+// loggerClassName: Lua type name for the Logger class.
+const loggerClassName = "log.Logger"
 
 var (
 	// defaultLogger: the default logger instance used when no logger is injected
@@ -73,18 +75,6 @@ func GetDefaultLogger() *log.Logger {
 	return defaultLogger
 }
 
-// getDefaultLoggerUserData: returns the default logger wrapped in UserData
-func getDefaultLoggerUserData(L *lua.LState) *lua.LUserData {
-	lv := L.GetGlobal(loggerKey)
-	if ud, ok := lv.(*lua.LUserData); ok {
-		return ud
-	}
-	// Create and cache default logger UserData
-	ud := wrapLogger(L, GetDefaultLogger())
-	L.SetGlobal(loggerKey, ud)
-	return ud
-}
-
 // InjectLogger: injects a pre-configured logger instance into the Lua state.
 // This is OPTIONAL - if you don't inject a logger, a default one will be created automatically.
 // Use this only when you want to add pre-set fields (like request ID, user ID, etc.) from Go.
@@ -94,356 +84,157 @@ func getDefaultLoggerUserData(L *lua.LState) *lua.LUserData {
 //	// Get default logger and add fields
 //	logger := logmodule.GetDefaultLogger().With("request_id", "abc123", "user", "john")
 //	logmodule.InjectLogger(L, logger)
-//
-// Or create a custom logger:
-//
-//	logger := logmodule.NewLogger(os.Stderr, true, time.RFC3339, log.TextFormatter)
-//	logger = logger.With("app", "myapp", "version", "1.0.0")
-//	logmodule.InjectLogger(L, logger)
 func InjectLogger(L *lua.LState, logger *log.Logger) {
-	ud := wrapLogger(L, logger)
-	L.SetGlobal(loggerKey, ud)
-}
-
-// wrapLogger: wraps a log.Logger in UserData with the Logger metatable
-func wrapLogger(L *lua.LState, logger *log.Logger) *lua.LUserData {
-	// Ensure Logger type is registered
-	registerLoggerType(L)
-
+	// Store a bare UserData. If the class metatable is already registered on L
+	// (i.e., Loader has been called), attach it now. Otherwise leave it bare —
+	// Loader will re-wrap after registering the metatable.
 	ud := L.NewUserData()
 	ud.Value = logger
-	L.SetMetatable(ud, L.GetTypeMetatable(loggerTypeName))
+	mt := L.GetTypeMetatable(loggerClassName)
+	if mt != lua.LNil {
+		L.SetMetatable(ud, mt)
+	}
+	L.SetGlobal(loggerInjectedKey, ud)
+}
+
+// newLoggerClass: creates a fresh *luareg.Class[*log.Logger] with all methods registered.
+// Called once per build() invocation so each Module gets its own Class instance.
+func newLoggerClass() *luareg.Class[*log.Logger] {
+	cls := luareg.NewClass[*log.Logger](loggerClassName, "structured logger object")
+	// Methods use (receiver, *lua.LState, msg string) — the LState escape hatch
+	// allows reading extra variadic key-value fields beyond msg, while keeping
+	// msg visible to reflection for stub generation.
+	cls.Method("debug", loggerDebugMethod, "log at debug level",
+		luareg.Args("msg"))
+	cls.Method("info", loggerInfoMethod, "log at info level",
+		luareg.Args("msg"))
+	cls.Method("warn", loggerWarnMethod, "log at warn level",
+		luareg.Args("msg"))
+	cls.Method("error", loggerErrorMethod, "log at error level",
+		luareg.Args("msg"))
+	cls.Method("fatal", loggerFatalMethod, "log at fatal level",
+		luareg.Args("msg"))
+	// with is fully variadic (key-value pairs only, no fixed params) — keep the
+	// *lua.LState-only escape hatch; stub shows Logger:with() with no params,
+	// which is the acceptable degradation documented below.
+	cls.Method("with", loggerWithMethod, "return a child logger with extra fields")
+	return cls
+}
+
+// getActiveLogger: returns the active logger for the given Lua state.
+// Looks for an injected logger in globals; falls back to the package default.
+func getActiveLogger(L *lua.LState) *log.Logger {
+	lv := L.GetGlobal(loggerInjectedKey)
+	if ud, ok := lv.(*lua.LUserData); ok {
+		if logger, ok := ud.Value.(*log.Logger); ok {
+			return logger
+		}
+	}
+	return GetDefaultLogger()
+}
+
+// wrapLogger: wraps a *log.Logger as a Lua UserData with the class metatable.
+// Requires the class metatable to be already registered on L (i.e., PushTo has run).
+func wrapLogger(L *lua.LState, logger *log.Logger) *lua.LUserData {
+	ud := L.NewUserData()
+	ud.Value = logger
+	L.SetMetatable(ud, L.GetTypeMetatable(loggerClassName))
 	return ud
 }
 
-// registerLoggerType: ensures the Logger type metatable is registered
-func registerLoggerType(L *lua.LState) {
-	mt := L.GetTypeMetatable(loggerTypeName)
-	if mt == lua.LNil {
-		mt = L.NewTypeMetatable(loggerTypeName)
-		L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), getLoggerMethods()))
-	}
+// Logger method implementations.
+// debug/info/warn/error/fatal use (receiver, *lua.LState, msg string): the
+// framework reads msg from stack position 2; optional key-value fields at
+// positions 3..N are read via extractFields using the LState escape hatch.
+// with uses (receiver, *lua.LState) only — fully variadic, no fixed params.
+
+// loggerDebugMethod: logs a debug-level message.
+func loggerDebugMethod(l *log.Logger, L *lua.LState, msg string) {
+	fields := extractFields(L, 3)
+	l.Debug(msg, fields...)
 }
 
-// getLoggerMethods: returns the logger methods map (lazy initialization to avoid init cycle)
-func getLoggerMethods() map[string]lua.LGFunction {
-	return map[string]lua.LGFunction{
-		"debug": loggerDebug,
-		"info":  loggerInfo,
-		"warn":  loggerWarn,
-		"error": loggerError,
-		"fatal": loggerFatal,
-		"with":  loggerWith,
-	}
+// loggerInfoMethod: logs an info-level message.
+func loggerInfoMethod(l *log.Logger, L *lua.LState, msg string) {
+	fields := extractFields(L, 3)
+	l.Info(msg, fields...)
 }
 
-// checkLogger: extracts a log.Logger from UserData
-func checkLogger(L *lua.LState, index int) *log.Logger {
-	ud := L.CheckUserData(index)
-	if logger, ok := ud.Value.(*log.Logger); ok {
-		return logger
-	}
-	L.ArgError(index, "Logger expected")
-	return nil
+// loggerWarnMethod: logs a warn-level message.
+func loggerWarnMethod(l *log.Logger, L *lua.LState, msg string) {
+	fields := extractFields(L, 3)
+	l.Warn(msg, fields...)
 }
 
-// Loader: creates and returns the log module for Lua.
-// This function should be registered with L.PreloadModule("log", log.Loader)
-//
-// @luamodule log
-//
-// Example usage in Lua:
-//
-//	local log = require("log")
-//	log.info("Application started")
-//	log.warn("Low memory warning")
-//	log.error("Failed to connect to database")
-//
-//	-- Or get a logger object
-//	local logger = log.logger()
-//	logger:info("Using logger object")
-//	local contextLogger = logger:with("request_id", "abc123")
-//	contextLogger:info("Request processing")
-func Loader(L *lua.LState) int {
-	// Register Logger type
-	registerLoggerType(L)
-
-	// Create module table
-	mod := L.SetFuncs(L.NewTable(), exports)
-
-	// Push module onto stack
-	L.Push(mod)
-	return 1
+// loggerErrorMethod: logs an error-level message.
+func loggerErrorMethod(l *log.Logger, L *lua.LState, msg string) {
+	fields := extractFields(L, 3)
+	l.Error(msg, fields...)
 }
 
-// exports: maps Lua function names to Go implementations (module-level functions)
-var exports = map[string]lua.LGFunction{
-	"debug":  moduleDebug,
-	"info":   moduleInfo,
-	"warn":   moduleWarn,
-	"error":  moduleError,
-	"fatal":  moduleFatal,
-	"logger": moduleLogger,
+// loggerFatalMethod: logs a fatal-level message and exits.
+func loggerFatalMethod(l *log.Logger, L *lua.LState, msg string) {
+	fields := extractFields(L, 3)
+	l.Fatal(msg, fields...)
 }
 
-// Module-level functions that use the default logger
-
-// moduleDebug: logs a debug-level message using the default logger.
-//
-// @luafunc debug
-// @luaparam msg string The message to log
-// @luaparam ... any Optional fields: key-value pairs, a table, or key-table pairs
-//
-// Supports three patterns:
-//
-//	log.debug("msg", "key", "value")              -- string-primitive pairs
-//	log.debug("msg", {key = "value"})             -- flatten table
-//	log.debug("msg", "context", {nested = "data"}) -- JSON encode table
-//
-// Example:
-//
-//	log.debug("Processing item", "item_id", 42, "status", "pending")
-func moduleDebug(L *lua.LState) int {
-	ud := getDefaultLoggerUserData(L)
-	if logger, ok := ud.Value.(*log.Logger); ok {
-		return logDebugImpl(logger, L, 1)
-	}
-	return logDebugImpl(GetDefaultLogger(), L, 1)
-}
-
-// moduleInfo: logs an info-level message using the default logger.
-//
-// @luafunc info
-// @luaparam msg string The message to log
-// @luaparam ... any Optional fields: key-value pairs, a table, or key-table pairs
-//
-// Example:
-//
-//	log.info("Server started", "port", 8080)
-func moduleInfo(L *lua.LState) int {
-	ud := getDefaultLoggerUserData(L)
-	if logger, ok := ud.Value.(*log.Logger); ok {
-		return logInfoImpl(logger, L, 1)
-	}
-	return logInfoImpl(GetDefaultLogger(), L, 1)
-}
-
-// moduleWarn: logs a warning-level message using the default logger.
-//
-// @luafunc warn
-// @luaparam msg string The message to log
-// @luaparam ... any Optional fields: key-value pairs, a table, or key-table pairs
-//
-// Example:
-//
-//	log.warn("Retry attempt failed", "attempt", 3, "max_retries", 5)
-func moduleWarn(L *lua.LState) int {
-	ud := getDefaultLoggerUserData(L)
-	if logger, ok := ud.Value.(*log.Logger); ok {
-		return logWarnImpl(logger, L, 1)
-	}
-	return logWarnImpl(GetDefaultLogger(), L, 1)
-}
-
-// moduleError: logs an error-level message using the default logger.
-//
-// @luafunc error
-// @luaparam msg string The message to log
-// @luaparam ... any Optional fields: key-value pairs, a table, or key-table pairs
-//
-// Example:
-//
-//	log.error("Database connection failed", "error", err_msg, "retry_in", 5)
-func moduleError(L *lua.LState) int {
-	ud := getDefaultLoggerUserData(L)
-	if logger, ok := ud.Value.(*log.Logger); ok {
-		return logErrorImpl(logger, L, 1)
-	}
-	return logErrorImpl(GetDefaultLogger(), L, 1)
-}
-
-// moduleFatal: logs a fatal-level message using the default logger and exits.
-//
-// @luafunc fatal
-// @luaparam msg string The message to log
-// @luaparam ... any Optional fields: key-value pairs, a table, or key-table pairs
-//
-// Example:
-//
-//	log.fatal("Critical system failure", "component", "database")
-func moduleFatal(L *lua.LState) int {
-	ud := getDefaultLoggerUserData(L)
-	if logger, ok := ud.Value.(*log.Logger); ok {
-		return logFatalImpl(logger, L, 1)
-	}
-	return logFatalImpl(GetDefaultLogger(), L, 1)
-}
-
-// moduleLogger: returns the default logger object.
-//
-// @luafunc logger
-// @luareturn log.Logger logger The default logger object
-//
-// Example:
-//
-//	local logger = log.logger()
-//	logger:info("Using logger object")
-func moduleLogger(L *lua.LState) int {
-	ud := getDefaultLoggerUserData(L)
-	L.Push(ud)
-	return 1
-}
-
-// Logger methods
-
-// loggerDebug: logs a debug-level message.
-//
-// @luamethod log.Logger debug
-// @luaparam self log.Logger The logger object
-// @luaparam msg string The message to log
-// @luaparam ... any Optional fields: key-value pairs, a table, or key-table pairs
-//
-// Example:
-//
-//	logger:debug("Processing item", "item_id", 42)
-func loggerDebug(L *lua.LState) int {
-	logger := checkLogger(L, 1)
-	return logDebugImpl(logger, L, 2)
-}
-
-// loggerInfo: logs an info-level message.
-//
-// @luamethod log.Logger info
-// @luaparam self log.Logger The logger object
-// @luaparam msg string The message to log
-// @luaparam ... any Optional fields: key-value pairs, a table, or key-table pairs
-//
-// Example:
-//
-//	logger:info("Server started", "port", 8080)
-func loggerInfo(L *lua.LState) int {
-	logger := checkLogger(L, 1)
-	return logInfoImpl(logger, L, 2)
-}
-
-// loggerWarn: logs a warning-level message.
-//
-// @luamethod log.Logger warn
-// @luaparam self log.Logger The logger object
-// @luaparam msg string The message to log
-// @luaparam ... any Optional fields: key-value pairs, a table, or key-table pairs
-//
-// Example:
-//
-//	logger:warn("High memory usage", "memory_used", 8.5)
-func loggerWarn(L *lua.LState) int {
-	logger := checkLogger(L, 1)
-	return logWarnImpl(logger, L, 2)
-}
-
-// loggerError: logs an error-level message.
-//
-// @luamethod log.Logger error
-// @luaparam self log.Logger The logger object
-// @luaparam msg string The message to log
-// @luaparam ... any Optional fields: key-value pairs, a table, or key-table pairs
-//
-// Example:
-//
-//	logger:error("Database connection failed", "error", err_msg)
-func loggerError(L *lua.LState) int {
-	logger := checkLogger(L, 1)
-	return logErrorImpl(logger, L, 2)
-}
-
-// loggerFatal: logs a fatal-level message and exits.
-//
-// @luamethod log.Logger fatal
-// @luaparam self log.Logger The logger object
-// @luaparam msg string The message to log
-// @luaparam ... any Optional fields: key-value pairs, a table, or key-table pairs
-//
-// Example:
-//
-//	logger:fatal("Critical failure", "component", "database")
-func loggerFatal(L *lua.LState) int {
-	logger := checkLogger(L, 1)
-	return logFatalImpl(logger, L, 2)
-}
-
-// loggerWith: creates a new logger with additional fields.
-//
-// @luamethod log.Logger with
-// @luaparam self log.Logger The logger object
-// @luaparam ... any Key-value pairs to add to the logger context
-// @luareturn log.Logger logger A new logger with the additional fields
-//
-// Example:
-//
-//	local logger = log.logger()
-//	local contextLogger = logger:with("request_id", "abc123", "user", "john")
-//	contextLogger:info("User logged in")
-//	logger:info("Other action")  -- original logger unchanged
-func loggerWith(L *lua.LState) int {
-	logger := checkLogger(L, 1)
+// loggerWithMethod: creates a child logger with extra fields.
+// Fully variadic: stack positions 2..N are key-value pairs.
+// Uses the *lua.LState-only escape hatch so no fixed params are enforced.
+func loggerWithMethod(l *log.Logger, L *lua.LState) *log.Logger {
 	fields := extractFields(L, 2)
-
-	// Create new logger with additional fields
-	newLogger := logger.With(fields...)
-
-	// Wrap in UserData and return
-	ud := wrapLogger(L, newLogger)
-	L.Push(ud)
-	return 1
+	return l.With(fields...)
 }
 
-// Implementation functions
+// Module-level shorthand functions use (L *lua.LState, msg string): the
+// framework reads msg from stack position 1; extra key-value fields at
+// positions 2..N are extracted via the LState escape hatch.
 
-// logDebugImpl: implementation of debug logging
-func logDebugImpl(logger *log.Logger, L *lua.LState, startIdx int) int {
-	msg := L.CheckString(startIdx)
-	fields := extractFields(L, startIdx+1)
+// moduleLuaDebug: logs at debug level on the active logger.
+func moduleLuaDebug(L *lua.LState, msg string) {
+	logger := getActiveLogger(L)
+	fields := extractFields(L, 2)
 	logger.Debug(msg, fields...)
-	return 0
 }
 
-// logInfoImpl: implementation of info logging
-func logInfoImpl(logger *log.Logger, L *lua.LState, startIdx int) int {
-	msg := L.CheckString(startIdx)
-	fields := extractFields(L, startIdx+1)
+// moduleLuaInfo: logs at info level on the active logger.
+func moduleLuaInfo(L *lua.LState, msg string) {
+	logger := getActiveLogger(L)
+	fields := extractFields(L, 2)
 	logger.Info(msg, fields...)
-	return 0
 }
 
-// logWarnImpl: implementation of warn logging
-func logWarnImpl(logger *log.Logger, L *lua.LState, startIdx int) int {
-	msg := L.CheckString(startIdx)
-	fields := extractFields(L, startIdx+1)
+// moduleLuaWarn: logs at warn level on the active logger.
+func moduleLuaWarn(L *lua.LState, msg string) {
+	logger := getActiveLogger(L)
+	fields := extractFields(L, 2)
 	logger.Warn(msg, fields...)
-	return 0
 }
 
-// logErrorImpl: implementation of error logging
-func logErrorImpl(logger *log.Logger, L *lua.LState, startIdx int) int {
-	msg := L.CheckString(startIdx)
-	fields := extractFields(L, startIdx+1)
+// moduleLuaError: logs at error level on the active logger.
+func moduleLuaError(L *lua.LState, msg string) {
+	logger := getActiveLogger(L)
+	fields := extractFields(L, 2)
 	logger.Error(msg, fields...)
-	return 0
 }
 
-// logFatalImpl: implementation of fatal logging
-func logFatalImpl(logger *log.Logger, L *lua.LState, startIdx int) int {
-	msg := L.CheckString(startIdx)
-	fields := extractFields(L, startIdx+1)
+// moduleLuaFatal: logs at fatal level on the active logger.
+func moduleLuaFatal(L *lua.LState, msg string) {
+	logger := getActiveLogger(L)
+	fields := extractFields(L, 2)
 	logger.Fatal(msg, fields...)
-	return 0
 }
 
-// extractFields: extracts key-value pairs from Lua stack starting at the given index.
+// moduleLuaLogger: returns the active logger as a UserData object.
+func moduleLuaLogger(L *lua.LState) *log.Logger {
+	return getActiveLogger(L)
+}
+
+// extractFields: extracts key-value pairs from the Lua stack starting at startIdx.
 // Supports three patterns:
-// 1. String-primitive pairs: log.info("msg", "key", "value", "key2", 42)
-// 2. Single table: log.info("msg", {key = "value", key2 = 42})
-// 3. String-table pairs: log.info("msg", "context", {nested = "data"})
+//  1. String-primitive pairs: log.info("msg", "key", "value", "key2", 42)
+//  2. Single table: log.info("msg", {key = "value"})
+//  3. String-table pairs: log.info("msg", "context", {nested = "data"})
 func extractFields(L *lua.LState, startIdx int) []interface{} {
 	top := L.GetTop()
 	if startIdx > top {
@@ -458,10 +249,8 @@ func extractFields(L *lua.LState, startIdx int) []interface{} {
 
 		// Case 1: Single table argument - flatten first-level keys
 		if tbl, ok := arg.(*lua.LTable); ok && i == startIdx && top == startIdx {
-			// Only one argument and it's a table - flatten it
 			tbl.ForEach(func(key lua.LValue, val lua.LValue) {
 				if keyStr, ok := key.(lua.LString); ok {
-					// Convert value using translator
 					var goVal any
 					if err := translator.FromLua(L, val, &goVal); err == nil {
 						fields = append(fields, string(keyStr), goVal)
@@ -476,19 +265,17 @@ func extractFields(L *lua.LState, startIdx int) []interface{} {
 			nextArg := L.Get(i + 1)
 			if keyStr, ok := arg.(lua.LString); ok {
 				if tbl, ok := nextArg.(*lua.LTable); ok {
-					// String-table pair: encode table as JSON
 					fields = append(fields, string(keyStr), tableToJSON(L, tbl))
-					i += 2 // Skip both arguments
+					i += 2
 					continue
 				}
 			}
 		}
 
-		// Case 3: String-primitive pairs (default behavior)
+		// Case 3: String-primitive pairs (default)
 		if keyStr, ok := arg.(lua.LString); ok {
 			fields = append(fields, string(keyStr))
 		} else {
-			// Convert non-string arguments using translator
 			var goVal any
 			if err := translator.FromLua(L, arg, &goVal); err == nil {
 				fields = append(fields, goVal)
@@ -503,16 +290,60 @@ func extractFields(L *lua.LState, startIdx int) []interface{} {
 
 // tableToJSON: converts a Lua table to a JSON string for logging
 func tableToJSON(L *lua.LState, tbl *lua.LTable) string {
-	// Use the glua translator to convert Lua table to Go
 	var result any
 	if err := translator.FromLua(L, tbl, &result); err != nil {
 		return fmt.Sprintf("{\"error\": \"failed to convert: %v\"}", err)
 	}
-
-	// Marshal to JSON
 	jsonBytes, err := json.Marshal(result)
 	if err != nil {
 		return fmt.Sprintf("{\"error\": \"failed to marshal: %v\"}", err)
 	}
 	return string(jsonBytes)
+}
+
+// build: constructs the module definition. Reused by Loader and Register.
+// Each call creates a fresh Module and Class to avoid duplicate registration panics.
+func build() *luareg.Module {
+	m := luareg.NewModule("log", "structured logger")
+	cls := newLoggerClass()
+	m.RegisterClass(cls)
+	// Module-level shorthand functions use (L *lua.LState, msg string): msg is
+	// visible to reflection for stub generation, and L is the escape hatch for
+	// reading extra variadic key-value fields beyond msg.
+	m.Fn("debug", moduleLuaDebug, "log on the default logger at debug level",
+		luareg.Args("msg"))
+	m.Fn("info", moduleLuaInfo, "log on the default logger at info level",
+		luareg.Args("msg"))
+	m.Fn("warn", moduleLuaWarn, "log on the default logger at warn level",
+		luareg.Args("msg"))
+	m.Fn("error", moduleLuaError, "log on the default logger at error level",
+		luareg.Args("msg"))
+	m.Fn("fatal", moduleLuaFatal, "log on the default logger at fatal level",
+		luareg.Args("msg"))
+	// logger returns the active *log.Logger; return type is auto-wrapped by luareg.
+	m.Fn("logger", moduleLuaLogger, "return the default logger")
+	return m
+}
+
+// Loader: gopher-lua module loader. Use with L.PreloadModule("log", log.Loader).
+func Loader(L *lua.LState) int {
+	n := build().PushTo(L)
+
+	// After PushTo the class metatable for "log.Logger" is registered on L.
+	// Re-wrap any previously injected logger so it gets the proper metatable.
+	if lv := L.GetGlobal(loggerInjectedKey); lv != lua.LNil {
+		if ud, ok := lv.(*lua.LUserData); ok {
+			if logger, ok2 := ud.Value.(*log.Logger); ok2 {
+				wrapped := wrapLogger(L, logger)
+				L.SetGlobal(loggerInjectedKey, wrapped)
+			}
+		}
+	}
+
+	return n
+}
+
+// Register: adds this module to reg for stub generation.
+func Register(reg *luareg.Registry) {
+	build().Register(reg)
 }

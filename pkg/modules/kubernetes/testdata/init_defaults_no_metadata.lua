@@ -3,13 +3,14 @@
 --
 -- This test verifies that init_defaults() creates the metadata
 -- field if it doesn't exist, along with labels and annotations.
+-- Note: init_defaults returns the updated object; the caller must assign.
 
 local k8s = require("kubernetes")
 
 local obj = {}
 
--- Initialize defaults (should create metadata)
-k8s.init_defaults(obj)
+-- Initialize defaults (must assign return value)
+obj = k8s.init_defaults(obj)
 
 -- Should have created metadata with labels and annotations
 assert(type(obj.metadata) == "table", "metadata should be created")

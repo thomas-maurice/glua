@@ -1,7 +1,8 @@
 
 -- Test: match_gvk validation - missing kind
 --
--- Verifies that match_gvk errors when kind field is missing.
+-- Verifies that match_gvk returns false when kind field is missing
+-- (an incomplete matcher cannot match any resource).
 
 local k8s = require("kubernetes")
 
@@ -10,18 +11,12 @@ local pod = {
 	kind = "Pod",
 }
 
--- Missing 'kind' field should error
+-- Missing 'kind' field: incomplete matcher should return false
 local matcher = {group = "", version = "v1"}
-local status, err = pcall(function()
-	k8s.match_gvk(pod, matcher)
-end)
+local result = k8s.match_gvk(pod, matcher)
 
-if status then
-	error("Expected error for missing 'kind' field, but got success")
-end
-
-if not string.find(err, "requires 'kind' field") then
-	error("Expected error message about 'kind' field, got: " .. tostring(err))
+if result then
+	error("Expected false for incomplete matcher (missing 'kind' field)")
 end
 
 return true

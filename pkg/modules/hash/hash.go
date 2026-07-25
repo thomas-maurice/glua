@@ -28,248 +28,125 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 
 	"github.com/thomas-maurice/glua/pkg/glua"
+	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
 )
 
-// Loader: creates and returns the hash module for Lua.
-// This function should be registered with L.PreloadModule("hash", hash.Loader)
-//
-// @luamodule hash
-//
-// Example usage in Lua:
-//
-//	local hash = require("hash")
-//	local h = hash.sha256("hello world")
-//	print(h)
-func Loader(L *lua.LState) int {
-	// Create module table
-	mod := L.SetFuncs(L.NewTable(), exports)
-
-	// Push module onto stack
-	L.Push(mod)
-	return 1
+// md5Hash: computes the hex-encoded MD5 hash of a string.
+func md5Hash(s string) string {
+	h := md5.Sum([]byte(s))
+	return hex.EncodeToString(h[:])
 }
 
-// exports: maps Lua function names to Go implementations
-var exports = map[string]lua.LGFunction{
-	"md5":         md5Hash,
-	"sha1":        sha1Hash,
-	"sha256":      sha256Hash,
-	"sha512":      sha512Hash,
-	"hmac_sha256": hmacSha256,
-	"md5_obj":     md5HashObj,
-	"sha1_obj":    sha1HashObj,
-	"sha256_obj":  sha256HashObj,
-	"sha512_obj":  sha512HashObj,
+// sha1Hash: computes the hex-encoded SHA1 hash of a string.
+func sha1Hash(s string) string {
+	h := sha1.Sum([]byte(s))
+	return hex.EncodeToString(h[:])
 }
 
-// md5Hash: computes the MD5 hash of a string.
-//
-// @luafunc md5
-// @luaparam str string The string to hash
-// @luareturn string hash The hex-encoded MD5 hash
-//
-// Example:
-//
-//	local h = hash.md5("hello world")
-//	print(h)  -- prints "5eb63bbbe01eeed093cb22bb8f5acdc3"
-func md5Hash(L *lua.LState) int {
-	str := L.CheckString(1)
-	h := md5.Sum([]byte(str))
-	L.Push(lua.LString(hex.EncodeToString(h[:])))
-	return 1
+// sha256Hash: computes the hex-encoded SHA256 hash of a string.
+func sha256Hash(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:])
 }
 
-// sha1Hash: computes the SHA1 hash of a string.
-//
-// @luafunc sha1
-// @luaparam str string The string to hash
-// @luareturn string hash The hex-encoded SHA1 hash
-//
-// Example:
-//
-//	local h = hash.sha1("hello world")
-//	print(h)  -- prints "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed"
-func sha1Hash(L *lua.LState) int {
-	str := L.CheckString(1)
-	h := sha1.Sum([]byte(str))
-	L.Push(lua.LString(hex.EncodeToString(h[:])))
-	return 1
+// sha512Hash: computes the hex-encoded SHA512 hash of a string.
+func sha512Hash(s string) string {
+	h := sha512.Sum512([]byte(s))
+	return hex.EncodeToString(h[:])
 }
 
-// sha256Hash: computes the SHA256 hash of a string.
-//
-// @luafunc sha256
-// @luaparam str string The string to hash
-// @luareturn string hash The hex-encoded SHA256 hash
-//
-// Example:
-//
-//	local h = hash.sha256("hello world")
-//	print(h)  -- prints "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
-func sha256Hash(L *lua.LState) int {
-	str := L.CheckString(1)
-	h := sha256.Sum256([]byte(str))
-	L.Push(lua.LString(hex.EncodeToString(h[:])))
-	return 1
-}
-
-// sha512Hash: computes the SHA512 hash of a string.
-//
-// @luafunc sha512
-// @luaparam str string The string to hash
-// @luareturn string hash The hex-encoded SHA512 hash
-//
-// Example:
-//
-//	local h = hash.sha512("hello world")
-func sha512Hash(L *lua.LState) int {
-	str := L.CheckString(1)
-	h := sha512.Sum512([]byte(str))
-	L.Push(lua.LString(hex.EncodeToString(h[:])))
-	return 1
-}
-
-// hmacSha256: computes the HMAC-SHA256 of a message with a key.
-//
-// @luafunc hmac_sha256
-// @luaparam message string The message to authenticate
-// @luaparam key string The secret key
-// @luareturn string hash The hex-encoded HMAC-SHA256
-//
-// Example:
-//
-//	local h = hash.hmac_sha256("message", "secret_key")
-//	print(h)
-func hmacSha256(L *lua.LState) int {
-	message := L.CheckString(1)
-	key := L.CheckString(2)
-
+// hmacSHA256: computes the hex-encoded HMAC-SHA256 of message with key.
+func hmacSHA256(message, key string) string {
 	mac := hmac.New(sha256.New, []byte(key))
 	mac.Write([]byte(message))
-	h := mac.Sum(nil)
-
-	L.Push(lua.LString(hex.EncodeToString(h)))
-	return 1
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
-// tableToJSON: converts a Lua table to JSON string
-func tableToJSON(L *lua.LState, table lua.LValue) ([]byte, error) {
+// tableToJSON: converts a Lua value to its JSON representation for hashing.
+func tableToJSON(L *lua.LState, value lua.LValue) ([]byte, error) {
 	translator := glua.NewTranslator()
 	var goValue interface{}
-	err := translator.FromLua(L, table, &goValue)
-	if err != nil {
+	if err := translator.FromLua(L, value, &goValue); err != nil {
 		return nil, err
 	}
 	return json.Marshal(goValue)
 }
 
-// md5HashObj: computes the MD5 hash of a Lua table (converted to JSON).
-//
-// @luafunc md5_obj
-// @luaparam obj table The table to hash
-// @luareturn string hash The hex-encoded MD5 hash
-// @luareturn string|nil err Error message if conversion fails
-//
-// Example:
-//
-//	local h, err = hash.md5_obj({name="John", age=30})
-//	if err then error(err) end
-//	print(h)
-func md5HashObj(L *lua.LState) int {
-	table := L.CheckAny(1)
-	jsonBytes, err := tableToJSON(L, table)
+// md5HashObj: computes the MD5 hash of a Lua value serialised to JSON.
+// Uses *lua.LState escape hatch to accept any Lua value.
+func md5HashObj(L *lua.LState, tbl lua.LValue) (string, error) {
+	b, err := tableToJSON(L, tbl)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(err.Error()))
-		return 2
+		return "", fmt.Errorf("failed to serialise value: %w", err)
 	}
-
-	h := md5.Sum(jsonBytes)
-	L.Push(lua.LString(hex.EncodeToString(h[:])))
-	L.Push(lua.LNil)
-	return 2
+	h := md5.Sum(b)
+	return hex.EncodeToString(h[:]), nil
 }
 
-// sha1HashObj: computes the SHA1 hash of a Lua table (converted to JSON).
-//
-// @luafunc sha1_obj
-// @luaparam obj table The table to hash
-// @luareturn string hash The hex-encoded SHA1 hash
-// @luareturn string|nil err Error message if conversion fails
-//
-// Example:
-//
-//	local h, err = hash.sha1_obj({name="John", age=30})
-//	if err then error(err) end
-//	print(h)
-func sha1HashObj(L *lua.LState) int {
-	table := L.CheckAny(1)
-	jsonBytes, err := tableToJSON(L, table)
+// sha1HashObj: computes the SHA1 hash of a Lua value serialised to JSON.
+func sha1HashObj(L *lua.LState, tbl lua.LValue) (string, error) {
+	b, err := tableToJSON(L, tbl)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(err.Error()))
-		return 2
+		return "", fmt.Errorf("failed to serialise value: %w", err)
 	}
-
-	h := sha1.Sum(jsonBytes)
-	L.Push(lua.LString(hex.EncodeToString(h[:])))
-	L.Push(lua.LNil)
-	return 2
+	h := sha1.Sum(b)
+	return hex.EncodeToString(h[:]), nil
 }
 
-// sha256HashObj: computes the SHA256 hash of a Lua table (converted to JSON).
-//
-// @luafunc sha256_obj
-// @luaparam obj table The table to hash
-// @luareturn string hash The hex-encoded SHA256 hash
-// @luareturn string|nil err Error message if conversion fails
-//
-// Example:
-//
-//	local h, err = hash.sha256_obj({name="John", age=30})
-//	if err then error(err) end
-//	print(h)
-func sha256HashObj(L *lua.LState) int {
-	table := L.CheckAny(1)
-	jsonBytes, err := tableToJSON(L, table)
+// sha256HashObj: computes the SHA256 hash of a Lua value serialised to JSON.
+func sha256HashObj(L *lua.LState, tbl lua.LValue) (string, error) {
+	b, err := tableToJSON(L, tbl)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(err.Error()))
-		return 2
+		return "", fmt.Errorf("failed to serialise value: %w", err)
 	}
-
-	h := sha256.Sum256(jsonBytes)
-	L.Push(lua.LString(hex.EncodeToString(h[:])))
-	L.Push(lua.LNil)
-	return 2
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:]), nil
 }
 
-// sha512HashObj: computes the SHA512 hash of a Lua table (converted to JSON).
-//
-// @luafunc sha512_obj
-// @luaparam obj table The table to hash
-// @luareturn string hash The hex-encoded SHA512 hash
-// @luareturn string|nil err Error message if conversion fails
-//
-// Example:
-//
-//	local h, err = hash.sha512_obj({name="John", age=30})
-//	if err then error(err) end
-//	print(h)
-func sha512HashObj(L *lua.LState) int {
-	table := L.CheckAny(1)
-	jsonBytes, err := tableToJSON(L, table)
+// sha512HashObj: computes the SHA512 hash of a Lua value serialised to JSON.
+func sha512HashObj(L *lua.LState, tbl lua.LValue) (string, error) {
+	b, err := tableToJSON(L, tbl)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(err.Error()))
-		return 2
+		return "", fmt.Errorf("failed to serialise value: %w", err)
 	}
+	h := sha512.Sum512(b)
+	return hex.EncodeToString(h[:]), nil
+}
 
-	h := sha512.Sum512(jsonBytes)
-	L.Push(lua.LString(hex.EncodeToString(h[:])))
-	L.Push(lua.LNil)
-	return 2
+// build: constructs the module definition. Reused by Loader and Register.
+func build() *luareg.Module {
+	m := luareg.NewModule("hash", "cryptographic hash utilities")
+	m.Fn("md5", md5Hash, "computes the hex-encoded MD5 hash of a string",
+		luareg.Args("s"))
+	m.Fn("sha1", sha1Hash, "computes the hex-encoded SHA1 hash of a string",
+		luareg.Args("s"))
+	m.Fn("sha256", sha256Hash, "computes the hex-encoded SHA256 hash of a string",
+		luareg.Args("s"))
+	m.Fn("sha512", sha512Hash, "computes the hex-encoded SHA512 hash of a string",
+		luareg.Args("s"))
+	m.Fn("hmac_sha256", hmacSHA256, "computes the hex-encoded HMAC-SHA256 of a message with a key",
+		luareg.Args("message", "key"))
+	m.Fn("md5_obj", md5HashObj, "computes the MD5 hash of a Lua value serialised to JSON",
+		luareg.Args("obj"))
+	m.Fn("sha1_obj", sha1HashObj, "computes the SHA1 hash of a Lua value serialised to JSON",
+		luareg.Args("obj"))
+	m.Fn("sha256_obj", sha256HashObj, "computes the SHA256 hash of a Lua value serialised to JSON",
+		luareg.Args("obj"))
+	m.Fn("sha512_obj", sha512HashObj, "computes the SHA512 hash of a Lua value serialised to JSON",
+		luareg.Args("obj"))
+	return m
+}
+
+// Loader: gopher-lua module loader. Use with L.PreloadModule("hash", hash.Loader).
+func Loader(L *lua.LState) int {
+	return build().PushTo(L)
+}
+
+// Register: adds this module to reg for stub generation.
+func Register(reg *luareg.Registry) {
+	build().Register(reg)
 }

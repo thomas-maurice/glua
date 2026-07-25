@@ -25,289 +25,129 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
 )
 
-// Loader: creates and returns the fs module for Lua.
-// This function should be registered with L.PreloadModule("fs", fs.Loader)
-//
-// @luamodule fs
-//
-// Example usage in Lua:
-//
-//	local fs = require("fs")
-//	local content, err = fs.read_file("/path/to/file.txt")
-//	fs.write_file("/path/to/output.txt", "content")
-func Loader(L *lua.LState) int {
-	// Create module table
-	mod := L.SetFuncs(L.NewTable(), exports)
-
-	// Push module onto stack
-	L.Push(mod)
-	return 1
+// FileInfo: information about a file or directory returned by stat.
+type FileInfo struct {
+	Name    string `json:"name"`
+	Size    int64  `json:"size"`
+	IsDir   bool   `json:"is_dir"`
+	Mode    uint32 `json:"mode"`
+	ModTime int64  `json:"mod_time"`
 }
 
-// exports: maps Lua function names to Go implementations
-var exports = map[string]lua.LGFunction{
-	"read_file":  readFile,
-	"write_file": writeFile,
-	"exists":     exists,
-	"mkdir":      mkdir,
-	"mkdir_all":  mkdirAll,
-	"remove":     remove,
-	"remove_all": removeAll,
-	"list":       list,
-	"stat":       stat,
-}
-
-// readFile: reads the entire contents of a file.
-//
-// @luafunc read_file
-// @luaparam path string The path to the file to read
-// @luareturn string content The file contents, or nil on error
-// @luareturn string|nil err Error message if reading failed
-//
-// Example:
-//
-//	local content, err = fs.read_file("/etc/config.yaml")
-//	if err then
-//	    print("Error: " .. err)
-//	else
-//	    print(content)
-//	end
-func readFile(L *lua.LState) int {
-	path := L.CheckString(1)
-
+// readFile: reads the entire contents of a file; raises on error.
+func readFile(path string) (string, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to read file: %v", err)))
-		return 2
+		return "", fmt.Errorf("failed to read file: %w", err)
 	}
-
-	L.Push(lua.LString(string(content)))
-	L.Push(lua.LNil)
-	return 2
+	return string(content), nil
 }
 
-// writeFile: writes content to a file, creating it if it doesn't exist.
-//
-// @luafunc write_file
-// @luaparam path string The path to the file to write
-// @luaparam content string The content to write
-// @luareturn string|nil err Error message if writing failed, nil on success
-//
-// Example:
-//
-//	local err = fs.write_file("/tmp/output.txt", "Hello World")
-//	if err then
-//	    print("Error: " .. err)
-//	end
-func writeFile(L *lua.LState) int {
-	path := L.CheckString(1)
-	content := L.CheckString(2)
-
-	err := os.WriteFile(path, []byte(content), 0644)
-	if err != nil {
-		L.Push(lua.LString(fmt.Sprintf("failed to write file: %v", err)))
-		return 1
-	}
-
-	L.Push(lua.LNil)
-	return 1
+// writeFile: writes content to a file; raises on error.
+func writeFile(path, content string) error {
+	return os.WriteFile(path, []byte(content), 0644)
 }
 
-// exists: checks if a file or directory exists.
-//
-// @luafunc exists
-// @luaparam path string The path to check
-// @luareturn boolean exists True if the path exists, false otherwise
-//
-// Example:
-//
-//	if fs.exists("/etc/config.yaml") then
-//	    print("Config file exists")
-//	end
-func exists(L *lua.LState) int {
-	path := L.CheckString(1)
-
+// exists: reports whether a path exists.
+func exists(path string) bool {
 	_, err := os.Stat(path)
-	L.Push(lua.LBool(err == nil))
-	return 1
+	return err == nil
 }
 
-// mkdir: creates a directory.
-//
-// @luafunc mkdir
-// @luaparam path string The directory path to create
-// @luareturn string|nil err Error message if creation failed, nil on success
-//
-// Example:
-//
-//	local err = fs.mkdir("/tmp/mydir")
-//	if err then
-//	    print("Error: " .. err)
-//	end
-func mkdir(L *lua.LState) int {
-	path := L.CheckString(1)
-
-	err := os.Mkdir(path, 0755)
-	if err != nil {
-		L.Push(lua.LString(fmt.Sprintf("failed to create directory: %v", err)))
-		return 1
+// mkdir: creates a directory; raises on error.
+func mkdir(path string) error {
+	if err := os.Mkdir(path, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
 	}
-
-	L.Push(lua.LNil)
-	return 1
+	return nil
 }
 
-// mkdirAll: creates a directory and all necessary parent directories.
-//
-// @luafunc mkdir_all
-// @luaparam path string The directory path to create
-// @luareturn string|nil err Error message if creation failed, nil on success
-//
-// Example:
-//
-//	local err = fs.mkdir_all("/tmp/path/to/nested/dir")
-//	if err then
-//	    print("Error: " .. err)
-//	end
-func mkdirAll(L *lua.LState) int {
-	path := L.CheckString(1)
-
-	err := os.MkdirAll(path, 0755)
-	if err != nil {
-		L.Push(lua.LString(fmt.Sprintf("failed to create directories: %v", err)))
-		return 1
+// mkdirAll: creates a directory and all necessary parents; raises on error.
+func mkdirAll(path string) error {
+	if err := os.MkdirAll(path, 0755); err != nil {
+		return fmt.Errorf("failed to create directories: %w", err)
 	}
-
-	L.Push(lua.LNil)
-	return 1
+	return nil
 }
 
-// remove: removes a file or empty directory.
-//
-// @luafunc remove
-// @luaparam path string The path to remove
-// @luareturn string|nil err Error message if removal failed, nil on success
-//
-// Example:
-//
-//	local err = fs.remove("/tmp/file.txt")
-//	if err then
-//	    print("Error: " .. err)
-//	end
-func remove(L *lua.LState) int {
-	path := L.CheckString(1)
-
-	err := os.Remove(path)
-	if err != nil {
-		L.Push(lua.LString(fmt.Sprintf("failed to remove: %v", err)))
-		return 1
+// remove: removes a file or empty directory; raises on error.
+func remove(path string) error {
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("failed to remove: %w", err)
 	}
-
-	L.Push(lua.LNil)
-	return 1
+	return nil
 }
 
-// removeAll: removes a path and all its contents recursively.
-//
-// @luafunc remove_all
-// @luaparam path string The path to remove recursively
-// @luareturn string|nil err Error message if removal failed, nil on success
-//
-// Example:
-//
-//	local err = fs.remove_all("/tmp/mydir")
-//	if err then
-//	    print("Error: " .. err)
-//	end
-func removeAll(L *lua.LState) int {
-	path := L.CheckString(1)
-
-	err := os.RemoveAll(path)
-	if err != nil {
-		L.Push(lua.LString(fmt.Sprintf("failed to remove recursively: %v", err)))
-		return 1
+// removeAll: removes a path and all its contents recursively; raises on error.
+func removeAll(path string) error {
+	if err := os.RemoveAll(path); err != nil {
+		return fmt.Errorf("failed to remove recursively: %w", err)
 	}
-
-	L.Push(lua.LNil)
-	return 1
+	return nil
 }
 
-// list: lists all entries in a directory.
-//
-// @luafunc list
-// @luaparam path string The directory path to list
-// @luareturn table entries Array of entry names, or nil on error
-// @luareturn string|nil err Error message if listing failed
-//
-// Example:
-//
-//	local entries, err = fs.list("/tmp")
-//	if err then
-//	    print("Error: " .. err)
-//	else
-//	    for i, entry in ipairs(entries) do
-//	        print(entry)
-//	    end
-//	end
-func list(L *lua.LState) int {
-	path := L.CheckString(1)
-
+// list: lists all entries in a directory; raises on error.
+func list(path string) ([]string, error) {
 	entries, err := os.ReadDir(path)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to list directory: %v", err)))
-		return 2
+		return nil, fmt.Errorf("failed to list directory: %w", err)
 	}
-
-	tbl := L.NewTable()
-	for i, entry := range entries {
-		tbl.RawSetInt(i+1, lua.LString(entry.Name()))
+	names := make([]string, len(entries))
+	for i, e := range entries {
+		names[i] = e.Name()
 	}
-
-	L.Push(tbl)
-	L.Push(lua.LNil)
-	return 2
+	return names, nil
 }
 
-// stat: gets information about a file or directory.
-//
-// @luafunc stat
-// @luaparam path string The path to stat
-// @luareturn table info File info with name, size, is_dir, mode, mod_time, or nil on error
-// @luareturn string|nil err Error message if stat failed
-//
-// Example:
-//
-//	local info, err = fs.stat("/etc/config.yaml")
-//	if err then
-//	    print("Error: " .. err)
-//	else
-//	    print("Name: " .. info.name)
-//	    print("Size: " .. info.size .. " bytes")
-//	    print("Is directory: " .. tostring(info.is_dir))
-//	end
-func stat(L *lua.LState) int {
-	path := L.CheckString(1)
-
+// stat: returns information about a file or directory; raises on error.
+func stat(path string) (FileInfo, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(fmt.Sprintf("failed to stat: %v", err)))
-		return 2
+		return FileInfo{}, fmt.Errorf("failed to stat: %w", err)
 	}
+	return FileInfo{
+		Name:    filepath.Base(path),
+		Size:    info.Size(),
+		IsDir:   info.IsDir(),
+		Mode:    uint32(info.Mode()), //nolint:gosec
+		ModTime: info.ModTime().Unix(),
+	}, nil
+}
 
-	tbl := L.NewTable()
-	tbl.RawSetString("name", lua.LString(filepath.Base(path)))
-	tbl.RawSetString("size", lua.LNumber(info.Size()))
-	tbl.RawSetString("is_dir", lua.LBool(info.IsDir()))
-	tbl.RawSetString("mode", lua.LNumber(info.Mode()))
-	tbl.RawSetString("mod_time", lua.LNumber(info.ModTime().Unix()))
+// build: constructs the module definition. Reused by Loader and Register.
+func build() *luareg.Module {
+	m := luareg.NewModule("fs", "file system utilities")
+	m.Fn("read_file", readFile, "reads the entire contents of a file, raises on error",
+		luareg.Args("path"))
+	m.Fn("write_file", writeFile, "writes content to a file, raises on error",
+		luareg.Args("path", "content"))
+	m.Fn("exists", exists, "reports whether a path exists",
+		luareg.Args("path"))
+	m.Fn("mkdir", mkdir, "creates a directory, raises on error",
+		luareg.Args("path"))
+	m.Fn("mkdir_all", mkdirAll, "creates a directory and all parents, raises on error",
+		luareg.Args("path"))
+	m.Fn("remove", remove, "removes a file or empty directory, raises on error",
+		luareg.Args("path"))
+	m.Fn("remove_all", removeAll, "removes a path and all its contents, raises on error",
+		luareg.Args("path"))
+	m.Fn("list", list, "lists all entries in a directory, raises on error",
+		luareg.Args("path"))
+	m.Fn("stat", stat, "returns file information, raises on error",
+		luareg.Args("path"))
+	return m
+}
 
-	L.Push(tbl)
-	L.Push(lua.LNil)
-	return 2
+// Loader: gopher-lua module loader. Use with L.PreloadModule("fs", fs.Loader).
+func Loader(L *lua.LState) int {
+	return build().PushTo(L)
+}
+
+// Register: adds this module to reg for stub generation.
+func Register(reg *luareg.Registry) {
+	build().Register(reg)
 }

@@ -16,24 +16,19 @@ local cm = {
 	}
 }
 
-local created, err = client.create(cm)
-if err then
-	error("Failed to create: " .. err)
-end
+client:create(cm)
 
 -- Delete it
 local gvk = {group = "", version = "v1", kind = "ConfigMap"}
-local err = client.delete(gvk, TEST_NAMESPACE, TEST_DELETE_CONFIG_NAME)
+client:delete(gvk, TEST_NAMESPACE, TEST_DELETE_CONFIG_NAME)
 
-if err then
-	error("Failed to delete: " .. err)
-end
+-- Try to get it (should fail with an error)
+local ok, err = pcall(function()
+	return client:get(gvk, TEST_NAMESPACE, TEST_DELETE_CONFIG_NAME)
+end)
 
--- Try to get it (should fail)
-local fetched, err = client.get(gvk, TEST_NAMESPACE, TEST_DELETE_CONFIG_NAME)
-
-if not err then
-	error("Expected error getting deleted resource, got nil")
+if ok then
+	error("Expected error getting deleted resource, but succeeded")
 end
 
 return true

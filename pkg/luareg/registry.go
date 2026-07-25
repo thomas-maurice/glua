@@ -18,43 +18,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package main
+package luareg
 
-import (
-	"flag"
-	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
+// Registry: aggregates module metadata for stub generation.
+// Modules call Register to deposit their metadata here; the stub generator
+// (A3) will iterate Modules() to produce output files.
+type Registry struct {
+	modules []*Module
+}
 
-	"github.com/thomas-maurice/glua/pkg/stubgen"
-)
+// NewRegistry: creates a new empty Registry.
+func NewRegistry() *Registry {
+	return &Registry{}
+}
 
-func main() {
-	outputDir := flag.String("output", "library", "Output directory for generated stubs")
-	flag.Parse()
+// add: appends a module to the registry (called by Module.Register).
+func (r *Registry) add(m *Module) {
+	r.modules = append(r.modules, m)
+}
 
-	// Get the directory where this source file lives
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		fmt.Fprintf(os.Stderr, "Error determining source directory\n")
-		os.Exit(1)
-	}
-	moduleDir := filepath.Dir(filepath.Dir(filename))
-
-	// Create generator and generate stubs
-	gen := stubgen.NewGenerator()
-	outputFile, err := gen.Generate(stubgen.GenerateConfig{
-		ScanDir:    moduleDir,
-		OutputDir:  *outputDir,
-		ModuleName: "log",
-		OutputFile: "log.gen.lua",
-		Types:      nil, // No types to register for log module
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Generated %s\n", outputFile)
+// Modules: returns all registered modules in registration order.
+func (r *Registry) Modules() []*Module {
+	return r.modules
 }

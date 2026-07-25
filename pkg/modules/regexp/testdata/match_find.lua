@@ -1,17 +1,18 @@
 local regexp = require("regexp")
 
--- Test match
-local matched, err = regexp.match("^hello", "hello world")
-assert(err == nil, "match should not error")
+-- match: raises on invalid pattern, returns bool on valid pattern
+local matched = regexp.match("^hello", "hello world")
 assert(matched == true, "should match")
 
-local matched2, err2 = regexp.match("^world", "hello world")
-assert(err2 == nil, "match should not error")
+local matched2 = regexp.match("^world", "hello world")
 assert(matched2 == false, "should not match")
 
--- Test find
-local result, err3 = regexp.find("world", "hello world")
-assert(err3 == nil, "find should not error")
+-- find: raises on invalid pattern, returns match string on valid pattern
+local result = regexp.find("world", "hello world")
 assert(result == "world", "should find 'world', got: " .. result)
+
+-- find on no match returns empty string
+local empty = regexp.find("xyz", "hello world")
+assert(empty == "", "no match should return empty string, got: " .. empty)
 
 return true

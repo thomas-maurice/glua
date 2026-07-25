@@ -50,22 +50,20 @@ func TestParseMemory(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			L.SetGlobal("test_input", lua.LString(tt.input))
 
-			if err := L.DoFile("testdata/test_parse_memory.lua"); err != nil {
-				t.Fatalf("Failed to execute script: %v", err)
-			}
-
-			result := L.Get(-2)
-			errVal := L.Get(-1)
-			L.Pop(2)
+			err := L.DoFile("testdata/test_parse_memory.lua")
 
 			if tt.wantErr {
-				if errVal == lua.LNil {
-					t.Errorf("Expected error for input %s, got nil", tt.input)
+				// With auto-raise, errors propagate as Go errors from DoFile.
+				if err == nil {
+					t.Errorf("Expected error for input %s, but DoFile succeeded", tt.input)
 				}
 			} else {
-				if errVal != lua.LNil {
-					t.Errorf("Unexpected error for input %s: %v", tt.input, errVal)
+				if err != nil {
+					t.Fatalf("Failed to execute script: %v", err)
 				}
+
+				result := L.Get(-1)
+				L.Pop(1)
 
 				if num, ok := result.(lua.LNumber); ok {
 					if int64(num) != tt.expected {
@@ -102,22 +100,19 @@ func TestParseCPU(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			L.SetGlobal("test_input", lua.LString(tt.input))
 
-			if err := L.DoFile("testdata/test_parse_cpu.lua"); err != nil {
-				t.Fatalf("Failed to execute script: %v", err)
-			}
-
-			result := L.Get(-2)
-			errVal := L.Get(-1)
-			L.Pop(2)
+			err := L.DoFile("testdata/test_parse_cpu.lua")
 
 			if tt.wantErr {
-				if errVal == lua.LNil {
-					t.Errorf("Expected error for input %s, got nil", tt.input)
+				if err == nil {
+					t.Errorf("Expected error for input %s, but DoFile succeeded", tt.input)
 				}
 			} else {
-				if errVal != lua.LNil {
-					t.Errorf("Unexpected error for input %s: %v", tt.input, errVal)
+				if err != nil {
+					t.Fatalf("Failed to execute script: %v", err)
 				}
+
+				result := L.Get(-1)
+				L.Pop(1)
 
 				if num, ok := result.(lua.LNumber); ok {
 					if int64(num) != tt.expected {
@@ -152,22 +147,19 @@ func TestParseTime(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			L.SetGlobal("test_input", lua.LString(tt.input))
 
-			if err := L.DoFile("testdata/test_parse_time.lua"); err != nil {
-				t.Fatalf("Failed to execute script: %v", err)
-			}
-
-			result := L.Get(-2)
-			errVal := L.Get(-1)
-			L.Pop(2)
+			err := L.DoFile("testdata/test_parse_time.lua")
 
 			if tt.wantErr {
-				if errVal == lua.LNil {
-					t.Errorf("Expected error for input %s, got nil", tt.input)
+				if err == nil {
+					t.Errorf("Expected error for input %s, but DoFile succeeded", tt.input)
 				}
 			} else {
-				if errVal != lua.LNil {
-					t.Errorf("Unexpected error for input %s: %v", tt.input, errVal)
+				if err != nil {
+					t.Fatalf("Failed to execute script: %v", err)
 				}
+
+				result := L.Get(-1)
+				L.Pop(1)
 
 				if num, ok := result.(lua.LNumber); ok {
 					if int64(num) != tt.expected {
@@ -205,13 +197,8 @@ func TestFormatTime(t *testing.T) {
 				t.Fatalf("Failed to execute script: %v", err)
 			}
 
-			result := L.Get(-2)
-			errVal := L.Get(-1)
-			L.Pop(2)
-
-			if errVal != lua.LNil {
-				t.Errorf("Unexpected error: %v", errVal)
-			}
+			result := L.Get(-1)
+			L.Pop(1)
 
 			if str, ok := result.(lua.LString); ok {
 				if string(str) != tt.expected {
@@ -236,7 +223,7 @@ func TestFormatParseRoundTrip(t *testing.T) {
 	}{
 		{"epoch", 0},
 		{"specific time", 1759509540},
-		{"recent time", 1696347540}, // 2023-10-03T16:39:00Z
+		{"recent time", 1696347540},
 	}
 
 	for _, tt := range tests {
@@ -289,7 +276,7 @@ func TestInitDefaults(t *testing.T) {
 	}
 }
 
-// TestLuaIntegrationScripts: runs integration test scripts (those not starting with test_)
+// TestLuaIntegrationScripts: runs integration test scripts
 func TestLuaIntegrationScripts(t *testing.T) {
 	patterns := []string{
 		"testdata/init_*.lua",
@@ -355,22 +342,19 @@ func TestParseDuration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			L.SetGlobal("test_input", lua.LString(tt.input))
 
-			if err := L.DoFile("testdata/test_parse_duration.lua"); err != nil {
-				t.Fatalf("Failed to execute script: %v", err)
-			}
-
-			result := L.Get(-2)
-			errVal := L.Get(-1)
-			L.Pop(2)
+			err := L.DoFile("testdata/test_parse_duration.lua")
 
 			if tt.wantErr {
-				if errVal == lua.LNil {
-					t.Errorf("Expected error for input %s, got nil", tt.input)
+				if err == nil {
+					t.Errorf("Expected error for input %s, but DoFile succeeded", tt.input)
 				}
 			} else {
-				if errVal != lua.LNil {
-					t.Errorf("Unexpected error for input %s: %v", tt.input, errVal)
+				if err != nil {
+					t.Fatalf("Failed to execute script: %v", err)
 				}
+
+				result := L.Get(-1)
+				L.Pop(1)
 
 				if num, ok := result.(lua.LNumber); ok {
 					if float64(num) != tt.expected {
@@ -409,13 +393,8 @@ func TestFormatDuration(t *testing.T) {
 				t.Fatalf("Failed to execute script: %v", err)
 			}
 
-			result := L.Get(-2)
-			errVal := L.Get(-1)
-			L.Pop(2)
-
-			if errVal != lua.LNil {
-				t.Errorf("Unexpected error: %v", errVal)
-			}
+			result := L.Get(-1)
+			L.Pop(1)
 
 			if str, ok := result.(lua.LString); ok {
 				if string(str) != tt.expected {

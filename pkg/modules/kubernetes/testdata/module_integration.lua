@@ -7,19 +7,19 @@
 
 local k8s = require("kubernetes")
 
--- Test parse_memory
+-- Test parse_memory (raises on error)
 local mem_bytes = k8s.parse_memory("1Gi")
 assert(mem_bytes == 1073741824, "Memory parsing failed")
 
--- Test parse_cpu
+-- Test parse_cpu (raises on error)
 local cpu_millis = k8s.parse_cpu("100m")
 assert(cpu_millis == 100, "CPU parsing failed")
 
--- Test parse_time
+-- Test parse_time (raises on error)
 local timestamp = k8s.parse_time("2025-10-03T16:39:00Z")
 assert(timestamp > 0, "Time parsing failed")
 
--- Test format_time
+-- Test format_time (raises on error)
 local timestr = k8s.format_time(1759509540)
 assert(timestr == "2025-10-03T16:39:00Z", "Time formatting failed")
 
@@ -28,10 +28,10 @@ local formatted = k8s.format_time(timestamp)
 local parsed = k8s.parse_time(formatted)
 assert(parsed == timestamp, "Round-trip failed")
 
--- Test init_defaults
+-- Test init_defaults (must assign return value)
 local obj = {}
-k8s.init_defaults(obj)
-obj.metadata.labels.test = "value"
-assert(obj.metadata.labels.test == "value", "init_defaults failed")
+obj = k8s.init_defaults(obj)
+obj = k8s.add_label(obj, "test", "value")
+assert(k8s.get_label(obj, "test") == "value", "init_defaults + add_label failed")
 
 return true

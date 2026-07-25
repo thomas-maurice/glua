@@ -77,10 +77,12 @@ if k8sclient then
 	local namespace = pod.metadata.namespace or "default"
 	local config_name = "webhook-config"
 
-	-- Try to get the ConfigMap using the client
-	local config, err = client:get(cm_gvk, namespace, config_name)
+	-- Try to get the ConfigMap using the client; errors are raised
+	local ok, config = pcall(function()
+		return client:get(cm_gvk, namespace, config_name)
+	end)
 
-	if config and not err then
+	if ok then
 		print(string.format("Found ConfigMap %s in namespace %s", config_name, namespace))
 
 		-- Add annotation indicating config was found
@@ -101,7 +103,7 @@ if k8sclient then
 			print(string.format("Applied policy: %s", policy))
 		end
 	else
-		print(string.format("ConfigMap %s not found or error: %s", config_name, err or "none"))
+		print(string.format("ConfigMap %s not found or error: %s", config_name, tostring(config)))
 
 		-- Add annotation indicating config was not found
 		table.insert(patches, {
@@ -112,12 +114,11 @@ if k8sclient then
 	end
 
 	-- Example 4: List resources to gather metadata
-	local pods, list_err = k8sclient.list(cm_gvk, namespace)
-	if pods and not list_err then
-		local count = 0
-		for i, item in ipairs(pods.items or {}) do
-			count = count + 1
-		end
+	local ok2, cms = pcall(function()
+		return client:list(cm_gvk, namespace)
+	end)
+	if ok2 then
+		local count = #cms
 
 		table.insert(patches, {
 			op = "add",

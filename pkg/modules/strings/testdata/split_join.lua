@@ -42,4 +42,15 @@ local single = {"hello"}
 local joined4 = strings.join(single, ",")
 assert(joined4 == "hello", "join with single element should return that element")
 
+-- Test join coerces numeric values rather than silently dropping them.
+-- Previously the implementation skipped non-string entries, returning "".
+local numbers = {1, 2, 3}
+local joined5 = strings.join(numbers, ",")
+assert(joined5 == "1,2,3", "join should coerce numbers, got: " .. joined5)
+
+-- Test join with mixed types — all values participate.
+local mixed = {"a", 2, true}
+local joined6 = strings.join(mixed, "-")
+assert(joined6 == "a-2-true", "join should coerce mixed types, got: " .. joined6)
+
 return true

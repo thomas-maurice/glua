@@ -1,16 +1,9 @@
-
--- Test: JSON parse - invalid JSON
+-- Test: JSON parse - invalid JSON raises
 --
--- Verifies that json.parse() returns an error
--- when given malformed JSON.
+-- Verifies that json.parse() raises a Lua error when given malformed JSON.
 
 local json = require("json")
-local tbl, err = json.parse('{invalid json}')
 
-if tbl ~= nil then
-	error("Expected tbl to be nil for invalid JSON")
-end
-
-if err == nil then
-	error("Expected error for invalid JSON")
-end
+local ok, err = pcall(json.parse, '{invalid json}')
+assert(not ok, "Expected error for invalid JSON")
+assert(type(err) == "string", "Error should be a string message")

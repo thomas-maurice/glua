@@ -16,19 +16,13 @@ local cm = {
 	}
 }
 
-local created, err = client.create(cm)
-if err then
-	error("Failed to create: " .. err)
-end
+local created = client:create(cm)
 
 -- Update it
 created.data[TEST_UPDATE_KEY] = TEST_UPDATE_VALUE
 created.data[TEST_ORIGINAL_KEY] = "changed"
 
-local updated, err = client.update(created)
-if err then
-	error("Failed to update: " .. err)
-end
+local updated = client:update(created)
 
 if updated.data[TEST_UPDATE_KEY] ~= TEST_UPDATE_VALUE then
 	error("Expected data." .. TEST_UPDATE_KEY .. " '" .. TEST_UPDATE_VALUE .. "', got " .. tostring(updated.data[TEST_UPDATE_KEY]))

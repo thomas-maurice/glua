@@ -23,206 +23,58 @@ package strings
 import (
 	"strings"
 
+	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
 )
 
-// Loader: creates the strings Lua module
-//
-// @luamodule strings
-func Loader(L *lua.LState) int {
-	mod := L.SetFuncs(L.NewTable(), exports)
-	L.Push(mod)
-	return 1
-}
-
-var exports = map[string]lua.LGFunction{
-	"has_prefix": hasPrefix,
-	"has_suffix": hasSuffix,
-	"trim":       trim,
-	"trim_left":  trimLeft,
-	"trim_right": trimRight,
-	"split":      split,
-	"join":       join,
-	"to_upper":   toUpper,
-	"to_lower":   toLower,
-	"contains":   contains,
-	"count":      count,
-	"replace":    replace,
-}
-
-// hasPrefix: checks if string has prefix
-//
-// @luafunc has_prefix
-// @luaparam s string The string to check
-// @luaparam prefix string The prefix to look for
-// @luareturn boolean True if string has prefix
-func hasPrefix(L *lua.LState) int {
-	s := L.CheckString(1)
-	prefix := L.CheckString(2)
-	L.Push(lua.LBool(strings.HasPrefix(s, prefix)))
-	return 1
-}
-
-// hasSuffix: checks if string has suffix
-//
-// @luafunc has_suffix
-// @luaparam s string The string to check
-// @luaparam suffix string The suffix to look for
-// @luareturn boolean True if string has suffix
-func hasSuffix(L *lua.LState) int {
-	s := L.CheckString(1)
-	suffix := L.CheckString(2)
-	L.Push(lua.LBool(strings.HasSuffix(s, suffix)))
-	return 1
-}
-
-// trim: removes cutset from both ends of string
-//
-// @luafunc trim
-// @luaparam s string The string to trim
-// @luaparam cutset string The characters to remove
-// @luareturn string The trimmed string
-func trim(L *lua.LState) int {
-	s := L.CheckString(1)
-	cutset := L.CheckString(2)
-	result := strings.Trim(s, cutset)
-	L.Push(lua.LString(result))
-	return 1
-}
-
-// trimLeft: removes cutset from left end of string
-//
-// @luafunc trim_left
-// @luaparam s string The string to trim
-// @luaparam cutset string The characters to remove
-// @luareturn string The trimmed string
-func trimLeft(L *lua.LState) int {
-	s := L.CheckString(1)
-	cutset := L.CheckString(2)
-	result := strings.TrimLeft(s, cutset)
-	L.Push(lua.LString(result))
-	return 1
-}
-
-// trimRight: removes cutset from right end of string
-//
-// @luafunc trim_right
-// @luaparam s string The string to trim
-// @luaparam cutset string The characters to remove
-// @luareturn string The trimmed string
-func trimRight(L *lua.LState) int {
-	s := L.CheckString(1)
-	cutset := L.CheckString(2)
-	result := strings.TrimRight(s, cutset)
-	L.Push(lua.LString(result))
-	return 1
-}
-
-// split: splits string by separator
-//
-// @luafunc split
-// @luaparam s string The string to split
-// @luaparam sep string The separator
-// @luareturn table Array of split parts
-func split(L *lua.LState) int {
-	s := L.CheckString(1)
-	sep := L.CheckString(2)
-	parts := strings.Split(s, sep)
-
-	table := L.NewTable()
-	for i, part := range parts {
-		table.RawSetInt(i+1, lua.LString(part))
+// join: joins array values with separator, coercing all elements to strings
+// via Lua's tostring semantics. Uses *lua.LState escape hatch so non-string
+// table elements (numbers, booleans) are coerced rather than rejected.
+func join(L *lua.LState, partsTable *lua.LTable, sep string) string {
+	n := partsTable.Len()
+	parts := make([]string, 0, n)
+	for i := 1; i <= n; i++ {
+		parts = append(parts, partsTable.RawGetInt(i).String())
 	}
-
-	L.Push(table)
-	return 1
+	return strings.Join(parts, sep)
 }
 
-// join: joins array of strings with separator
-//
-// @luafunc join
-// @luaparam parts table Array of strings to join
-// @luaparam sep string The separator
-// @luareturn string The joined string
-func join(L *lua.LState) int {
-	partsTable := L.CheckTable(1)
-	sep := L.CheckString(2)
-
-	var parts []string
-	partsTable.ForEach(func(k, v lua.LValue) {
-		if str, ok := v.(lua.LString); ok {
-			parts = append(parts, string(str))
-		}
-	})
-
-	result := strings.Join(parts, sep)
-	L.Push(lua.LString(result))
-	return 1
+// build: constructs the module definition. Reused by Loader and Register.
+func build() *luareg.Module {
+	m := luareg.NewModule("strings", "string manipulation utilities")
+	m.Fn("has_prefix", strings.HasPrefix, "checks if string has prefix",
+		luareg.Args("s", "prefix"))
+	m.Fn("has_suffix", strings.HasSuffix, "checks if string has suffix",
+		luareg.Args("s", "suffix"))
+	m.Fn("trim", strings.Trim, "removes cutset characters from both ends of a string",
+		luareg.Args("s", "cutset"))
+	m.Fn("trim_left", strings.TrimLeft, "removes cutset characters from the left end of a string",
+		luareg.Args("s", "cutset"))
+	m.Fn("trim_right", strings.TrimRight, "removes cutset characters from the right end of a string",
+		luareg.Args("s", "cutset"))
+	m.Fn("split", strings.Split, "splits a string by separator into a table",
+		luareg.Args("s", "sep"))
+	m.Fn("join", join, "joins a table of strings with a separator, coercing values to strings",
+		luareg.Args("parts", "sep"))
+	m.Fn("to_upper", strings.ToUpper, "converts a string to uppercase",
+		luareg.Args("s"))
+	m.Fn("to_lower", strings.ToLower, "converts a string to lowercase",
+		luareg.Args("s"))
+	m.Fn("contains", strings.Contains, "checks if a string contains a substring",
+		luareg.Args("s", "substr"))
+	m.Fn("count", strings.Count, "counts occurrences of substr in s",
+		luareg.Args("s", "substr"))
+	m.Fn("replace", strings.Replace, "replaces occurrences of old with new in s",
+		luareg.Args("s", "old", "new", "n"))
+	return m
 }
 
-// toUpper: converts string to uppercase
-//
-// @luafunc to_upper
-// @luaparam s string The string to convert
-// @luareturn string The uppercase string
-func toUpper(L *lua.LState) int {
-	s := L.CheckString(1)
-	L.Push(lua.LString(strings.ToUpper(s)))
-	return 1
+// Loader: gopher-lua module loader. Use with L.PreloadModule("strings", strings.Loader).
+func Loader(L *lua.LState) int {
+	return build().PushTo(L)
 }
 
-// toLower: converts string to lowercase
-//
-// @luafunc to_lower
-// @luaparam s string The string to convert
-// @luareturn string The lowercase string
-func toLower(L *lua.LState) int {
-	s := L.CheckString(1)
-	L.Push(lua.LString(strings.ToLower(s)))
-	return 1
-}
-
-// contains: checks if string contains substring
-//
-// @luafunc contains
-// @luaparam s string The string to search
-// @luaparam substr string The substring to find
-// @luareturn boolean True if string contains substring
-func contains(L *lua.LState) int {
-	s := L.CheckString(1)
-	substr := L.CheckString(2)
-	L.Push(lua.LBool(strings.Contains(s, substr)))
-	return 1
-}
-
-// count: counts occurrences of substring
-//
-// @luafunc count
-// @luaparam s string The string to search
-// @luaparam substr string The substring to count
-// @luareturn number The count of occurrences
-func count(L *lua.LState) int {
-	s := L.CheckString(1)
-	substr := L.CheckString(2)
-	L.Push(lua.LNumber(strings.Count(s, substr)))
-	return 1
-}
-
-// replace: replaces occurrences of old with new
-//
-// @luafunc replace
-// @luaparam s string The string to search
-// @luaparam old string The substring to replace
-// @luaparam new string The replacement string
-// @luaparam n number Number of replacements (-1 for all)
-// @luareturn string The string with replacements
-func replace(L *lua.LState) int {
-	s := L.CheckString(1)
-	old := L.CheckString(2)
-	new := L.CheckString(3)
-	n := L.CheckInt(4)
-
-	result := strings.Replace(s, old, new, n)
-	L.Push(lua.LString(result))
-	return 1
+// Register: adds this module to reg for stub generation.
+func Register(reg *luareg.Registry) {
+	build().Register(reg)
 }

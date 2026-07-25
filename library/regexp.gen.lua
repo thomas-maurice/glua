@@ -3,44 +3,44 @@
 ---@class regexp
 local regexp = {}
 
----@param pattern string The regular expression pattern
----@param text string The text to match against
----@return boolean True if pattern matches, false otherwise
----@return string|nil Error message if pattern is invalid
+--- reports whether pattern matches text, raises on invalid pattern
+---@param pattern string
+---@param text string
+---@return boolean
 function regexp.match(pattern, text) end
 
----@param pattern string The regular expression pattern
----@param text string The text to search
----@return string The first match (empty string if no match)
----@return string|nil Error message if pattern is invalid
+--- returns the first match of pattern in text, raises on invalid pattern
+---@param pattern string
+---@param text string
+---@return string
 function regexp.find(pattern, text) end
 
----@param pattern string The regular expression pattern
----@param text string The text to search
----@param limit number Maximum number of matches (-1 for all)
----@return table Array of matches
----@return string|nil Error message if pattern is invalid
-function regexp.find_all(pattern, text, limit) end
+--- returns all matches of pattern in text up to n, raises on invalid pattern
+---@param pattern string
+---@param text string
+---@param n number
+---@return string[]
+function regexp.find_all(pattern, text, n) end
 
----@param pattern string The regular expression pattern
----@param text string The text to search
----@param replacement string The replacement string
----@return string The text with first match replaced
----@return string|nil Error message if pattern is invalid
+--- replaces the first match of pattern with replacement, raises on invalid pattern
+---@param pattern string
+---@param text string
+---@param replacement string
+---@return string
 function regexp.replace(pattern, text, replacement) end
 
----@param pattern string The regular expression pattern
----@param text string The text to search
----@param replacement string The replacement string
----@return string The text with all matches replaced
----@return string|nil Error message if pattern is invalid
+--- replaces all matches of pattern with replacement, raises on invalid pattern
+---@param pattern string
+---@param text string
+---@param replacement string
+---@return string
 function regexp.replace_all(pattern, text, replacement) end
 
----@param pattern string The regular expression pattern
----@param text string The text to split
----@param limit number Maximum number of splits (-1 for all)
----@return table Array of split parts
----@return string|nil Error message if pattern is invalid
-function regexp.split(pattern, text, limit) end
+--- splits text by pattern into at most n parts, raises on invalid pattern
+---@param pattern string
+---@param text string
+---@param n number
+---@return string[]
+function regexp.split(pattern, text, n) end
 
 return regexp

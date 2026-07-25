@@ -16,18 +16,11 @@ local cm = {
 	}
 }
 
-local created, err = client.create(cm)
-if err then
-	error("Failed to create: " .. err)
-end
+local created = client:create(cm)
 
 -- Now get it
 local gvk = {group = "", version = "v1", kind = "ConfigMap"}
-local fetched, err = client.get(gvk, TEST_NAMESPACE, TEST_CONFIG_NAME)
-
-if err then
-	error("Failed to get: " .. err)
-end
+local fetched = client:get(gvk, TEST_NAMESPACE, TEST_CONFIG_NAME)
 
 if fetched.metadata.name ~= TEST_CONFIG_NAME then
 	error("Expected name '" .. TEST_CONFIG_NAME .. "', got " .. tostring(fetched.metadata.name))

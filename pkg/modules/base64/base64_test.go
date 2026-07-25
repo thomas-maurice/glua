@@ -4,118 +4,77 @@
 package base64
 
 import (
+	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	lua "github.com/yuin/gopher-lua"
 )
 
-func TestEncode(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
+// TestLuaScripts: runs all Lua test scripts in testdata/ directory.
+func TestLuaScripts(t *testing.T) {
+	files, err := filepath.Glob("testdata/*.lua")
+	require.NoError(t, err)
+	require.NotEmpty(t, files, "No Lua test files found in testdata/")
 
-	L.PreloadModule("base64", Loader)
-
-	code := `
-		local base64 = require("base64")
-		local encoded = base64.encode("hello world")
-		assert(encoded == "aGVsbG8gd29ybGQ=", "Expected correct base64 encoding, got: " .. encoded)
-	`
-
-	if err := L.DoString(code); err != nil {
-		t.Fatalf("Failed to execute Lua code: %v", err)
+	for _, file := range files {
+		testName := filepath.Base(file)
+		t.Run(testName, func(t *testing.T) {
+			L := lua.NewState()
+			defer L.Close()
+			L.PreloadModule("base64", Loader)
+			if err := L.DoFile(file); err != nil {
+				t.Fatalf("Lua script failed: %v", err)
+			}
+			result := L.Get(-1)
+			if result != lua.LTrue {
+				t.Errorf("Test script returned %v, expected true", result)
+			}
+		})
 	}
 }
 
-func TestDecode(t *testing.T) {
+// TestDecodeRaisesOnInvalid: decode raises a Lua error on invalid base64.
+func TestDecodeRaisesOnInvalid(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
-
 	L.PreloadModule("base64", Loader)
 
 	code := `
 		local base64 = require("base64")
-		local decoded, err = base64.decode("aGVsbG8gd29ybGQ=")
-		assert(err == nil, "Expected no error")
-		assert(decoded == "hello world", "Expected 'hello world', got: " .. decoded)
+		local ok, err = pcall(base64.decode, "not!valid!base64!")
+		assert(not ok, "Expected error for invalid base64")
+		assert(type(err) == "string", "Error should be a string")
 	`
-
-	if err := L.DoString(code); err != nil {
-		t.Fatalf("Failed to execute Lua code: %v", err)
-	}
+	require.NoError(t, L.DoString(code))
 }
 
-func TestRoundTrip(t *testing.T) {
+// TestEncodeDecodeRoundTrip: encode then decode recovers the original string.
+func TestEncodeDecodeRoundTrip(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
-
 	L.PreloadModule("base64", Loader)
 
 	code := `
 		local base64 = require("base64")
-		local original = "The quick brown fox jumps over the lazy dog"
-		local encoded = base64.encode(original)
-		local decoded, err = base64.decode(encoded)
-		assert(err == nil, "Expected no error")
-		assert(decoded == original, "Expected round-trip to match")
+		local s = "The quick brown fox jumps over the lazy dog"
+		local rt = base64.decode(base64.encode(s))
+		assert(rt == s, "Round-trip failed, got: " .. rt)
 	`
-
-	if err := L.DoString(code); err != nil {
-		t.Fatalf("Failed to execute Lua code: %v", err)
-	}
+	require.NoError(t, L.DoString(code))
 }
 
-func TestDecodeInvalid(t *testing.T) {
+// TestURLRoundTrip: URL-safe encode/decode round-trips correctly.
+func TestURLRoundTrip(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
-
 	L.PreloadModule("base64", Loader)
 
 	code := `
 		local base64 = require("base64")
-		local decoded, err = base64.decode("not!valid!base64!")
-		assert(decoded == nil, "Expected nil result")
-		assert(err ~= nil, "Expected error")
+		local s = "test data with /+= chars"
+		local rt = base64.decode_url(base64.encode_url(s))
+		assert(rt == s, "URL round-trip failed")
 	`
-
-	if err := L.DoString(code); err != nil {
-		t.Fatalf("Failed to execute Lua code: %v", err)
-	}
-}
-
-func TestEncodeURL(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("base64", Loader)
-
-	code := `
-		local base64 = require("base64")
-		local encoded = base64.encode_url("hello world")
-		-- URL encoding uses - and _ instead of + and /
-		assert(type(encoded) == "string", "Expected string result")
-	`
-
-	if err := L.DoString(code); err != nil {
-		t.Fatalf("Failed to execute Lua code: %v", err)
-	}
-}
-
-func TestDecodeURL(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	L.PreloadModule("base64", Loader)
-
-	code := `
-		local base64 = require("base64")
-		local original = "test data"
-		local encoded = base64.encode_url(original)
-		local decoded, err = base64.decode_url(encoded)
-		assert(err == nil, "Expected no error")
-		assert(decoded == original, "Expected URL-safe round-trip to match")
-	`
-
-	if err := L.DoString(code); err != nil {
-		t.Fatalf("Failed to execute Lua code: %v", err)
-	}
+	require.NoError(t, L.DoString(code))
 }

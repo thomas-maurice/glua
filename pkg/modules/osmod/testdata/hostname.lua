@@ -1,8 +1,7 @@
 local osmod = require("osmod")
 
--- Test hostname
-local hostname, err = osmod.hostname()
-assert(err == nil, "hostname should not return error: " .. tostring(err))
+-- hostname raises on error; on success returns a string
+local hostname = osmod.hostname()
 assert(hostname ~= "", "hostname should not be empty")
 assert(type(hostname) == "string", "hostname should be a string")
 

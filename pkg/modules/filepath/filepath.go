@@ -23,128 +23,47 @@ package filepath
 import (
 	"path/filepath"
 
+	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
 )
 
-// Loader: creates the filepath Lua module
-//
-// @luamodule filepath
+// join: joins a slice of path elements. Wraps the variadic filepath.Join so
+// luareg can handle it as a []string parameter.
+func join(elem []string) string {
+	return filepath.Join(elem...)
+}
+
+// splitPath: returns (dir, file) components of a path.
+func splitPath(path string) (string, string) {
+	return filepath.Split(path)
+}
+
+// build: constructs the module definition. Reused by Loader and Register.
+func build() *luareg.Module {
+	m := luareg.NewModule("filepath", "file path manipulation utilities")
+	m.Fn("join", join, "joins a table of path elements into a single path",
+		luareg.Args("elem"))
+	m.Fn("split", splitPath, "splits a path into directory and file components",
+		luareg.Args("path"))
+	m.Fn("abs", filepath.Abs, "returns the absolute form of the path, raises on error",
+		luareg.Args("path"))
+	m.Fn("ext", filepath.Ext, "returns the file extension including the dot",
+		luareg.Args("path"))
+	m.Fn("base", filepath.Base, "returns the last element of the path",
+		luareg.Args("path"))
+	m.Fn("dir", filepath.Dir, "returns all but the last element of the path",
+		luareg.Args("path"))
+	m.Fn("clean", filepath.Clean, "returns the shortest path equivalent to path",
+		luareg.Args("path"))
+	return m
+}
+
+// Loader: gopher-lua module loader. Use with L.PreloadModule("filepath", filepath.Loader).
 func Loader(L *lua.LState) int {
-	mod := L.SetFuncs(L.NewTable(), exports)
-	L.Push(mod)
-	return 1
+	return build().PushTo(L)
 }
 
-var exports = map[string]lua.LGFunction{
-	"join":  join,
-	"split": split,
-	"abs":   abs,
-	"ext":   ext,
-	"base":  base,
-	"dir":   dir,
-	"clean": clean,
-}
-
-// join: joins path elements into a single path
-//
-// @luafunc join
-// @luaparam ... string Path elements to join
-// @luareturn string The joined path
-func join(L *lua.LState) int {
-	n := L.GetTop()
-	if n == 0 {
-		L.Push(lua.LString(""))
-		return 1
-	}
-
-	parts := make([]string, n)
-	for i := 1; i <= n; i++ {
-		parts[i-1] = L.CheckString(i)
-	}
-
-	result := filepath.Join(parts...)
-	L.Push(lua.LString(result))
-	return 1
-}
-
-// split: splits path into directory and file
-//
-// @luafunc split
-// @luaparam path string The path to split
-// @luareturn string The directory part
-// @luareturn string The file part
-func split(L *lua.LState) int {
-	path := L.CheckString(1)
-	dir, file := filepath.Split(path)
-	L.Push(lua.LString(dir))
-	L.Push(lua.LString(file))
-	return 2
-}
-
-// abs: returns absolute path
-//
-// @luafunc abs
-// @luaparam path string The path to make absolute
-// @luareturn string The absolute path
-// @luareturn string|nil Error message if operation failed
-func abs(L *lua.LState) int {
-	path := L.CheckString(1)
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(err.Error()))
-		return 2
-	}
-
-	L.Push(lua.LString(absPath))
-	L.Push(lua.LNil)
-	return 2
-}
-
-// ext: returns the file extension
-//
-// @luafunc ext
-// @luaparam path string The file path
-// @luareturn string The file extension (including the dot)
-func ext(L *lua.LState) int {
-	path := L.CheckString(1)
-	extension := filepath.Ext(path)
-	L.Push(lua.LString(extension))
-	return 1
-}
-
-// base: returns the last element of path
-//
-// @luafunc base
-// @luaparam path string The file path
-// @luareturn string The base name
-func base(L *lua.LState) int {
-	path := L.CheckString(1)
-	baseName := filepath.Base(path)
-	L.Push(lua.LString(baseName))
-	return 1
-}
-
-// dir: returns all but the last element of path
-//
-// @luafunc dir
-// @luaparam path string The file path
-// @luareturn string The directory path
-func dir(L *lua.LState) int {
-	path := L.CheckString(1)
-	dirPath := filepath.Dir(path)
-	L.Push(lua.LString(dirPath))
-	return 1
-}
-
-// clean: returns the shortest path equivalent to path
-//
-// @luafunc clean
-// @luaparam path string The path to clean
-// @luareturn string The cleaned path
-func clean(L *lua.LState) int {
-	path := L.CheckString(1)
-	cleanPath := filepath.Clean(path)
-	L.Push(lua.LString(cleanPath))
-	return 1
+// Register: adds this module to reg for stub generation.
+func Register(reg *luareg.Registry) {
+	build().Register(reg)
 }

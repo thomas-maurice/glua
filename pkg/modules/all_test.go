@@ -18,43 +18,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package main
+package modules
 
 import (
-	"flag"
-	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
+	"testing"
 
-	"github.com/thomas-maurice/glua/pkg/stubgen"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/thomas-maurice/glua/pkg/luareg"
 )
 
-func main() {
-	outputDir := flag.String("output", "library", "Output directory for generated stubs")
-	flag.Parse()
-
-	// Get the directory where this source file lives
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		fmt.Fprintf(os.Stderr, "Error determining source directory\n")
-		os.Exit(1)
-	}
-	moduleDir := filepath.Dir(filepath.Dir(filename))
-
-	// Create generator and generate stubs
-	gen := stubgen.NewGenerator()
-	outputFile, err := gen.Generate(stubgen.GenerateConfig{
-		ScanDir:    moduleDir,
-		OutputDir:  *outputDir,
-		ModuleName: "filepath",
-		OutputFile: "filepath.gen.lua",
-		Types:      nil, // No types to register for filepath module
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Generated %s\n", outputFile)
+// TestRegisterAll_AllModulesWired: A5 migrated all 17 modules; RegisterAll
+// must wire every one of them. Locking in the exact count catches a module
+// being silently dropped from the aggregator (which would silently disappear
+// from the regenerated library/*.gen.lua too).
+func TestRegisterAll_AllModulesWired(t *testing.T) {
+	reg := luareg.NewRegistry()
+	require.NotPanics(t, func() { RegisterAll(reg) })
+	assert.Equal(t, 17, len(reg.Modules()),
+		"RegisterAll must wire every module; missing module would silently drop from the stub regen")
 }

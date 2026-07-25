@@ -1,7 +1,7 @@
 
 -- Test: error handling - object without kind
 --
--- Tests that create fails when object is missing kind.
+-- Tests that create raises an error when object is missing kind.
 
 local obj = {
 	apiVersion = "v1",
@@ -14,10 +14,12 @@ local obj = {
 	}
 }
 
-local result, err = client.create(obj)
+local ok, err = pcall(function()
+	return client:create(obj)
+end)
 
-if not err then
-	error("Expected error for missing kind, got nil")
+if ok then
+	error("Expected error for missing kind, but got success")
 end
 
 return true

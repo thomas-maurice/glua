@@ -65,8 +65,6 @@ func TestPluralize(t *testing.T) {
 
 // TestLoaderCreation tests that the Loader can be created with valid config
 func TestLoaderCreation(t *testing.T) {
-	// Creating the loader with a valid-looking config should succeed
-	// (it only fails when actually making API calls)
 	config := &rest.Config{
 		Host: "https://localhost:6443",
 	}
@@ -122,21 +120,25 @@ const (
 	testListValue2       = "value2"
 )
 
-// setupLuaWithClient creates a Lua state with the k8sclient module loaded and test constants
+// setupLuaWithClient creates a Lua state with the k8sclient module loaded and test constants.
+// The client is exposed as a UserData global named "client" with the class metatable.
 func setupLuaWithClient(client *Client) *lua.LState {
 	L := lua.NewState()
 
-	// Create module table with client methods
-	exports := map[string]lua.LGFunction{
-		"get":    client.get,
-		"create": client.create,
-		"update": client.update,
-		"delete": client.delete,
-		"list":   client.list,
-	}
+	// Register the class metatable so Wrap works.
+	cls := newClientClass()
+	tmp := build(nil)
+	_ = tmp
+	// We need to register the class metatable on L. Do this by pushing and popping a module.
+	m := build(nil)
+	m.PushTo(L)
+	L.Pop(1)
 
-	mod := L.SetFuncs(L.NewTable(), exports)
-	L.SetGlobal("client", mod)
+	// Wrap the client as UserData with the class metatable.
+	ud := L.NewUserData()
+	ud.Value = client
+	L.SetMetatable(ud, L.GetTypeMetatable(cls.Name()))
+	L.SetGlobal("client", ud)
 
 	// Set test constants as globals
 	L.SetGlobal("TEST_NAMESPACE", lua.LString(testNamespace))
@@ -300,30 +302,25 @@ func TestNewClientLua(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
+	// Register the class metatable first so newClientLua can wrap the client.
+	m := build(config)
+	m.PushTo(L)
+	L.Pop(1)
+
 	n := newClientLua(L, config)
-	if n != 2 {
-		t.Errorf("Expected newClientLua to return 2 values, got %d", n)
+	if n != 1 {
+		t.Errorf("Expected newClientLua to return 1 value, got %d", n)
 	}
 
-	// Check that client table was pushed
-	client := L.Get(-2)
-	if client.Type() != lua.LTTable {
-		t.Errorf("Expected client to be a table, got %v", client.Type())
+	// Check that a UserData was pushed
+	ud := L.Get(-1)
+	if ud.Type() != lua.LTUserData {
+		t.Errorf("Expected UserData, got %v", ud.Type())
 	}
 
-	// Check that error is nil
-	err := L.Get(-1)
-	if err != lua.LNil {
-		t.Errorf("Expected error to be nil, got %v", err)
-	}
-
-	// Verify client has methods
-	clientTable := client.(*lua.LTable)
-	methods := []string{"get", "create", "update", "delete", "list"}
-	for _, method := range methods {
-		field := L.GetField(clientTable, method)
-		if field.Type() != lua.LTFunction {
-			t.Errorf("Expected %s to be a function, got %v", method, field.Type())
-		}
+	// Verify it wraps a *Client
+	udVal := ud.(*lua.LUserData)
+	if _, ok := udVal.Value.(*Client); !ok {
+		t.Errorf("Expected UserData to wrap *Client, got %T", udVal.Value)
 	}
 }

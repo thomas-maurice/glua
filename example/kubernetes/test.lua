@@ -2,7 +2,8 @@
 -- Kubernetes client integration test
 -- This script creates, updates, lists, and deletes a ConfigMap
 
-local client = require("k8sclient")
+local k8sclient = require("k8sclient")
+local client = k8sclient.new_client()
 
 print("=== Kubernetes Client Integration Test ===\n")
 
@@ -24,19 +25,13 @@ local configmap = {
 	}
 }
 
-local created, err = client.create(configmap)
-if err then
-	error("Failed to create ConfigMap: " .. err)
-end
+local created = client:create(configmap)
 print("✓ Created ConfigMap: " .. created.metadata.name)
 print("  Data: key1=" .. created.data.key1 .. ", key2=" .. created.data.key2)
 
 -- 2. Get the ConfigMap
 print("\n2. Getting ConfigMap...")
-local fetched, err = client.get(gvk, "default", "test-config")
-if err then
-	error("Failed to get ConfigMap: " .. err)
-end
+local fetched = client:get(gvk, "default", "test-config")
 print("✓ Fetched ConfigMap: " .. fetched.metadata.name)
 print("  UID: " .. fetched.metadata.uid)
 
@@ -45,19 +40,13 @@ print("\n3. Updating ConfigMap...")
 fetched.data.key3 = "value3"
 fetched.data.key1 = "updated_value1"
 
-local updated, err = client.update(fetched)
-if err then
-	error("Failed to update ConfigMap: " .. err)
-end
+local updated = client:update(fetched)
 print("✓ Updated ConfigMap")
 print("  Data: key1=" .. updated.data.key1 .. ", key3=" .. updated.data.key3)
 
 -- 4. List ConfigMaps
 print("\n4. Listing ConfigMaps in default namespace...")
-local items, err = client.list(gvk, "default")
-if err then
-	error("Failed to list ConfigMaps: " .. err)
-end
+local items = client:list(gvk, "default")
 print("✓ Found " .. #items .. " ConfigMap(s)")
 for i, item in ipairs(items) do
 	print("  - " .. item.metadata.name)
@@ -65,16 +54,15 @@ end
 
 -- 5. Delete the ConfigMap
 print("\n5. Deleting ConfigMap...")
-local err = client.delete(gvk, "default", "test-config")
-if err then
-	error("Failed to delete ConfigMap: " .. err)
-end
+client:delete(gvk, "default", "test-config")
 print("✓ Deleted ConfigMap")
 
 -- 6. Verify deletion
 print("\n6. Verifying deletion...")
-local fetched, err = client.get(gvk, "default", "test-config")
-if not err then
+local ok, err = pcall(function()
+	return client:get(gvk, "default", "test-config")
+end)
+if ok then
 	error("ConfigMap should have been deleted but still exists!")
 end
 print("✓ ConfigMap successfully deleted (not found)")

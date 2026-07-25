@@ -3,14 +3,14 @@
 ---@class yaml
 local yaml = {}
 
----@param yamlstr string The YAML string to parse
----@return table tbl The parsed YAML as a Lua table, or nil on error
----@return string|nil err Error message if parsing failed
+--- parses a YAML string into a Lua value, raises on invalid YAML
+---@param yamlstr string
+---@return any
 function yaml.parse(yamlstr) end
 
----@param tbl table The Lua table to convert to YAML
----@return string str The YAML string, or nil on error
----@return string|nil err Error message if conversion failed
-function yaml.stringify(tbl) end
+--- converts a Lua value to a YAML string, raises on error
+---@param value any
+---@return string
+function yaml.stringify(value) end
 
 return yaml

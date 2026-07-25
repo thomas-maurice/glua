@@ -16,11 +16,7 @@ print()
 local creationTime = pod.metadata.creationTimestamp
 print("Creation Timestamp (string): " .. creationTime)
 
-local timestamp, err = k8s.parse_time(creationTime)
-if err then
-    error("Failed to parse timestamp: " .. err)
-end
-
+local timestamp = k8s.parse_time(creationTime)
 print("Creation Timestamp (Unix): " .. timestamp)
 print()
 
@@ -39,20 +35,13 @@ print(string.format("  %.2f days", ageDays))
 print()
 
 -- Format timestamp back
-local formatted, err = k8s.format_time(timestamp)
-if err then
-    error("Failed to format timestamp: " .. err)
-end
-
+local formatted = k8s.format_time(timestamp)
 print("Formatted Timestamp: " .. formatted)
 print()
 
 -- Create custom timestamp
 local oneDayAgo = currentTime - (24 * 60 * 60)
-local oneDayAgoFormatted, err = k8s.format_time(oneDayAgo)
-if not err then
-    print("24 hours ago: " .. oneDayAgoFormatted)
-end
+print("24 hours ago: " .. k8s.format_time(oneDayAgo))
 
 -- Validate age (example: warn if pod is older than 7 days)
 if ageDays > 7 then

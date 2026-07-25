@@ -15,11 +15,7 @@ local cm = {
 	}
 }
 
-local created, err = client.create(cm)
-
-if err then
-	error("Failed to create: " .. err)
-end
+local created = client:create(cm)
 
 if created.metadata.name ~= TEST_NEW_CONFIG_NAME then
 	error("Expected name '" .. TEST_NEW_CONFIG_NAME .. "', got " .. tostring(created.metadata.name))

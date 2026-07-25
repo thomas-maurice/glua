@@ -3,11 +3,13 @@
 ---@class spew
 local spew = {}
 
----@param value any The Lua value to dump (table, string, number, etc.)
+--- prints a Lua value to stdout as colored indented JSON
+---@param value any
 function spew.dump(value) end
 
----@param value any The Lua value to dump (table, string, number, etc.)
----@return string str A JSON string representation of the value
+--- returns a JSON string representation of a Lua value
+---@param value any
+---@return string
 function spew.sdump(value) end
 
 return spew

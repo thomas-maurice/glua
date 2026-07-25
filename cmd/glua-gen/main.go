@@ -18,43 +18,43 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// glua-gen regenerates the library/*.gen.lua stubs for every module shipped
+// with glua. It is the CLI used by `make gen-stubs` and by CI to keep the
+// checked-in stubs in sync with the Go source.
+//
+// Downstream projects that embed glua and add their own modules should NOT
+// invoke this binary. Instead they should ship their own tools/stubgen/main.go
+// that imports their modules + glua's modules package and calls
+// stubgen.GenerateFromRegistry directly. See README.md for the template.
 package main
 
 import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
-	"runtime"
 
+	"github.com/thomas-maurice/glua/pkg/luareg"
+	"github.com/thomas-maurice/glua/pkg/modules"
 	"github.com/thomas-maurice/glua/pkg/stubgen"
 )
 
+// main: parses flags, registers every glua module, and writes stubs to outDir.
 func main() {
-	outputDir := flag.String("output", "library", "Output directory for generated stubs")
+	outDir := flag.String("out", "library", "output directory for .gen.lua files")
 	flag.Parse()
 
-	// Get the directory where this source file lives
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		fmt.Fprintf(os.Stderr, "Error determining source directory\n")
-		os.Exit(1)
-	}
-	moduleDir := filepath.Dir(filepath.Dir(filename))
+	reg := luareg.NewRegistry()
+	modules.RegisterAll(reg)
 
-	// Create generator and generate stubs
 	gen := stubgen.NewGenerator()
-	outputFile, err := gen.Generate(stubgen.GenerateConfig{
-		ScanDir:    moduleDir,
-		OutputDir:  *outputDir,
-		ModuleName: "k8sclient",
-		OutputFile: "k8sclient.gen.lua",
-		Types:      nil, // No types to register for k8sclient module
-	})
+	files, err := gen.GenerateFromRegistry(reg, *outDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
+		fmt.Fprintf(os.Stderr, "glua-gen: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Generated %s\n", outputFile)
+	for _, f := range files {
+		fmt.Println(f)
+	}
+	fmt.Fprintf(os.Stderr, "glua-gen: wrote %d file(s) to %s\n", len(files), *outDir)
 }
