@@ -49,12 +49,21 @@ var (
 // function signatures).
 type Generator struct {
 	typeRegistry *glua.TypeRegistry
+	// comments resolves ---@field descriptions from Go doc comments (via
+	// golang.org/x/tools/go/packages) when a field has no "luadoc" tag
+	// override. Shared across the whole generator run so packages used by
+	// multiple types (e.g. k8s corev1) are only loaded once. See comments.go.
+	comments *commentResolver
 }
 
 // NewGenerator: creates a new Generator instance.
 func NewGenerator() *Generator {
+	comments := newCommentResolver()
+	typeRegistry := glua.NewTypeRegistry()
+	typeRegistry.SetFieldDocFunc(comments.FieldDoc)
 	return &Generator{
-		typeRegistry: glua.NewTypeRegistry(),
+		typeRegistry: typeRegistry,
+		comments:     comments,
 	}
 }
 
@@ -115,6 +124,7 @@ func (g *Generator) GenerateModule(m *luareg.Module) (string, error) {
 
 	// Discover struct types from all function and method signatures.
 	structReg := glua.NewTypeRegistry()
+	structReg.SetFieldDocFunc(g.comments.FieldDoc)
 	if err := discoverStructTypes(m, classLookup, structReg); err != nil {
 		return "", fmt.Errorf("discover struct types: %w", err)
 	}
@@ -464,7 +474,11 @@ func buildParamList(ft reflect.Type, fn *luareg.FnMeta, skipReceiver bool, class
 			luaType = goTypeToLua(pt.Elem(), classLookup)
 		} else {
 			name = fn.ArgName(luaIdx)
-			luaType = goTypeToLua(pt, classLookup)
+			if override := findArgType(fn, name); override != "" {
+				luaType = override
+			} else {
+				luaType = goTypeToLua(pt, classLookup)
+			}
 		}
 		// Doc lookup uses the user-visible name. For variadic, the author can
 		// attach a doc by passing "..." to ArgDoc.
@@ -617,6 +631,17 @@ func findArgDoc(fn *luareg.FnMeta, name string) string {
 	for _, ad := range fn.ArgDocs {
 		if ad.Name == name {
 			return ad.Doc
+		}
+	}
+	return ""
+}
+
+// findArgType: looks up the explicit LuaLS type override for a named
+// parameter in fn.ArgTypes. Returns "" if no override was registered.
+func findArgType(fn *luareg.FnMeta, name string) string {
+	for _, at := range fn.ArgTypes {
+		if at.Name == name {
+			return at.LuaType
 		}
 	}
 	return ""

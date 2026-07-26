@@ -62,6 +62,13 @@ type ReturnDocEntry struct {
 	Doc   string
 }
 
+// ArgTypeEntry: name and explicit LuaLS type annotation override for a
+// single parameter. Consumed by stub generators (A3).
+type ArgTypeEntry struct {
+	Name    string
+	LuaType string
+}
+
 // FnMeta: all metadata for a single registered function.
 // Returned by Module.Funcs() for use by stub generators (A3).
 type FnMeta struct {
@@ -70,6 +77,7 @@ type FnMeta struct {
 	Doc        string
 	ArgNames   []string         // positional names; may be shorter than param count
 	ArgDocs    []ArgDocEntry    // per-arg descriptions keyed by name
+	ArgTypes   []ArgTypeEntry   // per-arg LuaLS type overrides keyed by name
 	ReturnDocs []ReturnDocEntry // per-return descriptions keyed by index
 }
 
@@ -103,6 +111,27 @@ func Args(names ...string) FnOpt {
 func ArgDoc(name, doc string) FnOpt {
 	return func(m *FnMeta) {
 		m.ArgDocs = append(m.ArgDocs, ArgDocEntry{Name: name, Doc: doc})
+	}
+}
+
+// ArgType: attaches an explicit LuaLS type annotation to a parameter
+// identified by name, overriding the type the stub generator would otherwise
+// infer via reflection. Use this when a parameter's Go type carries no
+// useful Lua type on its own — e.g. a lua.LValue that is semantically a
+// callback.
+//
+// The name must match one previously set via Args, or the stub generator
+// will use the positional name.
+//
+// Example:
+//
+//	m.Fn("on_message", handler, "register a message handler",
+//	    luareg.Args("handler"),
+//	    luareg.ArgType("handler", "fun(evt: core.Event)"),
+//	)
+func ArgType(name, luaType string) FnOpt {
+	return func(m *FnMeta) {
+		m.ArgTypes = append(m.ArgTypes, ArgTypeEntry{Name: name, LuaType: luaType})
 	}
 }
 

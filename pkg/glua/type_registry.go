@@ -39,15 +39,27 @@ type TypeInfo struct {
 // FieldInfo: stores information about a struct field for Lua stub generation
 type FieldInfo struct {
 	Name    string // The field name (from JSON tag)
+	GoName  string // The Go struct field name (for source-comment lookup)
 	TypeKey string // The Lua type annotation (e.g., "string", "number", "corev1.Container")
 	IsArray bool   // Whether this field is an array
+	Doc     string // Optional description, from the "luadoc" struct tag (explicit override)
 }
+
+// FieldDocFunc: resolves a description for a struct field from its Go source
+// (e.g. a doc comment), keyed by the declaring struct's reflect.Type and the
+// Go field name. Returns "" if no description is available. Consumed only by
+// GenerateStubs — has no effect on runtime translation.
+//
+// This indirection keeps pkg/glua free of any source-parsing dependency;
+// pkg/stubgen supplies the implementation via SetFieldDocFunc.
+type FieldDocFunc func(t reflect.Type, fieldName string) string
 
 // TypeRegistry: manages type registration and stub generation for Lua.
 // It processes Go types recursively and generates Lua LSP annotations.
 type TypeRegistry struct {
-	types map[string]*TypeInfo // Map of type key to type information (prevents duplicates)
-	queue []interface{}        // Queue of objects to process (for discovering types)
+	types      map[string]*TypeInfo // Map of type key to type information (prevents duplicates)
+	queue      []interface{}        // Queue of objects to process (for discovering types)
+	fieldDocFn FieldDocFunc         // Optional resolver for field doc comments (stub-gen only)
 }
 
 // NewTypeRegistry: creates a new TypeRegistry instance
@@ -56,6 +68,13 @@ func NewTypeRegistry() *TypeRegistry {
 		types: make(map[string]*TypeInfo),
 		queue: make([]interface{}, 0),
 	}
+}
+
+// SetFieldDocFunc: registers a resolver used by GenerateStubs to fill in
+// ---@field descriptions from Go source comments when a field has no
+// "luadoc" tag override. Has no runtime effect — stub generation only.
+func (r *TypeRegistry) SetFieldDocFunc(fn FieldDocFunc) {
+	r.fieldDocFn = fn
 }
 
 // Register: adds a Go type to the registry for stub generation.
@@ -252,7 +271,9 @@ func (r *TypeRegistry) processStructFields(t reflect.Type, typeInfo *TypeInfo) {
 		fieldTypeKey := r.processType(field.Type)
 		typeInfo.Fields[fieldName] = &FieldInfo{
 			Name:    fieldName,
+			GoName:  field.Name,
 			TypeKey: fieldTypeKey,
+			Doc:     field.Tag.Get("luadoc"),
 		}
 	}
 }
@@ -272,7 +293,11 @@ func (r *TypeRegistry) Process() error {
 }
 
 // GenerateStubs: generates Lua annotation stubs for all registered types.
-// Returns a string containing ---@class and ---@field annotations.
+// Returns a string containing ---@class and ---@field annotations. A field's
+// description comes from its "luadoc" struct tag if present (explicit
+// override), else from SetFieldDocFunc's resolver if one was set (typically
+// the field's Go doc comment, since reflection alone cannot see it), else
+// the field gets no description.
 //
 // Example output:
 //
@@ -307,10 +332,19 @@ func (r *TypeRegistry) GenerateStubs() (string, error) {
 		}
 		sort.Strings(fieldNames)
 
-		// Generate field annotations
+		// Generate field annotations. Precedence: "luadoc" tag (explicit
+		// override) > Go doc comment (via fieldDocFn, if set) > no description.
 		for _, fieldName := range fieldNames {
 			field := typeInfo.Fields[fieldName]
-			fmt.Fprintf(&sb, "---@field %s %s\n", field.Name, field.TypeKey)
+			doc := field.Doc
+			if doc == "" && r.fieldDocFn != nil {
+				doc = r.fieldDocFn(typeInfo.GoType, field.GoName)
+			}
+			if doc != "" {
+				fmt.Fprintf(&sb, "---@field %s %s %s\n", field.Name, field.TypeKey, doc)
+			} else {
+				fmt.Fprintf(&sb, "---@field %s %s\n", field.Name, field.TypeKey)
+			}
 		}
 
 		sb.WriteString("\n")

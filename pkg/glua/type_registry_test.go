@@ -328,6 +328,42 @@ func TestTypeRegistry_SkipIgnoredJSONFields(t *testing.T) {
 	}
 }
 
+// TestTypeRegistry_LuadocTag: fields tagged with `luadoc:"..."` get their tag
+// text appended as the ---@field description, since reflection cannot see Go
+// doc comments. Fields without the tag keep the current untagged behavior.
+func TestTypeRegistry_LuadocTag(t *testing.T) {
+	type Message struct {
+		Body   string `json:"body" luadoc:"plaintext message body"`
+		Sender string `json:"sender"`
+	}
+
+	registry := NewTypeRegistry()
+	err := registry.Register(Message{})
+	if err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+
+	err = registry.Process()
+	if err != nil {
+		t.Fatalf("Process failed: %v", err)
+	}
+
+	stubs, err := registry.GenerateStubs()
+	if err != nil {
+		t.Fatalf("GenerateStubs failed: %v", err)
+	}
+
+	// Tagged field gets the description appended.
+	if !strings.Contains(stubs, "---@field body string plaintext message body") {
+		t.Errorf("Expected stub to contain '---@field body string plaintext message body', got:\n%s", stubs)
+	}
+
+	// Untagged field is unchanged - no trailing description.
+	if !strings.Contains(stubs, "---@field sender string\n") {
+		t.Errorf("Expected stub to contain '---@field sender string', got:\n%s", stubs)
+	}
+}
+
 func TestTypeRegistry_Pointers(t *testing.T) {
 	type Inner struct {
 		Value string `json:"value"`

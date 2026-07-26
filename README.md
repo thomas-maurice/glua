@@ -299,6 +299,42 @@ This generates complete type definitions:
 -- ... complete definitions
 ```
 
+Field descriptions come from the field's Go doc comment by default — reflection
+alone can't see it, so `stubgen.Generator` (used by `RegisterType`,
+`GenerateModule`, `GenerateFromRegistry`) resolves it from source via
+`golang.org/x/tools/go/packages`, falling back to the field's trailing inline
+comment if it has no doc comment above it:
+
+```go
+type Message struct {
+    // Body is the plaintext message body.
+    Body string `json:"body"`
+}
+```
+
+```lua
+---@class mymod.Message
+---@field body string Body is the plaintext message body.
+```
+
+Reading source is a dev-time-only, best-effort step: if the package can't be
+resolved (stripped module cache, vendored-only build, etc.) the field simply
+gets no description — stub generation never fails because of it. To force a
+specific description regardless of the doc comment (or when there isn't one),
+add a `luadoc` struct tag; it always wins:
+
+```go
+type Message struct {
+    Body string `json:"body" luadoc:"plaintext message body"`
+}
+```
+
+Precedence is `luadoc` tag > Go doc/inline comment > no description.
+
+Note this comment resolution only happens through `stubgen.Generator`. Calling
+`glua.TypeRegistry.GenerateStubs()` directly, as in the example above, only
+picks up `luadoc` tags unless you also call `SetFieldDocFunc` yourself.
+
 Now in your Lua scripts, you get full autocomplete:
 
 ```lua
@@ -628,6 +664,19 @@ Notes:
   the `Logger:with` pattern.
 - Module-level constants are set on the module table at `PushTo` time, and
   also appear as `---@field NAME type doc` annotations in the stub.
+- When a parameter's Go type reflects to something unhelpful for LuaLS (e.g.
+  a `lua.LValue` used as a callback), override the annotation with
+  `luareg.ArgType(name, luaType)`:
+
+  ```go
+  m.Fn("on_message", handler, "register a handler for room message events",
+      luareg.Args("handler"),
+      luareg.ArgType("handler", "fun(evt: core.Event)"),
+  )
+  ```
+
+  generates `---@param handler fun(evt: core.Event)` instead of
+  `---@param handler any`. It has no runtime effect — stub generation only.
 
 ### 3. Use from Lua
 

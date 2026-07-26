@@ -26,10 +26,12 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thomas-maurice/glua/pkg/luareg"
+	"github.com/thomas-maurice/glua/pkg/modules/kubernetes"
 	lua "github.com/yuin/gopher-lua"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -47,6 +49,33 @@ type testRect struct {
 	Origin testPoint `json:"origin"`
 	Width  float64   `json:"width"`
 	Height float64   `json:"height"`
+}
+
+// docFixture: exercises every source of a ---@field description the
+// resolver in comments.go supports. It must be a package-level declaration
+// (not a type declared inside a test function) because loadPackageFieldDocs
+// only walks top-level GenDecls in the package's AST.
+type docFixture struct {
+	// Name is the fixture's display name, read from a doc comment above the
+	// field.
+	Name string `json:"name"`
+
+	Count int `json:"count"` // Count is read from this inline comment.
+
+	// Overridden has its own doc comment, but the "luadoc" tag takes
+	// precedence over it.
+	Overridden string `json:"overridden" luadoc:"tag wins over doc comment"`
+
+	Silent string `json:"silent"`
+}
+
+// embeddingFixture: exercises extractFieldDocs' embedded-field handling —
+// the embedded field's doc comment must be keyed under its declared
+// (promoted) name, "docFixture". Package-level for the same AST-walking
+// reason as docFixture.
+type embeddingFixture struct {
+	// Base is embedded directly in embeddingFixture.
+	docFixture
 }
 
 // --- Pure Go functions registered in tests ---
@@ -86,13 +115,15 @@ func TestGenerateModule_Empty(t *testing.T) {
 // Verifies param annotations, return annotations, function signature, ordering.
 func TestGenerateModule_FunctionsOnly(t *testing.T) {
 	m := luareg.NewModule("math", "math utilities")
-	m.Fn("add", addFn, "adds two numbers",
+	m.Fn(
+		"add", addFn, "adds two numbers",
 		luareg.Args("a", "b"),
 		luareg.ArgDoc("a", "first operand"),
 		luareg.ArgDoc("b", "second operand"),
 		luareg.ReturnDoc(0, "result", "the sum"),
 	)
-	m.Fn("greet", greetFn, "greets someone",
+	m.Fn(
+		"greet", greetFn, "greets someone",
 		luareg.Args("name"),
 	)
 
@@ -130,7 +161,8 @@ func TestGenerateModule_FunctionsOnly(t *testing.T) {
 // TestGenerateModule_BoolReturn: a function returning bool produces "boolean" type.
 func TestGenerateModule_BoolReturn(t *testing.T) {
 	m := luareg.NewModule("util", "util module")
-	m.Fn("identity", boolFn, "identity bool",
+	m.Fn(
+		"identity", boolFn, "identity bool",
 		luareg.Args("v"),
 	)
 
@@ -146,7 +178,8 @@ func TestGenerateModule_BoolReturn(t *testing.T) {
 // has that param omitted from the Lua signature.
 func TestGenerateModule_LStateSkipped(t *testing.T) {
 	m := luareg.NewModule("escape", "escape hatch module")
-	m.Fn("passthrough", lstateFn, "passes a string through",
+	m.Fn(
+		"passthrough", lstateFn, "passes a string through",
 		luareg.Args("s"),
 	)
 
@@ -166,7 +199,8 @@ func TestGenerateModule_LStateSkipped(t *testing.T) {
 // error return.
 func TestGenerateModule_ErrorReturnOmitted(t *testing.T) {
 	m := luareg.NewModule("safe", "safe module")
-	m.Fn("safe_add", errFn, "safe add",
+	m.Fn(
+		"safe_add", errFn, "safe add",
 		luareg.Args("x"),
 	)
 
@@ -188,7 +222,8 @@ func TestGenerateModule_ErrorReturnOmitted(t *testing.T) {
 // TestGenerateModule_SliceParam: []string becomes string[].
 func TestGenerateModule_SliceParam(t *testing.T) {
 	m := luareg.NewModule("arr", "array module")
-	m.Fn("join", sliceFn, "joins strings",
+	m.Fn(
+		"join", sliceFn, "joins strings",
 		luareg.Args("parts"),
 	)
 
@@ -202,7 +237,8 @@ func TestGenerateModule_SliceParam(t *testing.T) {
 // TestGenerateModule_MapParam: map[string]string becomes table<string, string>.
 func TestGenerateModule_MapParam(t *testing.T) {
 	m := luareg.NewModule("maps", "map module")
-	m.Fn("first", mapFn, "gets first",
+	m.Fn(
+		"first", mapFn, "gets first",
 		luareg.Args("m"),
 	)
 
@@ -216,7 +252,8 @@ func TestGenerateModule_MapParam(t *testing.T) {
 // TestGenerateModule_MultiReturn: multiple non-error returns all appear.
 func TestGenerateModule_MultiReturn(t *testing.T) {
 	m := luareg.NewModule("duo", "duo module")
-	m.Fn("swap", multiRetFn, "swaps two strings",
+	m.Fn(
+		"swap", multiRetFn, "swaps two strings",
 		luareg.Args("a", "b"),
 		luareg.ReturnDoc(0, "first", "first return"),
 		luareg.ReturnDoc(1, "second", "second return"),
@@ -234,7 +271,8 @@ func TestGenerateModule_MultiReturn(t *testing.T) {
 // ---@class block to appear at the top of the file.
 func TestGenerateModule_StructParamGeneratesClass(t *testing.T) {
 	m := luareg.NewModule("geo", "geometry module")
-	m.Fn("mirror", pointFn, "mirrors a point",
+	m.Fn(
+		"mirror", pointFn, "mirrors a point",
 		luareg.Args("p"),
 	)
 
@@ -249,7 +287,11 @@ func TestGenerateModule_StructParamGeneratesClass(t *testing.T) {
 	// The class block must precede the module declaration.
 	classPos := strings.Index(out, "---@class stubgen.testPoint")
 	moduleClassPos := strings.Index(out, "---@class geo\n")
-	assert.True(t, classPos < moduleClassPos, "struct @class block must precede the module @class block")
+	assert.True(
+		t,
+		classPos < moduleClassPos,
+		"struct @class block must precede the module @class block",
+	)
 }
 
 // TestGenerateModule_OneClass: a module with a single registered class produces
@@ -261,11 +303,13 @@ func TestGenerateModule_OneClass(t *testing.T) {
 	withMethod := func(l *Logger, key, val string) *Logger { return l }
 
 	cls := luareg.NewClass[*Logger]("log.Logger", "structured logger")
-	cls.Method("info", logMethod, "logs info",
+	cls.Method(
+		"info", logMethod, "logs info",
 		luareg.Args("msg"),
 		luareg.ArgDoc("msg", "the message"),
 	)
-	cls.Method("with", withMethod, "returns child logger",
+	cls.Method(
+		"with", withMethod, "returns child logger",
 		luareg.Args("key", "val"),
 		luareg.ReturnDoc(0, "logger", "child logger"),
 	)
@@ -378,7 +422,8 @@ func TestGenerateModule_MethodSkipsReceiver(t *testing.T) {
 	incMethod := func(c *Counter, delta int) int { return c.n + delta }
 
 	cls := luareg.NewClass[*Counter]("cnt.Counter", "a counter")
-	cls.Method("inc", incMethod, "increments counter",
+	cls.Method(
+		"inc", incMethod, "increments counter",
 		luareg.Args("delta"),
 	)
 
@@ -420,6 +465,78 @@ func TestRegisterType_GenerateTypeStubs(t *testing.T) {
 	assert.Contains(t, stubs, "---@class stubgen.Config")
 	assert.Contains(t, stubs, "---@field name string")
 	assert.Contains(t, stubs, "---@field timeout number")
+}
+
+// TestRegisterType_LuadocTagDescribesField: a struct field tagged with
+// `luadoc:"..."` gets that text appended to its ---@field annotation, since
+// reflection cannot see Go doc comments. Untagged fields render unchanged.
+func TestRegisterType_LuadocTagDescribesField(t *testing.T) {
+	type Message struct {
+		Body   string `json:"body"   luadoc:"plaintext message body"`
+		Sender string `json:"sender"`
+	}
+
+	gen := NewGenerator()
+	require.NoError(t, gen.RegisterType(Message{}))
+
+	stubs, err := gen.GenerateTypeStubs()
+	require.NoError(t, err)
+
+	assert.Contains(t, stubs, "---@field body string plaintext message body")
+	assert.Contains(t, stubs, "---@field sender string\n")
+}
+
+// TestRegisterType_FieldDocFromGoComments: field descriptions come from Go
+// source comments (resolved via golang.org/x/tools/go/packages), not just
+// the "luadoc" tag. Exercises all four precedence cases on docFixture: a
+// leading doc comment, a trailing inline comment, a luadoc tag override that
+// wins over its own doc comment, and a field with no description at all.
+func TestRegisterType_FieldDocFromGoComments(t *testing.T) {
+	gen := NewGenerator()
+	require.NoError(t, gen.RegisterType(docFixture{}))
+
+	stubs, err := gen.GenerateTypeStubs()
+	require.NoError(t, err)
+
+	// Leading doc comment.
+	assert.Contains(
+		t,
+		stubs,
+		"---@field name string Name is the fixture's display name, read from a doc comment above the field.",
+	)
+	// Trailing inline comment.
+	assert.Contains(t, stubs, "---@field count number Count is read from this inline comment.")
+	// luadoc tag wins over the field's own doc comment.
+	assert.Contains(t, stubs, "---@field overridden string tag wins over doc comment")
+	assert.NotContains(t, stubs, "own doc comment, but the")
+	// No comment, no tag -> no description.
+	assert.Contains(t, stubs, "---@field silent string\n")
+}
+
+// TestGenerateModule_KubernetesFieldDocsFromSource: the kubernetes module
+// registers real k8s.io/api struct shapes (corev1.Pod and friends) via
+// RegisterStubType, so its generated stub is the real-world exercise of the
+// Go-doc-comment resolver against a large, module-cache-resolved dependency
+// graph — not just our own small package. Must complete without error and
+// without hanging; a well-known k8s doc comment must render. If package
+// resolution ever becomes too slow/flaky here, comment extraction should be
+// gated to a package allowlist rather than reverting this test.
+func TestGenerateModule_KubernetesFieldDocsFromSource(t *testing.T) {
+	reg := luareg.NewRegistry()
+	kubernetes.Register(reg)
+	require.Len(t, reg.Modules(), 1)
+
+	gen := NewGenerator()
+	start := time.Now()
+	out, err := gen.GenerateModule(reg.Modules()[0])
+	elapsed := time.Since(start)
+	require.NoError(t, err)
+
+	assert.Less(t, elapsed, 30*time.Second, "kubernetes module stub generation must not hang")
+
+	// corev1.ObjectMeta.Name carries a real, stable Go doc comment; its
+	// presence proves the resolver reached into the k8s.io/api module cache.
+	assert.Contains(t, out, "---@field name string Name must be unique within a namespace.")
 }
 
 // TestRegisterType_Empty: when no types are registered, GenerateTypeStubs
@@ -505,7 +622,11 @@ func TestGenerateFromRegistry_WithAnnotations(t *testing.T) {
 	for _, f := range files {
 		fileNames[filepath.Base(f)] = true
 	}
-	assert.True(t, fileNames["annotations.gen.lua"], "annotations.gen.lua must be written when types are registered")
+	assert.True(
+		t,
+		fileNames["annotations.gen.lua"],
+		"annotations.gen.lua must be written when types are registered",
+	)
 
 	// Verify its content.
 	content, err := os.ReadFile(filepath.Join(tmpDir, "annotations.gen.lua"))
@@ -539,7 +660,13 @@ func TestGenerateFromRegistry_Idempotent(t *testing.T) {
 		require.NoError(t, err)
 		c2, err := os.ReadFile(files2[i])
 		require.NoError(t, err)
-		assert.Equal(t, string(c1), string(c2), "file %s must be byte-identical on repeated generation", filepath.Base(files1[i]))
+		assert.Equal(
+			t,
+			string(c1),
+			string(c2),
+			"file %s must be byte-identical on repeated generation",
+			filepath.Base(files1[i]),
+		)
 	}
 }
 
@@ -547,7 +674,8 @@ func TestGenerateFromRegistry_Idempotent(t *testing.T) {
 // doesn't match any arg, it is simply not emitted (no crash).
 func TestGenerateModule_ArgDocWithoutName(t *testing.T) {
 	m := luareg.NewModule("util", "util module")
-	m.Fn("noop", func(x string) string { return x }, "identity",
+	m.Fn(
+		"noop", func(x string) string { return x }, "identity",
 		luareg.Args("x"),
 		luareg.ArgDoc("y", "nonexistent param"), // "y" not in ArgNames
 	)
@@ -560,11 +688,111 @@ func TestGenerateModule_ArgDocWithoutName(t *testing.T) {
 	assert.Contains(t, out, "---@param x string\n")
 }
 
+// TestGenerateModule_ArgTypeOverride: a param with luareg.ArgType renders the
+// override annotation instead of the reflected type. This is the escape hatch
+// for params like lua.LValue callbacks, whose Go type reflects to "any" and
+// gives LuaLS nothing useful to check against.
+func TestGenerateModule_ArgTypeOverride(t *testing.T) {
+	m := luareg.NewModule("bot", "bot module")
+	m.Fn(
+		"on_message", func(handler lua.LValue) {}, "register a handler for room message events",
+		luareg.Args("handler"),
+		luareg.ArgType("handler", "fun(evt: core.Event)"),
+	)
+
+	gen := NewGenerator()
+	out, err := gen.GenerateModule(m)
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "---@param handler fun(evt: core.Event)\n")
+	assert.NotContains(t, out, "---@param handler any")
+}
+
+// TestGenerateModule_ArgTypeOverrideWithDoc: ArgType and ArgDoc compose — the
+// override type is used alongside the doc string.
+func TestGenerateModule_ArgTypeOverrideWithDoc(t *testing.T) {
+	m := luareg.NewModule("bot", "bot module")
+	m.Fn(
+		"on_message", func(handler lua.LValue) {}, "register a handler",
+		luareg.Args("handler"),
+		luareg.ArgType("handler", "fun(evt: core.Event)"),
+		luareg.ArgDoc("handler", "called for each message event"),
+	)
+
+	gen := NewGenerator()
+	out, err := gen.GenerateModule(m)
+	require.NoError(t, err)
+
+	assert.Contains(
+		t,
+		out,
+		"---@param handler fun(evt: core.Event) called for each message event\n",
+	)
+}
+
+// TestGenerateModule_ArgTypeFallback: a param without an ArgType override
+// still renders its reflected Go type, unchanged from before this feature.
+func TestGenerateModule_ArgTypeFallback(t *testing.T) {
+	m := luareg.NewModule("math", "math utilities")
+	m.Fn("add", addFn, "adds two numbers", luareg.Args("a", "b"))
+
+	gen := NewGenerator()
+	out, err := gen.GenerateModule(m)
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "---@param a number\n")
+	assert.Contains(t, out, "---@param b number\n")
+}
+
+// TestGenerateModule_ArgTypeDuplicate: duplicate ArgType calls for the same
+// name are allowed (mirrors ArgDoc); the first registered entry wins because
+// findArgType returns on first match, same as findArgDoc.
+func TestGenerateModule_ArgTypeDuplicate(t *testing.T) {
+	m := luareg.NewModule("bot", "bot module")
+	m.Fn(
+		"on_message", func(handler lua.LValue) {}, "register a handler",
+		luareg.Args("handler"),
+		luareg.ArgType("handler", "fun(evt: core.Event)"),
+		luareg.ArgType("handler", "fun(evt: core.OtherEvent)"),
+	)
+
+	gen := NewGenerator()
+	out, err := gen.GenerateModule(m)
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "---@param handler fun(evt: core.Event)\n")
+	assert.NotContains(t, out, "core.OtherEvent")
+}
+
+// TestGenerateModule_ArgTypeOnMethod: ArgType also applies to class methods,
+// since Method shares the same FnMeta/FnOpt machinery as Fn.
+func TestGenerateModule_ArgTypeOnMethod(t *testing.T) {
+	type Bot struct{}
+	onMessage := func(b *Bot, handler lua.LValue) {}
+
+	cls := luareg.NewClass[*Bot]("bot.Bot", "bot instance")
+	cls.Method(
+		"on_message", onMessage, "register a handler",
+		luareg.Args("handler"),
+		luareg.ArgType("handler", "fun(evt: core.Event)"),
+	)
+
+	m := luareg.NewModule("bot", "bot module")
+	m.RegisterClass(cls)
+
+	gen := NewGenerator()
+	out, err := gen.GenerateModule(m)
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "---@param handler fun(evt: core.Event)\n")
+}
+
 // TestGenerateModule_FunctionWithDoc: function-level Doc string is emitted as
 // a leading --- comment before the annotations.
 func TestGenerateModule_FunctionWithDoc(t *testing.T) {
 	m := luareg.NewModule("doc", "doc module")
-	m.Fn("greet", greetFn, "greets someone by name",
+	m.Fn(
+		"greet", greetFn, "greets someone by name",
 		luareg.Args("name"),
 	)
 
@@ -581,7 +809,8 @@ func TestGenerateModule_StructReturnGeneratesClass(t *testing.T) {
 	makePoint := func(x, y float64) testPoint { return testPoint{x, y} }
 
 	m := luareg.NewModule("geo2", "geo2 module")
-	m.Fn("make_point", makePoint, "creates a point",
+	m.Fn(
+		"make_point", makePoint, "creates a point",
 		luareg.Args("x", "y"),
 	)
 
@@ -692,7 +921,8 @@ func TestGenerateModule_PtrStructParam(t *testing.T) {
 	withPointer := func(p *testPoint) *testPoint { return p }
 
 	m := luareg.NewModule("geo3", "geo3 module")
-	m.Fn("copy", withPointer, "copies a point",
+	m.Fn(
+		"copy", withPointer, "copies a point",
 		luareg.Args("p"),
 	)
 
@@ -726,7 +956,8 @@ func TestGenerateModule_MethodNoGoFn(t *testing.T) {
 // respected even when the order differs from return position 0, 1, ...
 func TestGenerateModule_ReturnDocByIndex(t *testing.T) {
 	m := luareg.NewModule("retdoc", "retdoc module")
-	m.Fn("pair", multiRetFn, "returns a pair",
+	m.Fn(
+		"pair", multiRetFn, "returns a pair",
 		luareg.ReturnDoc(0, "first", "the first value"),
 		luareg.ReturnDoc(1, "second", "the second value"),
 	)
@@ -782,7 +1013,8 @@ func TestStructLuaName_K8s(t *testing.T) {
 // emits "---@return type name" without a trailing space.
 func TestGenerateModule_ReturnDocNameOnly(t *testing.T) {
 	m := luareg.NewModule("nd", "name only doc module")
-	m.Fn("get", func() string { return "" }, "gets a value",
+	m.Fn(
+		"get", func() string { return "" }, "gets a value",
 		luareg.ReturnDoc(0, "value", ""),
 	)
 
@@ -799,7 +1031,8 @@ func TestGenerateModule_ReturnDocNameOnly(t *testing.T) {
 // by the .Index field.
 func TestGenerateModule_ReturnDocOutOfOrder(t *testing.T) {
 	m := luareg.NewModule("oo", "out of order returns")
-	m.Fn("two", func() (string, int) { return "", 0 }, "two returns",
+	m.Fn(
+		"two", func() (string, int) { return "", 0 }, "two returns",
 		// Register index 1 BEFORE index 0 to exercise the bug path.
 		luareg.ReturnDoc(1, "n", "an integer"),
 		luareg.ReturnDoc(0, "s", "a string"),
@@ -817,7 +1050,8 @@ func TestGenerateModule_ReturnDocOutOfOrder(t *testing.T) {
 // two-return function attaches the doc to return 1, not return 0.
 func TestGenerateModule_ReturnDocSparse(t *testing.T) {
 	m := luareg.NewModule("sp", "sparse return docs")
-	m.Fn("two", func() (string, int) { return "", 0 }, "two returns",
+	m.Fn(
+		"two", func() (string, int) { return "", 0 }, "two returns",
 		luareg.ReturnDoc(1, "n", "an integer"),
 	)
 
