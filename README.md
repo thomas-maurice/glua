@@ -1888,6 +1888,94 @@ print(text.pad_left("42", 5, "0"))  -- "00042"
 from this module — its design surface (column alignment, cell wrapping,
 border styles) is a caller concern, not a stdlib concern.
 
+#### collections
+
+Table utilities: the functional trio (`map`/`filter`/`reduce`), grouping,
+sorting, shaping helpers, and deep structural operations (`deep_equal`,
+`deep_copy`, `get_path`).
+
+**This is an ergonomics module, not a performance one.** `collections.map(t,
+fn)` is slower than `for i, v in ipairs(t) do ... end` in pure Lua, because
+every element crosses Lua -> Go -> Lua through a protected call, where a plain
+Lua loop never leaves the VM. Reach for these for clarity; drop to a
+hand-written loop in a hot path.
+
+It also deliberately bypasses the JSON-round-trip Translator and operates
+directly on the Lua table, which preserves number precision, non-string keys,
+function/userdata values and table identity. Every function documents which
+part of the table it reads:
+
+- **array mode** (`map filter reduce find any all group_by sort_by partition
+  uniq flatten reverse zip chunk`): iterates `1..#t` only; hash-part keys are
+  ignored, not an error.
+- **map mode** (`keys values merge pick omit get_path`): iterates every key,
+  array part and hash part together, in gopher-lua's unspecified order.
+- `deep_equal`/`deep_copy` recurse in map mode and therefore cover both parts
+  of every nested table.
+
+Empty results are always an empty table, never `nil`. Callbacks always
+receive `(value, index)` in that order (`sort_by`'s key function is the one
+exception: `fun(v): number|string`, no index). A callback that raises
+propagates as a normal Lua error naming the function and the failing index
+(`collections.filter: callback failed at index 7: <message>`), not a Go
+panic. `deep_equal`/`deep_copy` guard against self-referencing tables instead
+of hanging.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/collections"
+
+L.PreloadModule("collections", collections.Loader)
+```
+
+**Lua API:**
+
+```lua
+local c = require("collections")
+
+local pods = {
+  {name = "a", phase = "Running"},
+  {name = "b", phase = "Failed"},
+  {name = "c", phase = "Failed"},
+}
+
+-- The functional trio: callbacks always see (value, index).
+local failed = c.filter(pods, function(p) return p.phase == "Failed" end)
+local names = c.map(failed, function(p) return p.name end)
+local total = c.reduce(pods, function(acc) return acc + 1 end, 0)
+
+-- find returns value, index -- nil, 0 (not an error) when nothing matches.
+local pod, idx = c.find(pods, function(p) return p.name == "b" end)
+
+-- Grouping and stable sorting.
+local byPhase = c.group_by(pods, function(p) return p.phase end)
+local byName = c.sort_by(pods, function(p) return p.name end)
+local failing, ok = c.partition(pods, function(p) return p.phase == "Failed" end)
+
+-- Pure table shaping -- no callbacks, and the highest-value part of the module.
+c.uniq({1, 2, 2, 3})              -- {1, 2, 3}
+c.flatten({1, {2, {3, 4}}}, -1)   -- {1, 2, 3, 4}, -1 = fully
+c.reverse({1, 2, 3})              -- {3, 2, 1}
+c.zip({1, 2}, {"a", "b"})         -- {{1,"a"}, {2,"b"}}
+c.chunk({1, 2, 3, 4, 5}, 2)       -- {{1,2}, {3,4}, {5}}
+
+-- Map-shaped tables.
+c.keys(pods)                                    -- {1, 2, 3} (order unspecified)
+c.merge({a = 1}, {a = 2, b = 3})                -- {a = 2, b = 3}, later wins
+c.pick(pods[1], {"name"})                       -- {name = "a"}
+c.omit(pods[1], {"phase"})                      -- {name = "a"}
+
+-- get_path always takes a default -- pass nil explicitly for "no default",
+-- since `x or default` breaks when the stored value is `false`.
+local img = c.get_path(obj, "spec.containers.1.image", "<none>")
+
+-- Deep structural operations, cycle-safe.
+if not c.deep_equal(desired, actual) then
+  apply(c.deep_copy(desired))
+end
+```
+
 ## Features
 
 - **Bidirectional Conversion**: Seamlessly convert Go structs to Lua tables and vice versa with full round-trip integrity

@@ -32,6 +32,7 @@ import (
 	"github.com/thomas-maurice/glua/pkg/luareg"
 	"github.com/thomas-maurice/glua/pkg/modules/base64"
 	"github.com/thomas-maurice/glua/pkg/modules/bit32"
+	"github.com/thomas-maurice/glua/pkg/modules/collections"
 	"github.com/thomas-maurice/glua/pkg/modules/filepath"
 	"github.com/thomas-maurice/glua/pkg/modules/fs"
 	"github.com/thomas-maurice/glua/pkg/modules/hash"
@@ -62,6 +63,7 @@ import (
 func RegisterAll(reg *luareg.Registry) {
 	base64.Register(reg)
 	bit32.Register(reg)
+	collections.Register(reg)
 	filepath.Register(reg)
 	fs.Register(reg)
 	hash.Register(reg)
