@@ -18,17 +18,35 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package http provides HTTP client utilities for Lua scripts: get, post,
+// put, delete and arbitrary-method requests, each with a default timeout so
+// a script cannot block its calling goroutine forever on an unresponsive
+// endpoint.
 package http
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
 )
+
+// defaultTimeout: per-request timeout applied to every HTTP call made from
+// Lua. Mirrors k8sclient's defaultCallTimeout so both network-facing modules
+// fail fast instead of blocking a goroutine forever on a slow or
+// unresponsive endpoint. A package-level var (not const) so tests can shrink
+// it to keep timeout tests fast.
+var defaultTimeout = 30 * time.Second
+
+// requestContext: returns a context with the default per-request timeout.
+func requestContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), defaultTimeout)
+}
 
 // Response: represents an HTTP response returned to Lua callers.
 type Response struct {
@@ -39,13 +57,18 @@ type Response struct {
 
 // doRequest: executes an HTTP request and returns a *Response or an error.
 // The optional headers table is read directly from the Lua stack via L.
-func doRequest(L *lua.LState, method, url, body string, headers *lua.LTable) (*Response, error) {
+// The request is bounded by defaultTimeout so a slow or hanging server
+// cannot block the calling goroutine indefinitely.
+func doRequest(_ *lua.LState, method, url, body string, headers *lua.LTable) (*Response, error) {
 	var bodyReader io.Reader
 	if body != "" {
 		bodyReader = bytes.NewBufferString(body)
 	}
 
-	req, err := http.NewRequest(method, url, bodyReader)
+	ctx, cancel := requestContext()
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -127,8 +150,10 @@ func put(L *lua.LState, url, body string, headers *lua.LTable) (lua.LValue, erro
 	return responseToLua(L, r), nil
 }
 
-// delete_: performs an HTTP DELETE request with optional headers table.
-func delete_(L *lua.LState, url string, headers *lua.LTable) (lua.LValue, error) {
+// httpDelete: performs an HTTP DELETE request with optional headers table.
+// Named httpDelete (not delete_) to satisfy revive's var-naming rule; the
+// Lua-visible name stays "delete", set explicitly in build() below.
+func httpDelete(L *lua.LState, url string, headers *lua.LTable) (lua.LValue, error) {
 	r, err := doRequest(L, "DELETE", url, "", headers)
 	if err != nil {
 		return lua.LNil, err
@@ -148,16 +173,35 @@ func request(L *lua.LState, method, url, body string, headers *lua.LTable) (lua.
 // build: constructs the module definition. Reused by Loader and Register.
 func build() *luareg.Module {
 	m := luareg.NewModule("http", "HTTP client utilities")
-	m.Fn("get", get, "performs an HTTP GET request, raises on network error",
-		luareg.Args("url", "headers"))
-	m.Fn("post", post, "performs an HTTP POST request, raises on network error",
-		luareg.Args("url", "body", "headers"))
-	m.Fn("put", put, "performs an HTTP PUT request, raises on network error",
-		luareg.Args("url", "body", "headers"))
-	m.Fn("delete", delete_, "performs an HTTP DELETE request, raises on network error",
-		luareg.Args("url", "headers"))
-	m.Fn("request", request, "performs an HTTP request with a custom method, raises on network error",
-		luareg.Args("method", "url", "body", "headers"))
+	m.Fn("get", get, "performs an HTTP GET request, raises on network error or timeout",
+		luareg.Args("url", "headers"),
+		luareg.ArgDoc("url", "the absolute URL to request"),
+		luareg.ArgDoc("headers", "optional table of header name to value; pass nil for none"),
+		luareg.ReturnDoc(0, "response", "table with status (number), body (string) and headers (table)"))
+	m.Fn("post", post, "performs an HTTP POST request, raises on network error or timeout",
+		luareg.Args("url", "body", "headers"),
+		luareg.ArgDoc("url", "the absolute URL to request"),
+		luareg.ArgDoc("body", "the request body; pass an empty string for no body"),
+		luareg.ArgDoc("headers", "optional table of header name to value; pass nil for none"),
+		luareg.ReturnDoc(0, "response", "table with status (number), body (string) and headers (table)"))
+	m.Fn("put", put, "performs an HTTP PUT request, raises on network error or timeout",
+		luareg.Args("url", "body", "headers"),
+		luareg.ArgDoc("url", "the absolute URL to request"),
+		luareg.ArgDoc("body", "the request body; pass an empty string for no body"),
+		luareg.ArgDoc("headers", "optional table of header name to value; pass nil for none"),
+		luareg.ReturnDoc(0, "response", "table with status (number), body (string) and headers (table)"))
+	m.Fn("delete", httpDelete, "performs an HTTP DELETE request, raises on network error or timeout",
+		luareg.Args("url", "headers"),
+		luareg.ArgDoc("url", "the absolute URL to request"),
+		luareg.ArgDoc("headers", "optional table of header name to value; pass nil for none"),
+		luareg.ReturnDoc(0, "response", "table with status (number), body (string) and headers (table)"))
+	m.Fn("request", request, "performs an HTTP request with a custom method, raises on network error or timeout",
+		luareg.Args("method", "url", "body", "headers"),
+		luareg.ArgDoc("method", "the HTTP method, e.g. \"PATCH\" or \"HEAD\""),
+		luareg.ArgDoc("url", "the absolute URL to request"),
+		luareg.ArgDoc("body", "the request body; pass an empty string for no body"),
+		luareg.ArgDoc("headers", "optional table of header name to value; pass nil for none"),
+		luareg.ReturnDoc(0, "response", "table with status (number), body (string) and headers (table)"))
 	return m
 }
 
