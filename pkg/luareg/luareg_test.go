@@ -640,9 +640,13 @@ func TestSliceElementTypes(t *testing.T) {
 				assert.Equal(t, lua.LNumber(4), tbl.RawGetInt(1))
 			},
 		},
-		// Note: []uint8 == []byte; encoding/json marshals it as a base64 string,
-		// so the Translator returns LString, not LTable. This is a known limitation
-		// of the JSON round-trip path in pkg/glua.Translator and is out of A1 scope.
+		// Note: []uint8 == []byte. At the top level (function args/returns,
+		// tested here via []int etc.) []byte is special-cased to a raw Lua
+		// string rather than a table of numbers — see
+		// TestByteSliceArgAndReturnAreRawString below — so it is intentionally
+		// absent from this table-of-numbers test matrix. []byte nested inside
+		// a struct/map field still goes through the Translator's JSON path and
+		// renders as base64 — see TestByteSliceNestedInStructIsBase64.
 		{
 			name:    "[]uint16",
 			regFn:   func(m *luareg.Module) { m.Fn("f", func(s []uint16) []uint16 { return s }, "") },
@@ -972,11 +976,16 @@ func TestStructWithNestedSliceField(t *testing.T) {
 
 // ---- Additional: []byte / []uint8 quirks -----------------------------------
 
-// TestByteSliceReturnIsBase64String: encoding/json marshals []byte to a base64
-// string, so a Go function returning []byte yields an LString on the Lua side,
-// not a table of numbers. This locks in the known limitation of the JSON
-// round-trip path used by pkg/glua.Translator on the return side.
-func TestByteSliceReturnIsBase64String(t *testing.T) {
+// TestByteSliceArgAndReturnAreRawString: at the top level (function args and
+// returns), []byte maps to a raw Lua string, not base64 and not a table of
+// numbers. Lua strings are 8-bit clean (an LString is just a Go string), so
+// this is a lossless, zero-copy representation. This replaces the previous
+// "known limitation" pin — []byte returning base64 and requiring a table of
+// numbers on input was a bug (m.consume(m.payload()) raised "table expected,
+// got string"), not a documented tradeoff, and is fixed for the top-level
+// case. See TestByteSliceNestedInStructIsBase64 for the deliberately
+// unchanged nested case.
+func TestByteSliceArgAndReturnAreRawString(t *testing.T) {
 	mod := luareg.NewModule("m", "test")
 	mod.Fn("payload", func() []byte { return []byte("hi") }, "")
 	L := newState(t, "m", mod)
@@ -984,9 +993,63 @@ func TestByteSliceReturnIsBase64String(t *testing.T) {
 
 	require.NoError(t, L.DoString(`result = m.payload()`))
 	got, ok := L.GetGlobal("result").(lua.LString)
-	require.True(t, ok, "expected LString (base64-encoded), got %T", L.GetGlobal("result"))
+	require.True(t, ok, "expected LString, got %T", L.GetGlobal("result"))
+	assert.Equal(t, lua.LString("hi"), got)
+}
+
+// TestByteSliceArgAcceptsTableOfNumbersForCompat: the argument side also
+// still accepts a table of numbers, for backwards compatibility with callers
+// written against the old (unintentional) table-of-numbers representation.
+func TestByteSliceArgAcceptsTableOfNumbersForCompat(t *testing.T) {
+	mod := luareg.NewModule("m", "test")
+	mod.Fn("len", func(b []byte) int { return len(b) }, "")
+	L := newState(t, "m", mod)
+	defer L.Close()
+
+	require.NoError(t, L.DoString(`result = m.len({104, 105})`)) // "hi"
+	got, ok := L.GetGlobal("result").(lua.LNumber)
+	require.True(t, ok)
+	assert.Equal(t, lua.LNumber(2), got)
+}
+
+// TestByteSliceRoundTripThroughRealLua: a Go function returning []byte, whose
+// result is passed straight back into a Go function taking []byte, through
+// the real Lua interpreter. This is the exact scenario that was broken before
+// the fix (m.consume(m.payload()) raised "table expected, got string").
+func TestByteSliceRoundTripThroughRealLua(t *testing.T) {
+	mod := luareg.NewModule("m", "test")
+	mod.Fn("payload", func() []byte { return []byte("round-trip") }, "")
+	mod.Fn("consume", func(b []byte) string { return string(b) }, "")
+	L := newState(t, "m", mod)
+	defer L.Close()
+
+	require.NoError(t, L.DoString(`result = m.consume(m.payload())`))
+	got, ok := L.GetGlobal("result").(lua.LString)
+	require.True(t, ok, "expected LString, got %T", L.GetGlobal("result"))
+	assert.Equal(t, lua.LString("round-trip"), got)
+}
+
+// TestByteSliceNestedInStructIsBase64: []byte nested inside a struct field is
+// deliberately NOT changed by the top-level fix above — it still goes through
+// pkg/glua.Translator's JSON round trip and renders as base64. Fixing that
+// would mean abandoning JSON's MarshalJSON/UnmarshalJSON honouring for nested
+// fields, and base64 already matches the mental model kubernetes module users
+// have: a k8s Secret's `data` field (map[string][]byte) renders as base64 in
+// `kubectl get -o yaml`. This test pins that as intentional, not an oversight.
+func TestByteSliceNestedInStructIsBase64(t *testing.T) {
+	type Payload struct {
+		Data []byte `json:"data"`
+	}
+	mod := luareg.NewModule("m", "test")
+	mod.Fn("get", func() Payload { return Payload{Data: []byte("hi")} }, "")
+	L := newState(t, "m", mod)
+	defer L.Close()
+
+	require.NoError(t, L.DoString(`result = m.get()`))
+	tbl, ok := L.GetGlobal("result").(*lua.LTable)
+	require.True(t, ok, "expected LTable, got %T", L.GetGlobal("result"))
 	// base64("hi") == "aGk="
-	assert.Equal(t, lua.LString("aGk="), got)
+	assert.Equal(t, lua.LString("aGk="), tbl.RawGetString("data"))
 }
 
 // ---- Additional: goToLua coverage for primitives returned ------------------

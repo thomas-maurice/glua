@@ -33,6 +33,7 @@ var (
 	luaStateType   = reflect.TypeOf((*lua.LState)(nil))
 	luaTableType   = reflect.TypeOf((*lua.LTable)(nil))
 	luaValueIfType = reflect.TypeOf((*lua.LValue)(nil)).Elem() // the interface type
+	byteSliceType  = reflect.TypeOf([]byte(nil))
 )
 
 // buildWrapper: reflects on goFn and returns an lua.LGFunction that performs
@@ -254,6 +255,21 @@ func luaToGo(L *lua.LState, pos int, t reflect.Type, tr *glua.Translator) (refle
 		return reflect.ValueOf(float64(v)), nil
 
 	case reflect.Slice:
+		// []byte at the top level maps to a raw Lua string, not a table of
+		// numbers: Lua strings are 8-bit clean (an LString is just a Go
+		// string), so they are the natural, zero-copy representation of
+		// arbitrary bytes. This mirrors the return-side special case in
+		// goToLua. A table of numbers is ALSO still accepted here for
+		// backwards compatibility with callers written against the old
+		// (unintentional) table-of-numbers behaviour on the argument side.
+		// This does not apply to []byte nested inside a struct/map field,
+		// which still goes through the Translator's JSON path and renders as
+		// base64 — see the Struct case below for why that split is kept.
+		if t == byteSliceType {
+			if s, ok := L.Get(pos).(lua.LString); ok {
+				return reflect.ValueOf([]byte(s)), nil
+			}
+		}
 		lv := L.CheckTable(pos)
 		return luaTableToSlice(L, lv, t, tr, pos)
 
@@ -496,6 +512,24 @@ func goToLua(L *lua.LState, v reflect.Value, tr *glua.Translator) (lua.LValue, e
 			return lua.LNil, nil
 		}
 		v = v.Elem()
+	}
+
+	// []byte at the top level maps to a raw Lua string, not the base64
+	// string the Translator's JSON path below would otherwise produce (see
+	// pkg/glua.Translator.ToLua). Lua strings are 8-bit clean, so this is a
+	// lossless, zero-copy representation and round-trips with the argument
+	// side (luaToGo's mirror-image special case). []byte nested inside a
+	// struct or map field is deliberately NOT changed by this — it still
+	// goes through the JSON/Translator path and renders as base64, since
+	// fixing that would mean abandoning MarshalJSON/UnmarshalJSON honouring
+	// for nested fields, and base64 already matches the mental model
+	// kubernetes module users have from `kubectl get -o yaml` rendering a
+	// Secret's data map that way.
+	if v.Type() == byteSliceType {
+		if v.IsNil() {
+			return lua.LNil, nil
+		}
+		return lua.LString(v.Bytes()), nil
 	}
 
 	switch v.Kind() {

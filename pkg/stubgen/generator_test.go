@@ -873,6 +873,15 @@ func TestGoTypeToLua_Primitives(t *testing.T) {
 	}
 }
 
+// TestGoTypeToLua_ByteSlice: []byte must emit "string", not "number[]" —
+// pkg/luareg maps []byte to a raw Lua string at the top level (see
+// pkg/luareg's luaToGo/goToLua []byte special case), so a stub claiming
+// number[] would mislead the LSP and callers.
+func TestGoTypeToLua_ByteSlice(t *testing.T) {
+	classLookup := make(map[reflect.Type]luareg.AnyClass)
+	assert.Equal(t, "string", goTypeToLua(reflect.TypeOf([]byte(nil)), classLookup))
+}
+
 // TestGoTypeToLua_Compound: maps, interfaces, and pointer types.
 func TestGoTypeToLua_Compound(t *testing.T) {
 	classLookup := make(map[reflect.Type]luareg.AnyClass)
