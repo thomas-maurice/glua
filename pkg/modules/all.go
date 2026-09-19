@@ -40,6 +40,7 @@ import (
 	"github.com/thomas-maurice/glua/pkg/modules/hex"
 	"github.com/thomas-maurice/glua/pkg/modules/http"
 	"github.com/thomas-maurice/glua/pkg/modules/json"
+	"github.com/thomas-maurice/glua/pkg/modules/jsonpath"
 	k8sclient "github.com/thomas-maurice/glua/pkg/modules/k8sclient"
 	"github.com/thomas-maurice/glua/pkg/modules/kubernetes"
 	logmod "github.com/thomas-maurice/glua/pkg/modules/log"
@@ -76,6 +77,7 @@ func RegisterAll(reg *luareg.Registry) {
 	hex.Register(reg)
 	http.Register(reg)
 	json.Register(reg)
+	jsonpath.Register(reg)
 	k8sclient.Register(reg)
 	kubernetes.Register(reg)
 	logmod.Register(reg)

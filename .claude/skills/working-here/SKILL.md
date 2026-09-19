@@ -87,6 +87,21 @@ intentional, not a bug: a k8s `Secret.Data` renders as base64 in
 `kubectl get -o yaml`, which is the mental model module users already have.
 Do not "fix" the nested case without a deliberate decision.
 
+**Arity is exact — EXCEPT when the function takes `*lua.LState`.** The reflection
+wrapper normally rejects both too few and too many arguments. But a function
+whose first Go parameter is `*lua.LState` gets a *minimum* check only: too few
+raises, surplus arguments are silently ignored.
+
+This is deliberate, not a bug. The LState is the escape hatch for reading extra
+stack slots yourself, which is exactly how `log.info("msg", {fields})` works —
+`moduleLuaInfo` takes `(L, msg)` and pulls the fields from stack position 2 via
+`extractFields`. Enforcing exact arity would break it.
+
+The consequence to know: any function taking `*lua.LState` — including every one
+that returns a constructed table, since building one needs the state — opts out
+of surplus-argument checking. `collections.map(t, f, "junk")` is accepted.
+If a function does NOT need the state, leave it out and get the stricter check.
+
 **A nil Go slice becomes Lua `nil`, not an empty table.** It travels the JSON
 path, and `json.Marshal` renders a nil slice as `null`. An empty non-nil slice
 renders as `[]` and arrives as an empty table. So a function returning a nil

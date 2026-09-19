@@ -845,7 +845,7 @@ import (
 
 func main() {
     reg := luareg.NewRegistry()
-    modules.RegisterAll(reg)   // glua's 26 built-in modules
+    modules.RegisterAll(reg)   // glua's 27 built-in modules
     widget.Register(reg)       // your module
 
     gen := stubgen.NewGenerator()
@@ -2237,6 +2237,76 @@ local id = uuid.v7()                             -- sorts by creation time
 print(uuid.parse(id).timestamp)                  -- Unix seconds
 
 local stable = uuid.v5(uuid.NAMESPACE_DNS, "my-object-name")
+```
+
+#### jsonpath
+
+Query nested Lua tables with JSONPath: `query(data, path)`, `first(data, path,
+default)`, `exists(data, path)`, `render(data, template)`. Zero new
+dependencies — backed by `k8s.io/client-go/util/jsonpath`, which is already a
+direct dependency of this module.
+
+**This is the "kubectl jsonpath" dialect, not Goessner-canonical JSONPath and
+not RFC 9535.** It is the same engine `kubectl -o jsonpath=` uses: `$`, `.a`,
+`['a']`, `[0]`, `[0:2]` slices, `..` recursive descent, `[*]` wildcard and
+`?(@.x==y)` filters are supported; there is no `length()`/`min()`/`max()`,
+and the filter grammar is narrower than RFC 9535. If a path works in
+`kubectl get -o jsonpath=`, it works here.
+
+- **Auto-brace.** A bare path (`.spec.replicas`), a `$`-rooted path
+  (`$.spec.replicas`) and an explicitly braced path (`{.spec.replicas}`) are
+  all accepted — anything not already starting with `{` is wrapped for you.
+- **`query` always returns a table** — empty, one element or many — never
+  the bare value and never `nil`, so calling code never has to branch on
+  cardinality. `first` is for the common "one value or a default" case.
+- **Missing keys: `query`/`first`/`exists` vs `render`.** A field that is
+  not present is a miss for `query`/`first`/`exists` (empty result, `false`,
+  or the given default) — it does not raise, because "is this field set?" is
+  the point. `render` is the odd one out: a text template that silently
+  renders a gap is a template bug, so a missing key raises there.
+- Data is converted through `pkg/glua.Translator`, so it rides the same JSON
+  data path as the rest of glua: all numbers arrive as float64 (a Lua
+  integer above 2^53 will not round-trip exactly), and an empty Lua table
+  reads back as an empty JSON object rather than an array.
+- A path/template that fails to parse always raises a catchable error naming
+  it, on every function.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/jsonpath"
+
+L.PreloadModule("jsonpath", jsonpath.Loader)
+```
+
+**Lua API (general-purpose data):**
+
+```lua
+local jsonpath = require("jsonpath")
+
+local order = {
+  customer = "acme",
+  items = {
+    {sku = "widget", qty = 3, price = 9.99},
+    {sku = "gadget", qty = 1, price = 49.99},
+  },
+}
+
+local skus = jsonpath.query(order, "{.items[*].sku}")        -- {"widget", "gadget"}
+local first_qty = jsonpath.first(order, "{.items[0].qty}", 0) -- 3
+local has_gadget = jsonpath.exists(order, "{.items[?(@.sku==\"gadget\")]}") -- true
+local summary = jsonpath.render(order, "{.customer}: {.items[*].sku}")     -- "acme: widget gadget"
+```
+
+**Lua API (Kubernetes, the dialect's home turf):**
+
+```lua
+local jsonpath = require("jsonpath")
+
+local images = jsonpath.query(pod, "{.spec.containers[*].image}")
+if jsonpath.exists(pod, "{.spec.containers[?(@.securityContext.privileged==true)]}") then
+  return deny("privileged container")
+end
 ```
 
 ## Features
