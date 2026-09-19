@@ -845,7 +845,7 @@ import (
 
 func main() {
     reg := luareg.NewRegistry()
-    modules.RegisterAll(reg)   // glua's 19 built-in modules
+    modules.RegisterAll(reg)   // glua's 20 built-in modules
     widget.Register(reg)       // your module
 
     gen := stubgen.NewGenerator()
@@ -1687,6 +1687,40 @@ count = strings.count("banana", "a")  -- 3
 
 -- Replace
 result = strings.replace("hello world", "world", "there", -1)  -- "hello there"
+
+-- Whitespace trimming (the single most-missed function before this existed)
+trimmed = strings.trim_space("  hello  ")  -- "hello"
+
+-- Prefix/suffix removal (not just checking)
+s = strings.trim_prefix("hello world", "hello ")  -- "world"
+s = strings.trim_suffix("app.tar.gz", ".gz")      -- "app.tar"
+
+-- Split on whitespace runs, with no empty entries
+parts = strings.fields("  the quick  brown fox  ")  -- {"the", "quick", "brown", "fox"}
+
+-- Repeat. Named rep, not repeat: "repeat" is a reserved word in Lua, so
+-- strings.repeat(s, n) would be a syntax error at the call site.
+s = strings.rep("ab", 3)  -- "ababab"
+
+-- index/last_index are 1-based, returning 0 when absent -- NOT Go's
+-- 0-based/-1 convention. This composes with string.sub directly.
+pos = strings.index("key=value", "=")        -- 4
+missing = strings.index("hello", "xyz")      -- 0
+pos = strings.last_index("banana", "an")     -- 4
+
+-- Case-insensitive equality (simple Unicode case-folding)
+eq = strings.equal_fold("Hello", "HELLO")  -- true
+
+-- Title-case the first rune of each whitespace-separated word. First-rune
+-- only, not language-aware -- does not implement locale casing exceptions
+-- (e.g. "of"/"the" staying lowercase in real title case).
+s = strings.title("hello world")  -- "Hello World"
+
+-- Cut: split around the first occurrence of a separator
+before, after, found = strings.cut("app=nginx", "=")  -- "app", "nginx", true
+
+-- Split with a limit (the remainder stays unsplit in the last element)
+parts = strings.split_n("a,b,c,d", ",", 2)  -- {"a", "b,c,d"}
 ```
 
 #### bit32
@@ -1795,6 +1829,64 @@ print(strconv.parse_bool("TRUE"))            -- true
 local q = strconv.quote("line one\nline two")
 print(strconv.unquote(q) == "line one\nline two") -- true
 ```
+
+#### text
+
+Presentation/layout string operations that Go's standard library does not
+provide: word wrap, indent/dedent, truncation with an ellipsis, and rune
+padding.
+
+The split from `strings` is deliberate: `strings` binds Go's `strings`
+package one-to-one (if Go has it, it goes there); `text` is for operations Go
+does not have at all.
+
+**Every function here is rune-oriented, not display-width-oriented.**
+"Width" and "length" always mean a count of Unicode code points, never bytes
+and never terminal display cells. A CJK or emoji string will not visually
+align in a monospace terminal even though these functions agree it is "N
+runes wide" — getting real display width right needs a dependency
+(`mattn/go-runewidth`) that is deliberately not taken for this module. This
+is a stated limitation, not a bug.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/text"
+
+L.PreloadModule("text", text.Loader)
+```
+
+**Lua API:**
+
+```lua
+local text = require("text")
+
+-- Greedy word wrap. Existing "\n" are hard paragraph breaks. A word longer
+-- than width is not split -- it overflows its own line. Raises if width < 1.
+local wrapped = text.wrap("the quick brown fox jumps over the lazy dog", 20)
+
+-- Prefix every line. A trailing empty line (s ends with "\n") is not
+-- prefixed, so a trailing newline survives indenting unchanged.
+print(text.indent(wrapped, "  | "))
+
+-- Remove the common leading-whitespace prefix across all non-blank lines.
+-- Tabs and spaces are compared literally, never expanded; blank lines are
+-- normalized to empty rather than participating in the margin calculation.
+local code = "    def f():\n        return 1\n"
+print(text.dedent(code))  -- "def f():\n    return 1\n"
+
+-- Truncate to a maximum rune width, appending an ellipsis when shortened.
+print(text.truncate("sha256:0123456789abcdef", 12, "…"))  -- "sha256:012…"
+
+-- Pad with a single rune. Never truncates -- an already-wider string is
+-- returned unchanged.
+print(text.pad_right("NAME", 20, " ") .. "STATUS")
+print(text.pad_left("42", 5, "0"))  -- "00042"
+```
+
+`text.table` (an ASCII table formatter) was considered and deliberately cut
+from this module — its design surface (column alignment, cell wrapping,
+border styles) is a caller concern, not a stdlib concern.
 
 ## Features
 

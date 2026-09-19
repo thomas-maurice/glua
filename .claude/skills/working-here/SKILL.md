@@ -87,6 +87,24 @@ intentional, not a bug: a k8s `Secret.Data` renders as base64 in
 `kubectl get -o yaml`, which is the mental model module users already have.
 Do not "fix" the nested case without a deliberate decision.
 
+**A nil Go slice becomes Lua `nil`, not an empty table.** It travels the JSON
+path, and `json.Marshal` renders a nil slice as `null`. An empty non-nil slice
+renders as `[]` and arrives as an empty table. So a function returning a nil
+slice hands Lua something that breaks `#result` and `ipairs(result)`.
+
+Several stdlib functions return nil rather than an empty slice on "no results" —
+`regexp.FindAllString` and `strings.SplitN(s, sep, 0)` both do. **Always
+normalise before returning:**
+
+```go
+if matches == nil {
+    return []string{}, nil
+}
+```
+
+`pkg/modules/regexp/regexp.go:60` is the precedent. Any new function returning a
+slice needs a test for the empty case that asserts `type(x) == "table"`.
+
 **gopher-lua's `math.huge` is `math.MaxFloat64`, not `+Inf`.** Stock Lua 5.1 sets
 it to `HUGE_VAL`, i.e. infinity. So `math.huge == 1/0` is **false** here, and a
 test that expects `math.huge` to behave as infinity will fail confusingly. Real

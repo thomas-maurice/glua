@@ -47,6 +47,7 @@ import (
 	"github.com/thomas-maurice/glua/pkg/modules/strconv"
 	"github.com/thomas-maurice/glua/pkg/modules/strings"
 	"github.com/thomas-maurice/glua/pkg/modules/template"
+	"github.com/thomas-maurice/glua/pkg/modules/text"
 	"github.com/thomas-maurice/glua/pkg/modules/time"
 	"github.com/thomas-maurice/glua/pkg/modules/yaml"
 )
@@ -76,6 +77,7 @@ func RegisterAll(reg *luareg.Registry) {
 	strconv.Register(reg)
 	strings.Register(reg)
 	template.Register(reg)
+	text.Register(reg)
 	time.Register(reg)
 	yaml.Register(reg)
 }
