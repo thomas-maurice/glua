@@ -38,6 +38,7 @@ import (
 	"github.com/thomas-maurice/glua/pkg/modules/fs"
 	"github.com/thomas-maurice/glua/pkg/modules/hash"
 	"github.com/thomas-maurice/glua/pkg/modules/hex"
+	"github.com/thomas-maurice/glua/pkg/modules/hmac"
 	"github.com/thomas-maurice/glua/pkg/modules/http"
 	"github.com/thomas-maurice/glua/pkg/modules/json"
 	"github.com/thomas-maurice/glua/pkg/modules/jsonpath"
@@ -46,6 +47,7 @@ import (
 	logmod "github.com/thomas-maurice/glua/pkg/modules/log"
 	"github.com/thomas-maurice/glua/pkg/modules/netaddr"
 	"github.com/thomas-maurice/glua/pkg/modules/osmod"
+	"github.com/thomas-maurice/glua/pkg/modules/password"
 	"github.com/thomas-maurice/glua/pkg/modules/random"
 	"github.com/thomas-maurice/glua/pkg/modules/regexp"
 	"github.com/thomas-maurice/glua/pkg/modules/spew"
@@ -75,6 +77,7 @@ func RegisterAll(reg *luareg.Registry) {
 	fs.Register(reg)
 	hash.Register(reg)
 	hex.Register(reg)
+	hmac.Register(reg)
 	http.Register(reg)
 	json.Register(reg)
 	jsonpath.Register(reg)
@@ -83,6 +86,7 @@ func RegisterAll(reg *luareg.Registry) {
 	logmod.Register(reg)
 	netaddr.Register(reg)
 	osmod.Register(reg)
+	password.Register(reg)
 	random.Register(reg)
 	regexp.Register(reg)
 	spew.Register(reg)

@@ -845,7 +845,7 @@ import (
 
 func main() {
     reg := luareg.NewRegistry()
-    modules.RegisterAll(reg)   // glua's 27 built-in modules
+    modules.RegisterAll(reg)   // glua's 29 built-in modules
     widget.Register(reg)       // your module
 
     gen := stubgen.NewGenerator()
@@ -1498,6 +1498,54 @@ local hash = require("hash")
 local pod_hash = hash.sha256_obj(pod.spec)
 -- Store/compare this hash to detect changes
 ```
+
+`hash.hmac_sha256` is deprecated in favour of the `hmac` module below — kept for compatibility, but new code should use `hmac.sha256`/`hmac.verify_sha256`.
+
+#### hmac
+
+HMAC tag computation and verification, where the constant-time comparison is impossible to get wrong because it never appears in Lua.
+
+A script that does `if hash.hmac_sha256(msg, key) == tag then` has written a timing oracle without realizing it — Go's `==` is an early-exit string comparison, so its timing leaks how many leading bytes matched. This module never exposes a comparison primitive at all: `verify_*` computes and compares internally with `crypto/hmac.Equal`. There is deliberately no `hmac.equal`.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/hmac"
+
+L.PreloadModule("hmac", hmac.Loader)
+```
+
+**Lua API:**
+
+```lua
+local hmac = require("hmac")
+
+-- Compute a tag (lowercase hex)
+tag = hmac.sha1(message, key)
+tag = hmac.sha256(message, key)
+tag = hmac.sha512(message, key)
+
+-- Verify a tag. This is the ONLY way to check one — never raises, even on
+-- garbage input, because the tag is attacker-controlled.
+ok = hmac.verify_sha1(message, key, tag)
+ok = hmac.verify_sha256(message, key, tag)
+ok = hmac.verify_sha512(message, key, tag)
+```
+
+**Example — verifying a webhook signature:**
+
+```lua
+local hmac = require("hmac")
+
+local tag = hmac.sha256(payload, secret)  -- computed by the sender
+
+-- The only way to check it. No == on tags anywhere.
+if not hmac.verify_sha256(payload, secret, request.headers["x-signature"]) then
+  return deny("bad signature")
+end
+```
+
+Verification is per-algorithm (`verify_sha256`, not `verify(m, k, tag, algorithm)`) so an algorithm name can never arrive from attacker-controlled data. `verify_*` accepts the tag as lowercase or uppercase hex and returns `false` — never raises — for a wrong, malformed, or wrong-length tag. Contrast this with `password.verify` below, which raises on a malformed hash because that hash is the application's own data.
 
 #### log
 
@@ -2196,6 +2244,39 @@ local salt    = random.hex(16)
 local pin     = random.string(6, "0123456789")
 local dieRoll = random.int(1, 6)                 -- inclusive, like math.random
 ```
+
+#### password
+
+bcrypt password hashing and verification. argon2id is deliberately deferred — bcrypt's hash string is self-describing (cost and salt travel with it), so `verify` needs no extra parameters and cost rotation needs no schema migration.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/password"
+
+L.PreloadModule("password", password.Loader)
+```
+
+**Lua API:**
+
+```lua
+local password = require("password")
+
+local stored = password.hash(plaintext, password.DEFAULT_COST)  -- raises if cost is out of [4,31] or plaintext > 72 bytes
+
+if password.verify(attempt, stored) then
+  if password.cost(stored) < password.DEFAULT_COST then
+    stored = password.hash(attempt, password.DEFAULT_COST)   -- rehash on login
+  end
+  return allow()
+end
+return deny("invalid credentials")
+```
+
+- `password.hash(plaintext, cost)` raises on a `cost` outside `[4, 31]` (bcrypt's own range) and on a `plaintext` over 72 bytes. bcrypt silently truncates input beyond 72 bytes internally, which would let two distinct long passwords sharing the same 72-byte prefix verify identically — this module rejects the over-length input outright instead of truncating it.
+- `password.verify(plaintext, hash)` returns `false` (not an error) for a wrong password, since the plaintext is attacker-controlled and a wrong guess is a normal outcome. It **raises** on a malformed/non-bcrypt `hash`, because the hash is the application's own stored data — a malformed one means the database or a migration is broken, not that the user mistyped their password. This is the deliberate mirror image of `hmac.verify_*` above, which never raises because its `tag` argument is the attacker-controlled one.
+- `password.cost(hash)` returns the cost a hash was created with, for rehash-on-login logic; raises on a malformed hash.
+- Comparison is constant-time by construction (`bcrypt.CompareHashAndPassword` re-derives and compares the derived hashes), and — same rule as `hmac` — there is no `password.equal`.
 
 #### uuid
 
