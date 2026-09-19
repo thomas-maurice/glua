@@ -34,13 +34,13 @@ import (
 // added collections, bringing it to 21; S5/S6 added netaddr and url,
 // bringing it to 23; S7/S9 added compress, random and uuid, bringing it to
 // 26; S8 added jsonpath, bringing it to 27; S10/S11 added hmac and
-// password, bringing it to 29. RegisterAll must wire every one of them.
-// Locking in the exact count catches a module being silently dropped from
-// the aggregator (which would silently disappear from the regenerated
-// library/*.gen.lua too).
+// password, bringing it to 29; S12/S13 added x509 and jwt, bringing it to
+// 31. RegisterAll must wire every one of them. Locking in the exact count
+// catches a module being silently dropped from the aggregator (which would
+// silently disappear from the regenerated library/*.gen.lua too).
 func TestRegisterAll_AllModulesWired(t *testing.T) {
 	reg := luareg.NewRegistry()
 	require.NotPanics(t, func() { RegisterAll(reg) })
-	assert.Equal(t, 29, len(reg.Modules()),
+	assert.Equal(t, 31, len(reg.Modules()),
 		"RegisterAll must wire every module; missing module would silently drop from the stub regen")
 }

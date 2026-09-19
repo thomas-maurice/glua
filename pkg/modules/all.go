@@ -42,6 +42,7 @@ import (
 	"github.com/thomas-maurice/glua/pkg/modules/http"
 	"github.com/thomas-maurice/glua/pkg/modules/json"
 	"github.com/thomas-maurice/glua/pkg/modules/jsonpath"
+	"github.com/thomas-maurice/glua/pkg/modules/jwt"
 	k8sclient "github.com/thomas-maurice/glua/pkg/modules/k8sclient"
 	"github.com/thomas-maurice/glua/pkg/modules/kubernetes"
 	logmod "github.com/thomas-maurice/glua/pkg/modules/log"
@@ -58,6 +59,7 @@ import (
 	"github.com/thomas-maurice/glua/pkg/modules/time"
 	neturl "github.com/thomas-maurice/glua/pkg/modules/url"
 	"github.com/thomas-maurice/glua/pkg/modules/uuid"
+	x509mod "github.com/thomas-maurice/glua/pkg/modules/x509"
 	"github.com/thomas-maurice/glua/pkg/modules/yaml"
 )
 
@@ -81,6 +83,7 @@ func RegisterAll(reg *luareg.Registry) {
 	http.Register(reg)
 	json.Register(reg)
 	jsonpath.Register(reg)
+	jwt.Register(reg)
 	k8sclient.Register(reg)
 	kubernetes.Register(reg)
 	logmod.Register(reg)
@@ -97,5 +100,6 @@ func RegisterAll(reg *luareg.Registry) {
 	time.Register(reg)
 	neturl.Register(reg)
 	uuid.Register(reg)
+	x509mod.Register(reg)
 	yaml.Register(reg)
 }

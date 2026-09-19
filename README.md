@@ -845,7 +845,7 @@ import (
 
 func main() {
     reg := luareg.NewRegistry()
-    modules.RegisterAll(reg)   // glua's 29 built-in modules
+    modules.RegisterAll(reg)   // glua's 31 built-in modules
     widget.Register(reg)       // your module
 
     gen := stubgen.NewGenerator()
@@ -2389,6 +2389,132 @@ if jsonpath.exists(pod, "{.spec.containers[?(@.securityContext.privileged==true)
   return deny("privileged container")
 end
 ```
+
+#### x509
+
+Parses PEM certificates **from a string** and answers questions about them —
+subject/issuer, SANs, validity window, key usages, a chain verification —
+with two hard invariants:
+
+- **No file reads, ever.** Every function takes PEM text as a Lua string.
+  There is no `x509.parse_file` — read the file with the `fs` module and
+  pass the contents in.
+- **No network and no system trust store.** `crypto/x509.Verify` never does
+  AIA/OCSP/CRL fetching, so "no network" is free. `x509.SystemCertPool` is
+  **never** called anywhere in this module — `verify_chain`'s root and
+  intermediate pools are built exclusively from the PEM text you pass in, so
+  an empty `roots` argument can never verify anything, on any machine.
+
+`not_before`/`not_after` are **Unix-second numbers**, not RFC3339 strings, so
+they compose with the `time` module (`time.format`, `time.diff`) the same way
+`time` and `uuid` do — this deliberately differs from the `kubernetes`
+module, which speaks RFC3339 strings. `serial` is an exact decimal string
+(serials can be up to 20 bytes, past float64's exact range). `ip_addresses`
+reports both IPv4 and IPv6 SANs correctly.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/x509"
+
+L.PreloadModule("x509", x509.Loader)
+```
+
+**Lua API:**
+
+```lua
+local x509, time = require("x509"), require("time")
+
+local c = x509.parse(secret.data["tls.crt"])
+print(c.subject_cn, c.serial)
+print(time.format(c.not_after, "2006-01-02"))          -- composes with the time module
+
+local days = x509.expires_in_days(pem, time.now())
+if days < 30 then warn(("cert expires in %.1f days"):format(days)) end
+
+-- verify_chain NEVER trusts the host's system certificate store: only
+-- roots/intermediates you pass in are considered.
+local ok, reason = x509.verify_chain(leafPem, intermediatesPem, rootsPem,
+  { dns_name = "api.example.com", at_time = time.now(), key_usages = {"server_auth"} })
+if not ok then return deny("chain invalid: " .. reason) end
+```
+
+- `x509.parse`/`x509.parse_chain` raise on missing/wrong-type PEM blocks or
+  bad DER. `x509.verify_chain` does **not** raise on a failed verification —
+  "this chain isn't trusted" is a normal, expected outcome — it returns
+  `ok, reason` instead, with `reason` empty on success.
+- `opts.at_time` for `verify_chain` is required and must not be `0`: a
+  policy check that silently defaults to "verify as of 1970" is not a
+  validity check anyone wants, so a zero time raises rather than defaulting.
+
+#### jwt
+
+Decodes, verifies and signs JSON Web Tokens, with the two classic JWT
+footguns designed out of the API shape rather than merely documented
+against:
+
+- **`decode_unverified`, never `decode`.** There is no `decode` alias — the
+  dangerous, signature-skipping read can't be reached by the shorter, more
+  inviting name. Use it only to read `kid`/`iss` before choosing a key.
+- **Algorithm confusion is structurally blocked.** `verify`'s acceptable
+  algorithm set comes ONLY from `opts.algorithms`, never from the token's own
+  header — the header's `alg` is checked for membership in that list and is
+  never used to pick how `key` is interpreted. `opts.algorithms` may not mix
+  key-type families (HMAC vs. RSA-ish vs. EC): a caller passing
+  `{"HS256", "RS256"}` gets a raised error before the token is even touched,
+  because a single `key` argument cannot safely be interpreted as both a raw
+  HMAC secret and an RSA public key — which is exactly how an attacker forges
+  an HS256 token using a server's own RSA public key as the "secret".
+- **`alg: none` is refused unconditionally**, at option-validation time —
+  `opts.algorithms` is required, non-empty, and can never contain `"none"`.
+
+`exp`/`nbf` are always validated when present (no option disables either);
+`iat` is never validated. `leeway_seconds` applies to both. Every
+`VerifyOptions` field is named so its Go zero value is the safe one — most
+notably `allow_missing_exp` (default `false`): a token with no `exp` claim is
+**rejected** unless you opt in, not silently accepted.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/jwt"
+
+L.PreloadModule("jwt", jwt.Loader)
+```
+
+**Lua API:**
+
+```lua
+local jwt = require("jwt")
+
+-- Read kid WITHOUT trusting anything -- decode_unverified performs NO
+-- signature check.
+local unsafe = jwt.decode_unverified(token)
+local key = keyring[unsafe.header.kid]
+
+-- Always verify with an explicit algorithms list -- never taken from the
+-- token itself.
+local ok, claims = pcall(jwt.verify, token, key, {
+  algorithms = { "RS256" },
+  issuer     = "https://idp.example.com",
+  audience   = "api.example.com",
+  leeway_seconds = 30,
+})
+if not ok then return deny("token rejected: " .. tostring(claims)) end
+return allow(claims.sub)
+
+local signed = jwt.sign({ sub = "svc-a", exp = time.now() + 300 }, secret,
+                        { algorithm = "HS256" })
+```
+
+- Supported algorithms: `HS256/384/512`, `RS256/384/512`, `PS256/384/512`,
+  `ES256/384/512`. `EdDSA` is deferred to a later version.
+- `key` for `HS*` is the raw shared secret; for `RS*`/`PS*`/`ES*` it is a PEM
+  public key (or certificate, for `verify`) or PEM private key (for `sign`).
+  `sign` raises with a clear error if `key` doesn't match the requested
+  algorithm's key type, rather than producing a broken token.
+- Numeric claims (`exp`/`iat`/`nbf`) cross the Lua boundary as float64, well
+  inside the range where that's exact.
 
 ## Features
 

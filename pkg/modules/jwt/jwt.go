@@ -1,0 +1,375 @@
+// Copyright (c) 2024-2025 Thomas Maurice
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+// Package jwt decodes, verifies and signs JSON Web Tokens, designing out the
+// two classic JWT footguns at the API level rather than documenting around
+// them.
+//
+// # decode_unverified, not decode
+//
+// The unverified-decode function is deliberately named decode_unverified,
+// with no decode alias. jwt.decode(token) would be the most-misused
+// function in this library — naming it decode_unverified means the
+// dangerous shortcut can't be reached by the shorter, more inviting name.
+// It performs NO signature check; use it only to read kid/iss before
+// choosing a verification key.
+//
+// # Algorithm confusion is structurally impossible, not just discouraged
+//
+// The classic attack: a server picks the key type from the token's own
+// header, so an attacker takes the server's RSA PUBLIC key and signs a
+// forged token with HS256 using that public key bytes as the HMAC secret.
+// If the server's verification code blindly trusts the header's declared
+// algorithm to choose how to interpret its key material, the forged HS256
+// token verifies.
+//
+// This package closes that off two ways:
+//
+//   - The acceptable algorithm set comes ONLY from the caller's
+//     opts.algorithms, never from the token header. The token's declared alg
+//     is checked for membership in that set (via jwt/v5's WithValidMethods)
+//     and is NEVER used to pick which key type to parse `key` as.
+//   - opts.algorithms may not mix families: a caller passing
+//     {"HS256", "RS256"} gets a raised error before the token is even
+//     touched, because a single `key` argument cannot safely be interpreted
+//     two ways. A caller needing both must call verify twice, once per key.
+//     This package draws the family line at three buckets -- HMAC, RSA-ish
+//     (RS*/PS*, which share the same *rsa.PublicKey/*rsa.PrivateKey key
+//     type), and EC (ES*) -- rather than only forbidding the literal
+//     HMAC-vs-RSA pairing the classic attack uses: mixing RS256 and ES256
+//     would be exactly as ambiguous (which PEM key type is `key`?), even
+//     though it isn't the textbook CVE.
+//
+// alg: none is refused unconditionally: it can never appear in
+// opts.algorithms (rejected at option-validation time, before parsing), so
+// WithValidMethods can never admit a token that declares it.
+//
+// # Claim validation
+//
+// exp and nbf are always validated when present (there is no option to
+// disable either) via golang-jwt/jwt/v5's own Validator, which is exactly
+// the code this dependency is being taken FOR -- exp/nbf semantics with
+// leeway are where hand-rolled JWT validation tends to go subtly wrong. iat
+// is never validated (RFC 7519 defines it as informational, not a security
+// control, and comparing it invites clock-skew noise for no benefit).
+// leeway_seconds applies equally to exp and nbf. issuer/audience/subject are
+// checked only when the corresponding option is non-empty.
+//
+// Every VerifyOptions field is named so its Go zero value is the SAFE
+// value: an omitted issuer/audience/subject means "don't check" (the safe
+// default for a check that hasn't been configured), an omitted
+// leeway_seconds means zero leeway (the strict default), and — the one that
+// matters most — allow_missing_exp defaults to false, meaning a token with
+// no exp claim is REJECTED unless a caller opts in. There is deliberately
+// no require_exp field: naming it that way would make the safe behaviour
+// depend on the caller remembering to set a flag, rather than needing to
+// deliberately relax it.
+package jwt
+
+import (
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/thomas-maurice/glua/pkg/luareg"
+	lua "github.com/yuin/gopher-lua"
+)
+
+// algFamily: the three key-interpretation families this package recognises.
+// Every supported algorithm maps to exactly one, and opts.algorithms may
+// only ever span one family per call — see the package doc.
+type algFamily int
+
+const (
+	familyUnknown algFamily = iota
+	familyHMAC
+	familyRSA // RS* and PS*: both use *rsa.PublicKey / *rsa.PrivateKey
+	familyEC
+)
+
+// algFamilies: the complete, closed set of algorithms this package accepts.
+// "none" and anything not listed here (including EdDSA, deferred to a later
+// version) are unsupported. This map is the single source of truth both
+// for what verify/sign will accept and for family-mixing detection.
+var algFamilies = map[string]algFamily{
+	"HS256": familyHMAC, "HS384": familyHMAC, "HS512": familyHMAC,
+	"RS256": familyRSA, "RS384": familyRSA, "RS512": familyRSA,
+	"PS256": familyRSA, "PS384": familyRSA, "PS512": familyRSA,
+	"ES256": familyEC, "ES384": familyEC, "ES512": familyEC,
+}
+
+// Decoded: the result of decode_unverified. Both fields are populated
+// WITHOUT any signature check -- see the package doc.
+type Decoded struct {
+	Header map[string]interface{} `json:"header"` // the token's header segment, decoded
+	Claims map[string]interface{} `json:"claims"` // the token's claims segment, decoded
+}
+
+// VerifyOptions: required options for verify (F2 -- there are no optional
+// arguments in this framework). Every field's zero value is the safe value
+// -- see the package doc for why allow_missing_exp is spelled that way
+// rather than require_exp.
+type VerifyOptions struct {
+	Algorithms      []string `json:"algorithms"`        // REQUIRED, non-empty, single family, never "none"
+	Issuer          string   `json:"issuer"`            // "" = do not check
+	Audience        string   `json:"audience"`          // "" = do not check
+	Subject         string   `json:"subject"`           // "" = do not check
+	LeewaySeconds   float64  `json:"leeway_seconds"`    // 0 = no leeway; applied to both exp and nbf
+	AllowMissingExp bool     `json:"allow_missing_exp"` // false (default): a token with no exp is REJECTED
+}
+
+// SignOptions: required options for sign.
+type SignOptions struct {
+	Algorithm string `json:"algorithm"` // REQUIRED; never "none"
+	Kid       string `json:"kid"`       // "" = omit the header field
+	Typ       string `json:"typ"`       // "" = "JWT" (jwt/v5's own default)
+}
+
+// validateAlgorithms: the single choke point for the whole "algorithm
+// confusion" defense (see package doc). Used both by verify (opts.algorithms,
+// which may list several algorithms of one family) and sign (a single
+// algorithm, passed as a one-element slice so the same rejection rules
+// apply uniformly). Raises on: an empty list, "none" appearing anywhere, an
+// algorithm outside the supported set, or algorithms spanning more than one
+// family.
+func validateAlgorithms(algs []string, context string) (algFamily, error) {
+	if len(algs) == 0 {
+		return familyUnknown, fmt.Errorf("%s: algorithms is required and must not be empty", context)
+	}
+	var family algFamily
+	var first string
+	for i, alg := range algs {
+		if alg == "none" {
+			return familyUnknown, fmt.Errorf("%s: algorithm \"none\" is never accepted", context)
+		}
+		f, ok := algFamilies[alg]
+		if !ok {
+			return familyUnknown, fmt.Errorf("%s: unsupported algorithm %q", context, alg)
+		}
+		if i == 0 {
+			family = f
+			first = alg
+			continue
+		}
+		if f != family {
+			return familyUnknown, fmt.Errorf(
+				"%s: algorithms mixes algorithm families (%q and %q) -- a single key argument cannot be interpreted as both; call verify separately per key type",
+				context, first, alg)
+		}
+	}
+	return family, nil
+}
+
+// parseVerifyKey: interprets key according to family, NEVER according to
+// anything read from the token. HMAC families use the raw secret bytes;
+// RSA/EC families parse key as a PEM public key OR certificate (jwt/v5's
+// ParseRSAPublicKeyFromPEM/ParseECPublicKeyFromPEM both accept either
+// form).
+func parseVerifyKey(family algFamily, key string) (interface{}, error) {
+	switch family {
+	case familyHMAC:
+		return []byte(key), nil
+	case familyRSA:
+		return jwt.ParseRSAPublicKeyFromPEM([]byte(key))
+	case familyEC:
+		return jwt.ParseECPublicKeyFromPEM([]byte(key))
+	default:
+		return nil, errors.New("unreachable: unvalidated algorithm family")
+	}
+}
+
+// parseSignKey: the signing-side mirror of parseVerifyKey. RSA/EC families
+// parse key as a PEM PRIVATE key; a key of the wrong type (e.g. an EC PEM
+// key for an RSA algorithm) fails here with jwt/v5's own
+// ErrNotRSAPrivateKey/ErrNotECPrivateKey, which is the "reject a mismatched
+// key with a clear error" requirement.
+func parseSignKey(family algFamily, key string) (interface{}, error) {
+	switch family {
+	case familyHMAC:
+		return []byte(key), nil
+	case familyRSA:
+		return jwt.ParseRSAPrivateKeyFromPEM([]byte(key))
+	case familyEC:
+		return jwt.ParseECPrivateKeyFromPEM([]byte(key))
+	default:
+		return nil, errors.New("unreachable: unvalidated algorithm family")
+	}
+}
+
+// describeVerifyError: rewraps a jwt/v5 parse/validation error with a short
+// prefix naming WHICH check failed, so an operator's pcall message doesn't
+// read as a generic "invalid token" -- see SPECS.md S13's test plan.
+// The original error remains wrapped (%w) so errors.Is still works for a
+// caller that wants to branch on the exact jwt/v5 sentinel.
+func describeVerifyError(err error) error {
+	switch {
+	case errors.Is(err, jwt.ErrTokenExpired):
+		return fmt.Errorf("token expired: %w", err)
+	case errors.Is(err, jwt.ErrTokenNotValidYet):
+		return fmt.Errorf("token not valid yet (nbf): %w", err)
+	case errors.Is(err, jwt.ErrTokenInvalidIssuer):
+		return fmt.Errorf("issuer mismatch: %w", err)
+	case errors.Is(err, jwt.ErrTokenInvalidAudience):
+		return fmt.Errorf("audience mismatch: %w", err)
+	case errors.Is(err, jwt.ErrTokenInvalidSubject):
+		return fmt.Errorf("subject mismatch: %w", err)
+	case errors.Is(err, jwt.ErrTokenRequiredClaimMissing):
+		return fmt.Errorf("required claim missing (exp): %w", err)
+	case errors.Is(err, jwt.ErrTokenSignatureInvalid):
+		return fmt.Errorf("signature invalid or algorithm not permitted: %w", err)
+	case errors.Is(err, jwt.ErrTokenMalformed):
+		return fmt.Errorf("malformed token: %w", err)
+	default:
+		return err
+	}
+}
+
+// decodeUnverifiedFn: implements jwt.decode_unverified. Performs NO
+// signature check -- see the package doc.
+func decodeUnverifiedFn(token string) (Decoded, error) {
+	parsed, _, err := jwt.NewParser().ParseUnverified(token, jwt.MapClaims{})
+	if err != nil {
+		return Decoded{}, fmt.Errorf("jwt.decode_unverified: %w", err)
+	}
+	claims, _ := parsed.Claims.(jwt.MapClaims)
+	header := parsed.Header
+	if header == nil {
+		header = map[string]interface{}{}
+	}
+	return Decoded{
+		Header: header,
+		Claims: map[string]interface{}(claims),
+	}, nil
+}
+
+// verifyFn: implements jwt.verify. Raises on ANY failure -- see the package
+// doc and SPECS.md S13.
+func verifyFn(token, key string, opts VerifyOptions) (map[string]interface{}, error) {
+	family, err := validateAlgorithms(opts.Algorithms, "jwt.verify")
+	if err != nil {
+		return nil, err
+	}
+
+	verifyKey, err := parseVerifyKey(family, key)
+	if err != nil {
+		return nil, fmt.Errorf("jwt.verify: invalid key: %w", err)
+	}
+
+	parserOpts := []jwt.ParserOption{
+		jwt.WithValidMethods(opts.Algorithms),
+		jwt.WithLeeway(time.Duration(opts.LeewaySeconds * float64(time.Second))),
+	}
+	if opts.Issuer != "" {
+		parserOpts = append(parserOpts, jwt.WithIssuer(opts.Issuer))
+	}
+	if opts.Audience != "" {
+		parserOpts = append(parserOpts, jwt.WithAudience(opts.Audience))
+	}
+	if opts.Subject != "" {
+		parserOpts = append(parserOpts, jwt.WithSubject(opts.Subject))
+	}
+	if !opts.AllowMissingExp {
+		parserOpts = append(parserOpts, jwt.WithExpirationRequired())
+	}
+
+	claims := jwt.MapClaims{}
+	_, err = jwt.NewParser(parserOpts...).ParseWithClaims(token, claims, func(*jwt.Token) (interface{}, error) {
+		// The key is fixed by opts.algorithms' family, resolved above --
+		// NEVER by anything read from the token being verified here. See
+		// the package doc's "Algorithm confusion" section.
+		return verifyKey, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("jwt.verify: %w", describeVerifyError(err))
+	}
+	return map[string]interface{}(claims), nil
+}
+
+// signFn: implements jwt.sign.
+func signFn(claims map[string]interface{}, key string, opts SignOptions) (string, error) {
+	family, err := validateAlgorithms([]string{opts.Algorithm}, "jwt.sign")
+	if err != nil {
+		return "", err
+	}
+
+	method := jwt.GetSigningMethod(opts.Algorithm)
+	if method == nil {
+		return "", fmt.Errorf("jwt.sign: unsupported algorithm %q", opts.Algorithm)
+	}
+
+	signKey, err := parseSignKey(family, key)
+	if err != nil {
+		return "", fmt.Errorf("jwt.sign: key does not match algorithm %q: %w", opts.Algorithm, err)
+	}
+
+	token := jwt.NewWithClaims(method, jwt.MapClaims(claims))
+	if opts.Kid != "" {
+		token.Header["kid"] = opts.Kid
+	}
+	if opts.Typ != "" {
+		token.Header["typ"] = opts.Typ
+	}
+
+	signed, err := token.SignedString(signKey)
+	if err != nil {
+		return "", fmt.Errorf("jwt.sign: claims not encodable: %w", err)
+	}
+	return signed, nil
+}
+
+// build: constructs the module definition. Reused by Loader and Register.
+func build() *luareg.Module {
+	m := luareg.NewModule("jwt", "JWT decode, verify and sign, with alg:none and algorithm confusion designed out")
+
+	m.Fn("decode_unverified", decodeUnverifiedFn,
+		"decodes a JWT's header and claims WITHOUT verifying its signature -- DOES NOT verify anything; use only to read kid/iss before choosing a key",
+		luareg.Args("token"),
+		luareg.ArgDoc("token", "the compact JWT string (header.claims.signature)"),
+		luareg.ReturnDoc(0, "decoded", "the unverified header and claims"))
+
+	m.Fn("verify", verifyFn,
+		"verifies a JWT's signature and claims; raises on ANY failure: bad signature, alg not in opts.algorithms, alg:none, expired, not yet valid, issuer/audience/subject mismatch, or an unparseable key",
+		luareg.Args("token", "key", "opts"),
+		luareg.ArgDoc("token", "the compact JWT string"),
+		luareg.ArgDoc("key", "HS*: the raw shared secret; RS*/PS*/ES*: a PEM public key or certificate"),
+		luareg.ArgDoc("opts", "required options: algorithms (non-empty, single family, never \"none\"), issuer, audience, subject, leeway_seconds, allow_missing_exp"),
+		luareg.ReturnDoc(0, "claims", "the token's verified claims"))
+
+	m.Fn("sign", signFn,
+		"signs claims into a compact JWT; raises on an unknown/forbidden algorithm, a key that does not match the algorithm, or claims that cannot be JSON-encoded",
+		luareg.Args("claims", "key", "opts"),
+		luareg.ArgDoc("claims", "the claims to encode"),
+		luareg.ArgDoc("key", "HS*: the raw shared secret; RS*/PS*/ES*: a PEM private key"),
+		luareg.ArgDoc("opts", "required options: algorithm (never \"none\"), kid, typ"),
+		luareg.ReturnDoc(0, "token", "the compact JWT string"))
+
+	return m
+}
+
+// Loader: gopher-lua module loader. Use with L.PreloadModule("jwt", jwt.Loader).
+func Loader(L *lua.LState) int {
+	return build().PushTo(L)
+}
+
+// Register: adds this module to reg for stub generation.
+func Register(reg *luareg.Registry) {
+	build().Register(reg)
+}
