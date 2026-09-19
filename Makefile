@@ -109,7 +109,19 @@ bench-update:
 	@echo "=== Running benchmarks and updating README ==="
 	@go test -bench=. -benchmem ./benchmarks/ > /tmp/glua-bench-results.txt 2>&1
 	@echo "=== Updating benchmarks/README.md ==="
-	@awk '/^## Latest Benchmark Results/{print; print ""; print "```"; while(getline < "/tmp/glua-bench-results.txt"){if(/^goos:/){p=1}if(p)print; if(/^PASS/)exit}; print "```"; print ""; print "### Key Takeaways"; next}1' benchmarks/README.md > /tmp/glua-readme-new.md
+	@awk '/^## Latest Benchmark Results/{ \
+		print; print ""; print "```"; \
+		while((getline line < "/tmp/glua-bench-results.txt") > 0){ \
+			if(line ~ /^goos:/){p=1} \
+			if(p)print line; \
+			if(line ~ /^PASS/)break \
+		}; \
+		print "```"; \
+		skip=1; next \
+	} \
+	skip && /^```/{ fence++; if(fence==2){skip=0} next } \
+	skip{ next } \
+	1' benchmarks/README.md > /tmp/glua-readme-new.md
 	@if grep -q "BenchmarkGoToLuaSimple" /tmp/glua-readme-new.md; then \
 		mv /tmp/glua-readme-new.md benchmarks/README.md; \
 		echo "✓ Updated benchmarks/README.md with latest results"; \

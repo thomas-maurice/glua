@@ -9,17 +9,42 @@ goos: darwin
 goarch: arm64
 pkg: github.com/thomas-maurice/glua/benchmarks
 cpu: Apple M5
-BenchmarkGoToLuaSimple-10              942836       1240 ns/op     4276 B/op       44 allocs/op
-BenchmarkGoToLuaComplex-10             164640       6759 ns/op    23969 B/op      221 allocs/op
-BenchmarkGoToLuaPod-10                  65240      17756 ns/op    58872 B/op      468 allocs/op
-BenchmarkLuaToGoSimple-10             1350904        896.5 ns/op     1000 B/op       23 allocs/op
-BenchmarkLuaToGoComplex-10             249796       4835 ns/op     4899 B/op      118 allocs/op
-BenchmarkRoundTripSimple-10            508216       2390 ns/op     5279 B/op       67 allocs/op
-BenchmarkRoundTripPod-10                70228      17374 ns/op    42888 B/op      391 allocs/op
-BenchmarkLuaFieldAccess-10             185173       6622 ns/op    33904 B/op      112 allocs/op
-BenchmarkLuaNestedFieldAccess-10        99068      11289 ns/op    37712 B/op      269 allocs/op
-BenchmarkLuaArrayIteration-10           96232      12569 ns/op    36576 B/op      332 allocs/op
-BenchmarkLuaMapIteration-10            154359       7850 ns/op    34776 B/op      122 allocs/op
-BenchmarkLuaFieldModification-10       143973       7562 ns/op    34672 B/op      152 allocs/op
-BenchmarkLuaComplexOperation-10         38978      52104 ns/op   334735 B/op      453 allocs/op
+BenchmarkGoToLuaSimple-10           	  879066	      1377 ns/op	    4216 B/op	      43 allocs/op
+BenchmarkGoToLuaComplex-10          	  152691	      7864 ns/op	   23982 B/op	     233 allocs/op
+BenchmarkGoToLuaPod-10              	   65482	     18569 ns/op	   59081 B/op	     478 allocs/op
+BenchmarkLuaToGoSimple-10           	 1514328	       800.2 ns/op	     666 B/op	      19 allocs/op
+BenchmarkLuaToGoComplex-10          	  320875	      3765 ns/op	    3640 B/op	      82 allocs/op
+BenchmarkRoundTripSimple-10         	  504601	      2348 ns/op	    4889 B/op	      62 allocs/op
+BenchmarkRoundTripPod-10            	   75952	     16032 ns/op	   41252 B/op	     339 allocs/op
+BenchmarkLuaFieldAccess-10          	  202062	      6060 ns/op	   33904 B/op	     112 allocs/op
+BenchmarkLuaNestedFieldAccess-10    	  118362	     10129 ns/op	   37712 B/op	     269 allocs/op
+BenchmarkLuaArrayIteration-10       	  103377	     11684 ns/op	   36576 B/op	     332 allocs/op
+BenchmarkLuaMapIteration-10         	  170642	      7191 ns/op	   34776 B/op	     122 allocs/op
+BenchmarkLuaFieldModification-10    	  176596	      6826 ns/op	   34672 B/op	     152 allocs/op
+BenchmarkLuaComplexOperation-10     	   42712	     54218 ns/op	  360944 B/op	     453 allocs/op
 PASS
+```
+
+### Key Takeaways
+
+- **The JSON round-trip dominates.** Both directions marshal to JSON and back
+  (see the Translator section in the root README), so cost scales with the size
+  of the object graph, not with how many fields Lua actually touches.
+  `GoToLuaPod` moves a full Pod spec and costs ~13x `GoToLuaSimple`.
+- **Go -> Lua is the expensive direction**, roughly 1.7x `LuaToGo` on the simple
+  case and 2.1x on the complex one, allocating ~6.6x the memory across ~2.8x the
+  allocations on that complex case. Converting a large Go struct into
+  Lua is the thing to avoid in a hot path — hoist it out of the loop, or expose
+  the value as a class (userdata) instead, which skips serialisation entirely.
+- **Lua-side field access is not free.** `LuaFieldAccess` and friends allocate
+  ~34 KB per iteration because each benchmark rebuilds its table; the per-access
+  cost itself is small. Read repeatedly from one converted table rather than
+  reconverting.
+- **Nested access costs about 1.7x flat access**, and iteration (array or map)
+  lands in the same range. None of these are pathological; the conversion at the
+  boundary is what to watch.
+
+Comparability note: these numbers were produced under Go 1.26+ with the current
+dependency set. Comparing them against results recorded before a toolchain or
+gopher-lua bump is not meaningful — re-run `make bench-update` on an idle
+machine and compare like for like.
