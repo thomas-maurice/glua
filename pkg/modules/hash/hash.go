@@ -18,6 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package hash provides cryptographic hash utilities for Lua scripts: MD5,
+// SHA1, SHA256, SHA512 and HMAC-SHA256, over strings or arbitrary Lua values
+// serialised to JSON.
 package hash
 
 import (
@@ -121,23 +124,42 @@ func sha512HashObj(L *lua.LState, tbl lua.LValue) (string, error) {
 func build() *luareg.Module {
 	m := luareg.NewModule("hash", "cryptographic hash utilities")
 	m.Fn("md5", md5Hash, "computes the hex-encoded MD5 hash of a string",
-		luareg.Args("s"))
+		luareg.Args("s"),
+		luareg.ArgDoc("s", "the string to hash"),
+		luareg.ReturnDoc(0, "hex", "the lowercase hex-encoded MD5 digest"))
 	m.Fn("sha1", sha1Hash, "computes the hex-encoded SHA1 hash of a string",
-		luareg.Args("s"))
+		luareg.Args("s"),
+		luareg.ArgDoc("s", "the string to hash"),
+		luareg.ReturnDoc(0, "hex", "the lowercase hex-encoded SHA1 digest"))
 	m.Fn("sha256", sha256Hash, "computes the hex-encoded SHA256 hash of a string",
-		luareg.Args("s"))
+		luareg.Args("s"),
+		luareg.ArgDoc("s", "the string to hash"),
+		luareg.ReturnDoc(0, "hex", "the lowercase hex-encoded SHA256 digest"))
 	m.Fn("sha512", sha512Hash, "computes the hex-encoded SHA512 hash of a string",
-		luareg.Args("s"))
+		luareg.Args("s"),
+		luareg.ArgDoc("s", "the string to hash"),
+		luareg.ReturnDoc(0, "hex", "the lowercase hex-encoded SHA512 digest"))
 	m.Fn("hmac_sha256", hmacSHA256, "computes the hex-encoded HMAC-SHA256 of a message with a key",
-		luareg.Args("message", "key"))
+		luareg.Args("message", "key"),
+		luareg.ArgDoc("message", "the message to authenticate"),
+		luareg.ArgDoc("key", "the shared secret key"),
+		luareg.ReturnDoc(0, "hex", "the lowercase hex-encoded HMAC-SHA256 tag"))
 	m.Fn("md5_obj", md5HashObj, "computes the MD5 hash of a Lua value serialised to JSON",
-		luareg.Args("obj"))
+		luareg.Args("obj"),
+		luareg.ArgDoc("obj", "the Lua value to hash; it is JSON-marshalled before hashing"),
+		luareg.ReturnDoc(0, "hex", "the lowercase hex-encoded MD5 digest of the JSON encoding"))
 	m.Fn("sha1_obj", sha1HashObj, "computes the SHA1 hash of a Lua value serialised to JSON",
-		luareg.Args("obj"))
+		luareg.Args("obj"),
+		luareg.ArgDoc("obj", "the Lua value to hash; it is JSON-marshalled before hashing"),
+		luareg.ReturnDoc(0, "hex", "the lowercase hex-encoded SHA1 digest of the JSON encoding"))
 	m.Fn("sha256_obj", sha256HashObj, "computes the SHA256 hash of a Lua value serialised to JSON",
-		luareg.Args("obj"))
+		luareg.Args("obj"),
+		luareg.ArgDoc("obj", "the Lua value to hash; it is JSON-marshalled before hashing"),
+		luareg.ReturnDoc(0, "hex", "the lowercase hex-encoded SHA256 digest of the JSON encoding"))
 	m.Fn("sha512_obj", sha512HashObj, "computes the SHA512 hash of a Lua value serialised to JSON",
-		luareg.Args("obj"))
+		luareg.Args("obj"),
+		luareg.ArgDoc("obj", "the Lua value to hash; it is JSON-marshalled before hashing"),
+		luareg.ReturnDoc(0, "hex", "the lowercase hex-encoded SHA512 digest of the JSON encoding"))
 	return m
 }
 

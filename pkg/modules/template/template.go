@@ -18,6 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package template provides Go text/template rendering utilities for Lua
+// scripts, from an inline string or a file, with a Lua table as the data
+// context.
 package template
 
 import (
@@ -93,7 +96,7 @@ func luaValueToGo(L *lua.LState, val lua.LValue) interface{} {
 	case *lua.LTable:
 		maxN := 0
 		isArray := true
-		v.ForEach(func(key lua.LValue, val lua.LValue) {
+		v.ForEach(func(key, _ lua.LValue) {
 			if keyNum, ok := key.(lua.LNumber); ok {
 				if n := int(keyNum); n > 0 && float64(n) == float64(keyNum) {
 					if n > maxN {
@@ -123,9 +126,15 @@ func luaValueToGo(L *lua.LState, val lua.LValue) interface{} {
 func build() *luareg.Module {
 	m := luareg.NewModule("template", "Go text/template rendering utilities")
 	m.Fn("render", render, "renders a template string with data, raises on error",
-		luareg.Args("tmpl", "data"))
+		luareg.Args("tmpl", "data"),
+		luareg.ArgDoc("tmpl", "a Go text/template source string"),
+		luareg.ArgDoc("data", "table exposed to the template as the root context (dot)"),
+		luareg.ReturnDoc(0, "out", "the rendered template output"))
 	m.Fn("render_file", renderFile, "renders a template file with data, raises on error",
-		luareg.Args("path", "data"))
+		luareg.Args("path", "data"),
+		luareg.ArgDoc("path", "path to a file containing Go text/template source"),
+		luareg.ArgDoc("data", "table exposed to the template as the root context (dot)"),
+		luareg.ReturnDoc(0, "out", "the rendered template output"))
 	return m
 }
 

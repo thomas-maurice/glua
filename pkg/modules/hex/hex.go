@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package hex provides hexadecimal encoding and decoding utilities for Lua
+// scripts.
 package hex
 
 import (
@@ -46,9 +48,13 @@ func decode(s string) (string, error) {
 func build() *luareg.Module {
 	m := luareg.NewModule("hex", "hexadecimal encoding and decoding utilities")
 	m.Fn("encode", encode, "encodes a string to hexadecimal",
-		luareg.Args("s"))
+		luareg.Args("s"),
+		luareg.ArgDoc("s", "the raw string to encode"),
+		luareg.ReturnDoc(0, "encoded", "the lowercase hexadecimal encoding of s"))
 	m.Fn("decode", decode, "decodes a hexadecimal string, raises on invalid input",
-		luareg.Args("encoded"))
+		luareg.Args("encoded"),
+		luareg.ArgDoc("encoded", "a hexadecimal string with an even number of digits"),
+		luareg.ReturnDoc(0, "s", "the decoded raw string"))
 	return m
 }
 

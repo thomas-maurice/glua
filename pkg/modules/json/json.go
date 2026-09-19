@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package json provides JSON serialisation and deserialisation utilities for
+// Lua scripts.
 package json
 
 import (
@@ -91,7 +93,7 @@ func luaToGo(L *lua.LState, value lua.LValue) interface{} {
 	case *lua.LTable:
 		maxN := 0
 		isArray := true
-		v.ForEach(func(key lua.LValue, val lua.LValue) {
+		v.ForEach(func(key, _ lua.LValue) {
 			if keyNum, ok := key.(lua.LNumber); ok {
 				if n := int(keyNum); n > 0 && float64(n) == float64(keyNum) {
 					if n > maxN {
@@ -129,9 +131,13 @@ func luaToGo(L *lua.LState, value lua.LValue) interface{} {
 func build() *luareg.Module {
 	m := luareg.NewModule("json", "JSON serialisation and deserialisation utilities")
 	m.Fn("parse", parse, "parses a JSON string into a Lua value, raises on invalid JSON",
-		luareg.Args("jsonstr"))
+		luareg.Args("jsonstr"),
+		luareg.ArgDoc("jsonstr", "a JSON-encoded string"),
+		luareg.ReturnDoc(0, "value", "the decoded value: table, string, number, boolean or nil"))
 	m.Fn("stringify", stringify, "converts a Lua value to a JSON string, raises on error",
-		luareg.Args("value"))
+		luareg.Args("value"),
+		luareg.ArgDoc("value", "the Lua value to encode; tables become JSON objects or arrays"),
+		luareg.ReturnDoc(0, "jsonstr", "the JSON-encoded string"))
 	return m
 }
 

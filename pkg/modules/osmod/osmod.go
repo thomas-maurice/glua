@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package osmod provides operating system utilities for Lua scripts:
+// environment variables, hostname and the temp directory path.
 package osmod
 
 import (
@@ -52,13 +54,22 @@ func hostname() (string, error) {
 func build() *luareg.Module {
 	m := luareg.NewModule("osmod", "operating system utilities")
 	m.Fn("getenv", os.Getenv, "returns the value of an environment variable",
-		luareg.Args("name"))
+		luareg.Args("name"),
+		luareg.ArgDoc("name", "the environment variable name"),
+		luareg.ReturnDoc(0, "value", "the variable's value, or empty string if unset"))
 	m.Fn("setenv", setenv, "sets an environment variable, raises on error",
-		luareg.Args("name", "value"))
+		luareg.Args("name", "value"),
+		luareg.ArgDoc("name", "the environment variable name"),
+		luareg.ArgDoc("value", "the value to set"),
+		luareg.ReturnDoc(0, "ok", "true on success"))
 	m.Fn("unsetenv", unsetenv, "unsets an environment variable, raises on error",
-		luareg.Args("name"))
-	m.Fn("hostname", hostname, "returns the system hostname, raises on error")
-	m.Fn("tmpdir", os.TempDir, "returns the default temporary directory path")
+		luareg.Args("name"),
+		luareg.ArgDoc("name", "the environment variable name to remove"),
+		luareg.ReturnDoc(0, "ok", "true on success"))
+	m.Fn("hostname", hostname, "returns the system hostname, raises on error",
+		luareg.ReturnDoc(0, "name", "the system's hostname as reported by the OS"))
+	m.Fn("tmpdir", os.TempDir, "returns the default temporary directory path",
+		luareg.ReturnDoc(0, "path", "the directory the OS designates for temporary files"))
 	return m
 }
 

@@ -18,6 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package kubernetes provides Kubernetes utility functions for Lua scripts:
+// quantity/time/duration parsing and formatting, GVK matching, and helpers
+// for manipulating an object's metadata, labels and annotations.
 package kubernetes
 
 import (
@@ -469,49 +472,106 @@ func GetAnnotation(obj map[string]any, key string) string {
 func build() *luareg.Module {
 	m := luareg.NewModule("kubernetes", "Kubernetes utility functions")
 	m.Fn("parse_memory", ParseMemory, "parse a Kubernetes memory quantity, returns bytes",
-		luareg.Args("quantity"))
+		luareg.Args("quantity"),
+		luareg.ArgDoc("quantity", "a K8s resource.Quantity string, e.g. \"1024Mi\" or \"1Gi\""),
+		luareg.ReturnDoc(0, "bytes", "the quantity's value in bytes"))
 	m.Fn("parse_cpu", ParseCPU, "parse a Kubernetes CPU quantity, returns millicores",
-		luareg.Args("quantity"))
+		luareg.Args("quantity"),
+		luareg.ArgDoc("quantity", "a K8s resource.Quantity string, e.g. \"100m\" or \"1\""),
+		luareg.ReturnDoc(0, "millicores", "the quantity's value in millicores (1000m = 1 core)"))
 	m.Fn("format_memory", FormatMemory, "format a byte count as a canonical K8s memory string (BinarySI: Ki/Mi/Gi/Ti)",
-		luareg.Args("bytes"))
+		luareg.Args("bytes"),
+		luareg.ArgDoc("bytes", "the memory amount in bytes"),
+		luareg.ReturnDoc(0, "quantity", "the binary-SI quantity string, e.g. \"2Gi\""))
 	m.Fn("format_memory_si", FormatMemorySI, "format a byte count as a canonical K8s memory string (DecimalSI: k/M/G/T)",
-		luareg.Args("bytes"))
+		luareg.Args("bytes"),
+		luareg.ArgDoc("bytes", "the memory amount in bytes"),
+		luareg.ReturnDoc(0, "quantity", "the decimal-SI quantity string, e.g. \"2G\""))
 	m.Fn("format_cpu", FormatCPU, "format a millicore count as a canonical K8s CPU string (DecimalSI)",
-		luareg.Args("millicores"))
+		luareg.Args("millicores"),
+		luareg.ArgDoc("millicores", "the CPU amount in millicores (1000m = 1 core)"),
+		luareg.ReturnDoc(0, "quantity", "the decimal-SI CPU quantity string, e.g. \"500m\" or \"1\""))
 	m.Fn("parse_time", ParseTime, "parse an RFC3339 time string, returns Unix timestamp",
-		luareg.Args("timestr"))
+		luareg.Args("timestr"),
+		luareg.ArgDoc("timestr", "an RFC3339-formatted timestamp, e.g. \"2025-10-03T16:39:00Z\""),
+		luareg.ReturnDoc(0, "timestamp", "seconds since the Unix epoch (UTC)"))
 	m.Fn("format_time", FormatTime, "convert a Unix timestamp to RFC3339 string",
-		luareg.Args("timestamp"))
+		luareg.Args("timestamp"),
+		luareg.ArgDoc("timestamp", "seconds since the Unix epoch (UTC)"),
+		luareg.ReturnDoc(0, "timestr", "the RFC3339-formatted timestamp"))
 	m.Fn("parse_duration", ParseDuration, "parse a duration string, returns seconds",
-		luareg.Args("duration"))
+		luareg.Args("duration"),
+		luareg.ArgDoc("duration", "a Go-style duration string, e.g. \"5m\" or \"1h30m\""),
+		luareg.ReturnDoc(0, "seconds", "the duration's length in seconds"))
 	m.Fn("format_duration", FormatDuration, "convert seconds to a duration string",
-		luareg.Args("seconds"))
+		luareg.Args("seconds"),
+		luareg.ArgDoc("seconds", "a duration length in seconds"),
+		luareg.ReturnDoc(0, "duration", "the Go-style duration string, e.g. \"5m0s\""))
 	m.Fn("match_gvk", MatchGVK, "check if a Kubernetes object matches a GVK matcher",
-		luareg.Args("obj", "matcher"))
+		luareg.Args("obj", "matcher"),
+		luareg.ArgDoc("obj", "the object to check; must have apiVersion and kind keys"),
+		luareg.ArgDoc("matcher", "GVK matcher table with group, version and kind fields"),
+		luareg.ReturnDoc(0, "matches", "true if obj's apiVersion and kind match matcher"))
 	m.Fn("ensure_metadata", EnsureMetadata, "ensure metadata.labels and annotations exist, returns updated obj",
-		luareg.Args("obj"))
+		luareg.Args("obj"),
+		luareg.ArgDoc("obj", "the object whose metadata.labels and metadata.annotations should exist"),
+		luareg.ReturnDoc(0, "obj", "the object with metadata.labels and metadata.annotations guaranteed present"))
 	m.Fn("init_defaults", InitDefaults, "ensure metadata.labels and annotations exist, returns updated obj",
-		luareg.Args("obj"))
+		luareg.Args("obj"),
+		luareg.ArgDoc("obj", "the object whose metadata.labels and metadata.annotations should exist"),
+		luareg.ReturnDoc(0, "obj", "the object with metadata.labels and metadata.annotations guaranteed present"))
 	m.Fn("add_label", AddLabel, "add a label and return the updated obj",
-		luareg.Args("obj", "key", "value"))
+		luareg.Args("obj", "key", "value"),
+		luareg.ArgDoc("obj", "the object to modify"),
+		luareg.ArgDoc("key", "the label key to set"),
+		luareg.ArgDoc("value", "the label value to set"),
+		luareg.ReturnDoc(0, "obj", "the object with the label set"))
 	m.Fn("add_labels", AddLabels, "add multiple labels and return the updated obj",
-		luareg.Args("obj", "labels"))
+		luareg.Args("obj", "labels"),
+		luareg.ArgDoc("obj", "the object to modify"),
+		luareg.ArgDoc("labels", "table of label key to value to merge into obj.metadata.labels"),
+		luareg.ReturnDoc(0, "obj", "the object with the labels set"))
 	m.Fn("remove_label", RemoveLabel, "remove a label and return the updated obj",
-		luareg.Args("obj", "key"))
+		luareg.Args("obj", "key"),
+		luareg.ArgDoc("obj", "the object to modify"),
+		luareg.ArgDoc("key", "the label key to remove; a no-op if absent"),
+		luareg.ReturnDoc(0, "obj", "the object with the label removed"))
 	m.Fn("has_label", HasLabel, "return true if the label exists",
-		luareg.Args("obj", "key"))
+		luareg.Args("obj", "key"),
+		luareg.ArgDoc("obj", "the object to check"),
+		luareg.ArgDoc("key", "the label key to look for"),
+		luareg.ReturnDoc(0, "ok", "true if obj.metadata.labels contains key"))
 	m.Fn("get_label", GetLabel, "return the value of a label, or empty string if absent",
-		luareg.Args("obj", "key"))
+		luareg.Args("obj", "key"),
+		luareg.ArgDoc("obj", "the object to read from"),
+		luareg.ArgDoc("key", "the label key to look up"),
+		luareg.ReturnDoc(0, "value", "the label value, or empty string if absent"))
 	m.Fn("add_annotation", AddAnnotation, "add an annotation and return the updated obj",
-		luareg.Args("obj", "key", "value"))
+		luareg.Args("obj", "key", "value"),
+		luareg.ArgDoc("obj", "the object to modify"),
+		luareg.ArgDoc("key", "the annotation key to set"),
+		luareg.ArgDoc("value", "the annotation value to set"),
+		luareg.ReturnDoc(0, "obj", "the object with the annotation set"))
 	m.Fn("add_annotations", AddAnnotations, "add multiple annotations and return the updated obj",
-		luareg.Args("obj", "annotations"))
+		luareg.Args("obj", "annotations"),
+		luareg.ArgDoc("obj", "the object to modify"),
+		luareg.ArgDoc("annotations", "table of annotation key to value to merge into obj.metadata.annotations"),
+		luareg.ReturnDoc(0, "obj", "the object with the annotations set"))
 	m.Fn("remove_annotation", RemoveAnnotation, "remove an annotation and return the updated obj",
-		luareg.Args("obj", "key"))
+		luareg.Args("obj", "key"),
+		luareg.ArgDoc("obj", "the object to modify"),
+		luareg.ArgDoc("key", "the annotation key to remove; a no-op if absent"),
+		luareg.ReturnDoc(0, "obj", "the object with the annotation removed"))
 	m.Fn("has_annotation", HasAnnotation, "return true if the annotation exists",
-		luareg.Args("obj", "key"))
+		luareg.Args("obj", "key"),
+		luareg.ArgDoc("obj", "the object to check"),
+		luareg.ArgDoc("key", "the annotation key to look for"),
+		luareg.ReturnDoc(0, "ok", "true if obj.metadata.annotations contains key"))
 	m.Fn("get_annotation", GetAnnotation, "return the value of an annotation, or empty string if absent",
-		luareg.Args("obj", "key"))
+		luareg.Args("obj", "key"),
+		luareg.ArgDoc("obj", "the object to read from"),
+		luareg.ArgDoc("key", "the annotation key to look up"),
+		luareg.ReturnDoc(0, "value", "the annotation value, or empty string if absent"))
 	for _, a := range stubAliases {
 		m.RegisterStubAlias(a.name, a.def, a.doc)
 	}

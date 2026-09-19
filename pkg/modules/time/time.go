@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package time provides time and date utilities for Lua scripts, using Unix
+// timestamps (seconds since epoch, UTC) as the common representation.
 package time
 
 import (
@@ -90,7 +92,7 @@ func toOsdate(L *lua.LState, timestamp int64) *lua.LTable {
 // fromOsdate: converts an os.date-compatible table to a Unix timestamp.
 // Required fields: year, month, day. Optional: hour, min, sec (default 0).
 // Raises on missing or wrong-typed required fields.
-func fromOsdate(L *lua.LState, tbl *lua.LTable) (int64, error) {
+func fromOsdate(_ *lua.LState, tbl *lua.LTable) (int64, error) {
 	year, err := requireNumberField(tbl, "year")
 	if err != nil {
 		return 0, err
@@ -104,10 +106,10 @@ func fromOsdate(L *lua.LState, tbl *lua.LTable) (int64, error) {
 		return 0, err
 	}
 	hour := optionalNumberField(tbl, "hour", 0)
-	min := optionalNumberField(tbl, "min", 0)
+	minute := optionalNumberField(tbl, "min", 0)
 	sec := optionalNumberField(tbl, "sec", 0)
 
-	t := time.Date(year, time.Month(month), day, hour, min, sec, 0, time.UTC)
+	t := time.Date(year, time.Month(month), day, hour, minute, sec, 0, time.UTC)
 	return t.Unix(), nil
 }
 
@@ -135,23 +137,43 @@ func optionalNumberField(tbl *lua.LTable, name string, def int) int {
 // build: constructs the module definition. Reused by Loader and Register.
 func build() *luareg.Module {
 	m := luareg.NewModule("time", "time and date utilities")
-	m.Fn("now", now, "returns the current Unix timestamp")
+	m.Fn("now", now, "returns the current Unix timestamp",
+		luareg.ReturnDoc(0, "timestamp", "seconds since the Unix epoch (UTC)"))
 	m.Fn("parse", parse, "parses a time string with a Go layout, raises on error",
-		luareg.Args("timestr", "layout"))
+		luareg.Args("timestr", "layout"),
+		luareg.ArgDoc("timestr", "the timestamp string to parse"),
+		luareg.ArgDoc("layout", "a Go reference-time layout, e.g. \"2006-01-02 15:04:05\""),
+		luareg.ReturnDoc(0, "timestamp", "seconds since the Unix epoch (UTC)"))
 	m.Fn("parse_rfc3339", parseRFC3339, "parses an RFC3339 time string, raises on error",
-		luareg.Args("timestr"))
+		luareg.Args("timestr"),
+		luareg.ArgDoc("timestr", "an RFC3339-formatted timestamp, e.g. \"2025-10-03T16:39:00Z\""),
+		luareg.ReturnDoc(0, "timestamp", "seconds since the Unix epoch (UTC)"))
 	m.Fn("format", format, "formats a Unix timestamp with a Go layout",
-		luareg.Args("timestamp", "layout"))
+		luareg.Args("timestamp", "layout"),
+		luareg.ArgDoc("timestamp", "seconds since the Unix epoch (UTC)"),
+		luareg.ArgDoc("layout", "a Go reference-time layout, e.g. \"2006-01-02 15:04:05\""),
+		luareg.ReturnDoc(0, "out", "timestamp formatted per layout, in UTC"))
 	m.Fn("add", add, "adds seconds to a Unix timestamp",
-		luareg.Args("timestamp", "seconds"))
+		luareg.Args("timestamp", "seconds"),
+		luareg.ArgDoc("timestamp", "seconds since the Unix epoch (UTC)"),
+		luareg.ArgDoc("seconds", "the number of seconds to add; negative subtracts"),
+		luareg.ReturnDoc(0, "timestamp", "timestamp + seconds"))
 	m.Fn("diff", diff, "returns the difference in seconds between two timestamps (t1 - t2)",
-		luareg.Args("t1", "t2"))
+		luareg.Args("t1", "t2"),
+		luareg.ArgDoc("t1", "the minuend timestamp, seconds since the Unix epoch"),
+		luareg.ArgDoc("t2", "the subtrahend timestamp, seconds since the Unix epoch"),
+		luareg.ReturnDoc(0, "seconds", "t1 - t2, in seconds"))
 	m.Fn("sleep", sleep, "pauses execution for the given number of seconds",
-		luareg.Args("seconds"))
+		luareg.Args("seconds"),
+		luareg.ArgDoc("seconds", "how long to sleep; fractional values are supported"))
 	m.Fn("to_osdate", toOsdate, "converts a Unix timestamp to an os.date-compatible table",
-		luareg.Args("timestamp"))
+		luareg.Args("timestamp"),
+		luareg.ArgDoc("timestamp", "seconds since the Unix epoch (UTC)"),
+		luareg.ReturnDoc(0, "date", "table with year, month, day, hour, min, sec, wday, yday, isdst fields, in UTC"))
 	m.Fn("from_osdate", fromOsdate, "converts an os.date-compatible table to a Unix timestamp, raises on invalid input",
-		luareg.Args("date_table"))
+		luareg.Args("date_table"),
+		luareg.ArgDoc("date_table", "table with required year, month, day and optional hour, min, sec (default 0)"),
+		luareg.ReturnDoc(0, "timestamp", "seconds since the Unix epoch, interpreting the fields as UTC"))
 	return m
 }
 

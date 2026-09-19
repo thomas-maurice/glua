@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package regexp provides regular expression utilities for Lua scripts,
+// wrapping Go's stdlib regexp (RE2 syntax).
 package regexp
 
 import (
@@ -99,17 +101,39 @@ func split(pattern, text string, n int) ([]string, error) {
 func build() *luareg.Module {
 	m := luareg.NewModule("regexp", "regular expression utilities")
 	m.Fn("match", match, "reports whether pattern matches text, raises on invalid pattern",
-		luareg.Args("pattern", "text"))
+		luareg.Args("pattern", "text"),
+		luareg.ArgDoc("pattern", "an RE2 regular expression"),
+		luareg.ArgDoc("text", "the string to test"),
+		luareg.ReturnDoc(0, "ok", "true if pattern matches anywhere in text"))
 	m.Fn("find", find, "returns the first match of pattern in text, raises on invalid pattern",
-		luareg.Args("pattern", "text"))
+		luareg.Args("pattern", "text"),
+		luareg.ArgDoc("pattern", "an RE2 regular expression"),
+		luareg.ArgDoc("text", "the string to search"),
+		luareg.ReturnDoc(0, "match", "the first matching substring, or empty string if no match"))
 	m.Fn("find_all", findAll, "returns all matches of pattern in text up to n, raises on invalid pattern",
-		luareg.Args("pattern", "text", "n"))
+		luareg.Args("pattern", "text", "n"),
+		luareg.ArgDoc("pattern", "an RE2 regular expression"),
+		luareg.ArgDoc("text", "the string to search"),
+		luareg.ArgDoc("n", "maximum number of matches to return; a negative value returns all matches"),
+		luareg.ReturnDoc(0, "matches", "table (array) of matching substrings, in order of appearance"))
 	m.Fn("replace", replace, "replaces the first match of pattern with replacement, raises on invalid pattern",
-		luareg.Args("pattern", "text", "replacement"))
+		luareg.Args("pattern", "text", "replacement"),
+		luareg.ArgDoc("pattern", "an RE2 regular expression"),
+		luareg.ArgDoc("text", "the string to search"),
+		luareg.ArgDoc("replacement", "the literal string to substitute for the first match"),
+		luareg.ReturnDoc(0, "result", "text with its first match (if any) replaced"))
 	m.Fn("replace_all", replaceAll, "replaces all matches of pattern with replacement, raises on invalid pattern",
-		luareg.Args("pattern", "text", "replacement"))
+		luareg.Args("pattern", "text", "replacement"),
+		luareg.ArgDoc("pattern", "an RE2 regular expression"),
+		luareg.ArgDoc("text", "the string to search"),
+		luareg.ArgDoc("replacement", "the literal string to substitute for every match"),
+		luareg.ReturnDoc(0, "result", "text with all matches replaced"))
 	m.Fn("split", split, "splits text by pattern into at most n parts, raises on invalid pattern",
-		luareg.Args("pattern", "text", "n"))
+		luareg.Args("pattern", "text", "n"),
+		luareg.ArgDoc("pattern", "an RE2 regular expression used as the separator"),
+		luareg.ArgDoc("text", "the string to split"),
+		luareg.ArgDoc("n", "maximum number of substrings to return; a negative value returns all substrings"),
+		luareg.ReturnDoc(0, "parts", "table (array) of substrings between matches of pattern"))
 	return m
 }
 
