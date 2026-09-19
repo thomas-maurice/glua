@@ -219,42 +219,21 @@ func TestNewClient(t *testing.T) {
 	}
 }
 
-// TestCreateGVKTable tests the createGVKTable helper function
-func TestCreateGVKTable(t *testing.T) {
+// TestGVKConstants verifies all 20 GVK constants registered via m.Const in
+// build() are actually reachable from Lua with the expected group/version/kind.
+// This is the only coverage of the live registration path: createGVKTable and
+// addGVKConstants (an earlier, unused approach to the same problem) were
+// removed as dead code, so this test replaces the coverage they used to
+// provide for a different, no-longer-used code path.
+func TestGVKConstants(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
-	table := createGVKTable(L, "apps", "v1", "Deployment")
+	config := &rest.Config{Host: "https://localhost:6443"}
+	L.PreloadModule("k8sclient", func(L *lua.LState) int {
+		return build(config).PushTo(L)
+	})
 
-	if table == nil {
-		t.Fatal("createGVKTable returned nil")
-	}
-
-	group := L.GetField(table, "group")
-	if group.String() != "apps" {
-		t.Errorf("Expected group 'apps', got %q", group.String())
-	}
-
-	version := L.GetField(table, "version")
-	if version.String() != "v1" {
-		t.Errorf("Expected version 'v1', got %q", version.String())
-	}
-
-	kind := L.GetField(table, "kind")
-	if kind.String() != "Deployment" {
-		t.Errorf("Expected kind 'Deployment', got %q", kind.String())
-	}
-}
-
-// TestAddGVKConstants tests that GVK constants are added correctly
-func TestAddGVKConstants(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	mod := L.NewTable()
-	addGVKConstants(L, mod)
-
-	// Test a few constants
 	constants := []struct {
 		name    string
 		group   string
@@ -262,32 +241,54 @@ func TestAddGVKConstants(t *testing.T) {
 		kind    string
 	}{
 		{"POD", "", "v1", "Pod"},
+		{"NAMESPACE", "", "v1", "Namespace"},
+		{"NODE", "", "v1", "Node"},
+		{"CONFIGMAP", "", "v1", "ConfigMap"},
+		{"SECRET", "", "v1", "Secret"},
+		{"SERVICE", "", "v1", "Service"},
+		{"SERVICEACCOUNT", "", "v1", "ServiceAccount"},
+		{"PERSISTENTVOLUME", "", "v1", "PersistentVolume"},
+		{"PERSISTENTVOLUMECLAIM", "", "v1", "PersistentVolumeClaim"},
 		{"DEPLOYMENT", "apps", "v1", "Deployment"},
+		{"STATEFULSET", "apps", "v1", "StatefulSet"},
+		{"DAEMONSET", "apps", "v1", "DaemonSet"},
+		{"REPLICASET", "apps", "v1", "ReplicaSet"},
+		{"JOB", "batch", "v1", "Job"},
+		{"CRONJOB", "batch", "v1", "CronJob"},
 		{"INGRESS", "networking.k8s.io", "v1", "Ingress"},
+		{"NETWORKPOLICY", "networking.k8s.io", "v1", "NetworkPolicy"},
 		{"ROLE", "rbac.authorization.k8s.io", "v1", "Role"},
+		{"CLUSTERROLE", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
+		{"ROLEBINDING", "rbac.authorization.k8s.io", "v1", "RoleBinding"},
+		{"CLUSTERROLEBINDING", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
 	}
 
 	for _, tc := range constants {
 		t.Run(tc.name, func(t *testing.T) {
-			gvkValue := L.GetField(mod, tc.name)
-			if gvkValue.Type() != lua.LTTable {
-				t.Fatalf("Expected %s to be a table, got %v", tc.name, gvkValue.Type())
+			code := `
+				local k8sclient = require("k8sclient")
+				local gvk = k8sclient.` + tc.name + `
+				return gvk.group, gvk.version, gvk.kind
+			`
+			if err := L.DoString(code); err != nil {
+				t.Fatalf("DoString failed: %v", err)
 			}
-
-			gvkTable := gvkValue.(*lua.LTable)
-			group := L.GetField(gvkTable, "group")
-			if group.String() != tc.group {
-				t.Errorf("Expected group %q, got %q", tc.group, group.String())
+			if L.GetTop() != 3 {
+				t.Fatalf("Expected 3 return values, got %d", L.GetTop())
 			}
+			group := L.Get(-3).String()
+			version := L.Get(-2).String()
+			kind := L.Get(-1).String()
+			L.Pop(3)
 
-			version := L.GetField(gvkTable, "version")
-			if version.String() != tc.version {
-				t.Errorf("Expected version %q, got %q", tc.version, version.String())
+			if group != tc.group {
+				t.Errorf("Expected group %q, got %q", tc.group, group)
 			}
-
-			kind := L.GetField(gvkTable, "kind")
-			if kind.String() != tc.kind {
-				t.Errorf("Expected kind %q, got %q", tc.kind, kind.String())
+			if version != tc.version {
+				t.Errorf("Expected version %q, got %q", tc.version, version)
+			}
+			if kind != tc.kind {
+				t.Errorf("Expected kind %q, got %q", tc.kind, kind)
 			}
 		})
 	}
