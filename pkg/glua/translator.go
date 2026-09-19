@@ -125,7 +125,7 @@ func (t *Translator) toLuaValue(L *lua.LState, v interface{}) (lua.LValue, error
 //  1. Create Go value from Lua value (map[string]interface{} for tables, primitives for others)
 //  2. Marshal the value to JSON
 //  3. Unmarshal JSON into output object
-func (t *Translator) FromLua(L *lua.LState, lv lua.LValue, output interface{}) error {
+func (t *Translator) FromLua(_ *lua.LState, lv lua.LValue, output interface{}) error {
 	// Convert Lua value to Go value
 	data, err := t.fromLuaValue(lv)
 	if err != nil {
@@ -179,22 +179,30 @@ func (t *Translator) fromLuaValue(lv lua.LValue) (interface{}, error) {
 			return arr, nil
 		}
 
-		// Otherwise, treat it as a map
+		// Otherwise, treat it as a map. Errors from ForEach's callback are
+		// captured in a closure variable rather than smuggled through the
+		// user-controlled map itself — a Lua table can legitimately contain a
+		// key like "__error__", and writing into m would both corrupt the
+		// output and (previously) panic on the unchecked type assertion below
+		// when that key held a non-error value.
 		m := make(map[string]interface{})
+		var forEachErr error
 		v.ForEach(func(key, value lua.LValue) {
+			if forEachErr != nil {
+				// ForEach has no early-exit; once an error is recorded, stop
+				// doing further conversion work but let the iteration finish.
+				return
+			}
 			keyStr := key.String()
 			val, err := t.fromLuaValue(value)
 			if err != nil {
-				// Store error for handling outside ForEach
-				m["__error__"] = err
+				forEachErr = fmt.Errorf("failed to convert value for key %q: %w", keyStr, err)
 				return
 			}
 			m[keyStr] = val
 		})
-
-		// Check if error occurred during ForEach
-		if errVal, ok := m["__error__"]; ok {
-			return nil, errVal.(error)
+		if forEachErr != nil {
+			return nil, forEachErr
 		}
 
 		return m, nil

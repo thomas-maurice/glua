@@ -562,3 +562,57 @@ func getSamplePod() *podStruct {
 		},
 	}
 }
+
+// TestTranslator_FromLua_TableWithLiteralErrorKey_NoPanic: a Lua table whose
+// key is the literal string "__error__" used to panic the host process.
+// fromLuaValue signalled ForEach conversion errors by writing into the SAME
+// user-controlled map under that key, then blindly asserted the stored value
+// was an `error` outside the loop. A table with a real "__error__" key (e.g.
+// a struct field literally named that, or an attacker-controlled table
+// passed into any module function taking a struct/map argument) held a
+// non-error value there and the type assertion panicked. This test proves
+// such a table now converts cleanly and the key survives untouched.
+func TestTranslator_FromLua_TableWithLiteralErrorKey_NoPanic(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	tr := &Translator{}
+
+	table := L.NewTable()
+	table.RawSetString("__error__", lua.LString("not an error, just a string"))
+	table.RawSetString("name", lua.LString("Bob"))
+
+	var output map[string]interface{}
+	err := tr.FromLua(L, table, &output)
+	if err != nil {
+		t.Fatalf("FromLua panicked or failed on a literal __error__ key: %v", err)
+	}
+
+	if output["__error__"] != "not an error, just a string" {
+		t.Errorf("expected __error__ key to be preserved, got %v", output["__error__"])
+	}
+	if output["name"] != "Bob" {
+		t.Errorf("expected name 'Bob', got %v", output["name"])
+	}
+}
+
+// TestTranslator_FromLua_NestedConversionErrorPropagates: a table containing
+// a value fromLuaValue cannot convert (e.g. a Lua function) must still
+// surface as a real Go error from FromLua, not a panic and not a silently
+// dropped key.
+func TestTranslator_FromLua_NestedConversionErrorPropagates(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	tr := &Translator{}
+
+	table := L.NewTable()
+	table.RawSetString("ok", lua.LString("fine"))
+	table.RawSetString("bad", L.NewFunction(func(_ *lua.LState) int { return 0 }))
+
+	var output map[string]interface{}
+	err := tr.FromLua(L, table, &output)
+	if err == nil {
+		t.Fatal("expected an error for an unconvertible nested value, got nil")
+	}
+}
