@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package main runs a Kubernetes admission webhook server that validates Pods
+// using a Lua script.
 package main
 
 import (

@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package main demonstrates the k8sclient module by connecting to a real
+// Kubernetes cluster from Lua.
 package main
 
 import (
