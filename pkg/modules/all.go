@@ -33,6 +33,7 @@ import (
 	"github.com/thomas-maurice/glua/pkg/modules/base64"
 	"github.com/thomas-maurice/glua/pkg/modules/bit32"
 	"github.com/thomas-maurice/glua/pkg/modules/collections"
+	"github.com/thomas-maurice/glua/pkg/modules/compress"
 	"github.com/thomas-maurice/glua/pkg/modules/filepath"
 	"github.com/thomas-maurice/glua/pkg/modules/fs"
 	"github.com/thomas-maurice/glua/pkg/modules/hash"
@@ -44,6 +45,7 @@ import (
 	logmod "github.com/thomas-maurice/glua/pkg/modules/log"
 	"github.com/thomas-maurice/glua/pkg/modules/netaddr"
 	"github.com/thomas-maurice/glua/pkg/modules/osmod"
+	"github.com/thomas-maurice/glua/pkg/modules/random"
 	"github.com/thomas-maurice/glua/pkg/modules/regexp"
 	"github.com/thomas-maurice/glua/pkg/modules/spew"
 	"github.com/thomas-maurice/glua/pkg/modules/strconv"
@@ -52,6 +54,7 @@ import (
 	"github.com/thomas-maurice/glua/pkg/modules/text"
 	"github.com/thomas-maurice/glua/pkg/modules/time"
 	neturl "github.com/thomas-maurice/glua/pkg/modules/url"
+	"github.com/thomas-maurice/glua/pkg/modules/uuid"
 	"github.com/thomas-maurice/glua/pkg/modules/yaml"
 )
 
@@ -66,6 +69,7 @@ func RegisterAll(reg *luareg.Registry) {
 	base64.Register(reg)
 	bit32.Register(reg)
 	collections.Register(reg)
+	compress.Register(reg)
 	filepath.Register(reg)
 	fs.Register(reg)
 	hash.Register(reg)
@@ -77,6 +81,7 @@ func RegisterAll(reg *luareg.Registry) {
 	logmod.Register(reg)
 	netaddr.Register(reg)
 	osmod.Register(reg)
+	random.Register(reg)
 	regexp.Register(reg)
 	spew.Register(reg)
 	strconv.Register(reg)
@@ -85,5 +90,6 @@ func RegisterAll(reg *luareg.Registry) {
 	text.Register(reg)
 	time.Register(reg)
 	neturl.Register(reg)
+	uuid.Register(reg)
 	yaml.Register(reg)
 }

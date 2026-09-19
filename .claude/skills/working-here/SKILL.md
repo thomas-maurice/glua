@@ -105,6 +105,21 @@ if matches == nil {
 `pkg/modules/regexp/regexp.go:60` is the precedent. Any new function returning a
 slice needs a test for the empty case that asserts `type(x) == "table"`.
 
+**`[]byte` has the same trap with a different symptom.** It does not take the
+JSON path — it maps to a raw `lua.LString` — but a nil `[]byte` still arrives as
+Lua `nil` rather than `""`. `bytes.Buffer.Bytes()` returns nil for an empty
+buffer, so decompressing to an empty string, or any other empty byte result,
+silently yields nil unless you normalise:
+
+```go
+if b == nil {
+    b = []byte{}
+}
+```
+
+`pkg/modules/compress` does this. Test the empty case asserting
+`type(x) == "string"`.
+
 **gopher-lua's `math.huge` is `math.MaxFloat64`, not `+Inf`.** Stock Lua 5.1 sets
 it to `HUGE_VAL`, i.e. infinity. So `math.huge == 1/0` is **false** here, and a
 test that expects `math.huge` to behave as infinity will fail confusingly. Real

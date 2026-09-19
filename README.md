@@ -845,7 +845,7 @@ import (
 
 func main() {
     reg := luareg.NewRegistry()
-    modules.RegisterAll(reg)   // glua's 23 built-in modules
+    modules.RegisterAll(reg)   // glua's 26 built-in modules
     widget.Register(reg)       // your module
 
     gen := stubgen.NewGenerator()
@@ -2102,6 +2102,141 @@ print(v6.hostname, v6.port)               -- ::1  8080
 print(url.build(v6))                      -- http://[::1]:8080/path
 print(url.build({scheme = "http", hostname = "::1", port = "8080", path = "/"}))
 -- http://[::1]:8080/ -- brackets added automatically
+```
+
+#### compress
+
+gzip, zlib and raw DEFLATE compression and decompression: `gzip_compress`/
+`gzip_decompress`, `zlib_compress`/`zlib_decompress`, `flate_compress`/
+`flate_decompress`.
+
+`[]byte` at the top level crosses into Lua as a raw, 8-bit-clean string, not
+base64, so compressed output composes directly with `base64`:
+`base64.encode(compress.gzip_compress(s, compress.BEST_COMPRESSION))`.
+
+**Every decompress function takes a required `max_bytes` argument, with no
+"0 means unlimited" escape hatch.** glua is embedded in admission controllers
+and policy engines that routinely decompress untrusted input (a base64
+annotation, an HTTP body, a ConfigMap). An unbounded read of a decompression
+stream turns a tiny input into a decompression bomb that OOMs the **host Go
+process** — strictly worse than a catchable Lua error. `max_bytes < 1`
+raises immediately; exceeding it raises naming the limit that fired, and the
+implementation never buffers more than `max_bytes + 1` bytes regardless of
+how large the compressed input claims to decompress to.
+
+Compression levels are validated against `[-2, 9]` for all three codecs (they
+are all backed by `compress/flate`): `NO_COMPRESSION = 0`, `BEST_SPEED = 1`,
+`BEST_COMPRESSION = 9`, `DEFAULT_COMPRESSION = -1`, `HUFFMAN_ONLY = -2`, plus
+`MAX_BYTES_DEFAULT = 67108864` (64 MiB) for the common decompress call.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/compress"
+
+L.PreloadModule("compress", compress.Loader)
+```
+
+**Lua API:**
+
+```lua
+local compress, base64 = require("compress"), require("base64")
+
+local blob = base64.encode(compress.gzip_compress(payload, compress.BEST_COMPRESSION))
+
+local ok, out = pcall(compress.gzip_decompress,
+                      base64.decode(annotation), 1024 * 1024)
+if not ok then
+  return deny("annotation payload too large or corrupt")
+end
+```
+
+#### random
+
+Cryptographically secure randomness, backed by `crypto/rand`: `bytes(n)`,
+`hex(n)`, `token(n)`, `string(n, charset)`, `int(min, max)`.
+
+**This is a CSPRNG, not gopher-lua's `math.random`.** `math.random` is a
+seeded, deterministic PRNG — predictable from its seed — and must never be
+used for tokens, keys, salts or nonces. Everything in this module is backed
+by `crypto/rand` and is suitable for exactly those uses. There is
+deliberately no seeding function, so output is never reproducible.
+
+- `random.int(min, max)` is **inclusive of both ends**, matching Lua's
+  `math.random(m, n)` rather than Go's half-open convention — a Go reader
+  should not assume half-open semantics here. It is bias-free by
+  construction (`crypto/rand.Int` against a `big.Int` span, never `% n`),
+  and raises if `min > max`, either bound is non-integral, or
+  `max - min >= 2^53`.
+- `random.string(n, charset)` is **rune-oriented**, not byte-oriented, so a
+  UTF-8 charset cannot produce broken UTF-8. Duplicate runes in `charset`
+  are not de-duplicated — they are simply weighted more heavily. An empty
+  `charset` raises.
+- `random.token(n)` is base64url, **unpadded** — safe to drop directly into
+  a URL or header, unlike `base64.encode(random.bytes(n))`, which contains
+  `+`, `/` and `=`.
+- `n <= 0` (for `bytes`/`hex`/`token`/`string`) and `n` beyond `2^20` both
+  raise.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/random"
+
+L.PreloadModule("random", random.Loader)
+```
+
+**Lua API:**
+
+```lua
+local random = require("random")
+
+local apiKey  = random.token(32)                 -- URL-safe, no padding
+local salt    = random.hex(16)
+local pin     = random.string(6, "0123456789")
+local dieRoll = random.int(1, 6)                 -- inclusive, like math.random
+```
+
+#### uuid
+
+UUID v4 (random), v5 (deterministic) and v7 (time-ordered) generation,
+parsing and formatting, backed by `github.com/google/uuid`.
+
+**`uuid` is a separate module from `random`, deliberately.** v7 is
+*time-ordered*, not random — consecutive v7 values sort by creation time by
+design — so `uuid.v4()`/`uuid.v7()` sitting next to `random.token()` would
+teach the wrong mental model. The `google/uuid` dependency exists
+specifically for v7: RFC 9562 wants a monotonic counter so two UUIDs minted
+in the same millisecond still sort correctly, which needs real
+synchronisation and isn't worth hand-rolling.
+
+`parse`/`is_valid`/`v5`'s namespace argument accept every form
+`google/uuid`'s `Parse` accepts: canonical hyphenated, the raw 32-hex form
+with no hyphens, `urn:uuid:...`, and the `{braced}` form. `format` converts
+a parsed UUID into any of `canonical`, `plain`, `urn` or `braced`.
+
+`uuid.parse(s)` returns `{uuid, version, variant, timestamp}` — `timestamp`
+is Unix seconds, populated for v1/v6/v7 only (`0` otherwise).
+`uuid.NAMESPACE_DNS`/`NAMESPACE_URL`/`NAMESPACE_OID`/`NAMESPACE_X500` are
+provided for use with `v5`, alongside `uuid.NIL`.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/uuid"
+
+L.PreloadModule("uuid", uuid.Loader)
+```
+
+**Lua API:**
+
+```lua
+local uuid = require("uuid")
+
+local id = uuid.v7()                             -- sorts by creation time
+print(uuid.parse(id).timestamp)                  -- Unix seconds
+
+local stable = uuid.v5(uuid.NAMESPACE_DNS, "my-object-name")
 ```
 
 ## Features
