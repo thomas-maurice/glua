@@ -63,6 +63,7 @@ type Class[T any] struct {
 	methods []*FnMeta
 	byName  map[string]*FnMeta
 	typ     reflect.Type // reflect.Type of T
+	lenFn   func(T) int  // optional __len backing function; nil means no __len
 }
 
 // NewClass: creates a Class with the given Lua type name and summary doc.
@@ -136,6 +137,23 @@ func (c *Class[T]) Method(luaName string, methodFn any, doc string, opts ...FnOp
 	return c
 }
 
+// Len: registers an OPT-IN __len metamethod for this class, backed by fn.
+// There is no generically sensible definition of "length" for an arbitrary
+// wrapped Go type — most classes (loggers, clients, ...) have none at all —
+// so __len is only set when a class explicitly opts in via this method,
+// rather than bolting an invented meaning (e.g. method count) onto every
+// class.
+//
+// Example:
+//
+//	c.Len(func(q *Queue) int { return len(q.items) })
+//
+// Returns the receiver for chaining.
+func (c *Class[T]) Len(fn func(T) int) *Class[T] {
+	c.lenFn = fn
+	return c
+}
+
 // Wrap: creates a UserData around an instance of T, bound to this class's
 // metatable. L must have the metatable already registered (i.e. PushTo has
 // been called on the Module that owns this class).
@@ -161,17 +179,142 @@ func (c *Class[T]) Check(L *lua.LState, pos int) T {
 	return zero
 }
 
+// classTypeMarkerField: hidden field stored on each class's type metatable,
+// holding the reflect.Type this Lua class name is bound to. Used at
+// registration time by checkClassTypeCollision.
+const classTypeMarkerField = "__glua_class_gotype"
+
 // register: builds the metatable for this class in L and registers all methods.
 // classLookup is used so method wrappers can auto-wrap return values of class types.
+//
+// L.NewTypeMetatable is keyed globally in L's registry by Lua name alone —
+// uniqueness of c.name is only enforced within a single Module (see
+// Module.classByName). If two different modules register a class under the
+// same Lua name on the same LState, both would otherwise share the same
+// metatable, and the second register() call would silently repoint every
+// already-wrapped instance of the first class at the second class's methods.
+// checkClassTypeCollision panics loudly instead of allowing that, mirroring
+// how validateGoFn already panics on bad registrations at setup time.
 func (c *Class[T]) register(L *lua.LState, classLookup func(reflect.Type) AnyClass) {
 	mt := L.NewTypeMetatable(c.name)
+	checkClassTypeCollision(L, mt, c.name, c.typ)
+
 	methods := L.NewTable()
 	for _, meta := range c.methods {
-		meta := meta // capture
 		wrapper := buildMethodWrapper(c, meta, classLookup)
 		L.SetField(methods, meta.LuaName, L.NewFunction(wrapper))
 	}
 	L.SetField(mt, "__index", methods)
+
+	// __metatable hides the real methods table from getmetatable/setmetatable.
+	// gopher-lua diverges from stock Lua 5.1 here: baseSetMetatable only
+	// type-checks arg 2 (the new metatable), not arg 1, so without this a Lua
+	// script could call setmetatable(instance, {}) and strip every method off
+	// a live instance. Setting __metatable makes gopher-lua's baselib raise
+	// "cannot change a protected metatable" on setmetatable, and makes
+	// getmetatable return this string instead of the real methods table.
+	L.SetField(mt, "__metatable", lua.LString(c.name))
+
+	// __tostring: "<class name>: <pointer-or-value>". Pointer receivers print
+	// their address (stable, short, avoids dumping a potentially huge struct
+	// like a k8sclient.Client); value receivers print via %v.
+	className := c.name
+	L.SetField(mt, "__tostring", L.NewFunction(func(L *lua.LState) int {
+		ud := L.CheckUserData(1)
+		v := reflect.ValueOf(ud.Value)
+		if v.Kind() == reflect.Pointer {
+			L.Push(lua.LString(fmt.Sprintf("%s: %p", className, ud.Value)))
+		} else {
+			L.Push(lua.LString(fmt.Sprintf("%s: %v", className, ud.Value)))
+		}
+		return 1
+	}))
+
+	// __eq: compares the WRAPPED Go values, not the *lua.LUserData wrappers,
+	// so two userdata wrapping the same underlying value (e.g. two returns of
+	// the same *Logger) compare equal instead of relying on default identity
+	// comparison of the wrapper. Lua only invokes __eq when both operands are
+	// userdata sharing this exact metamethod, so both values are guaranteed
+	// to be T here.
+	L.SetField(mt, "__eq", L.NewFunction(func(L *lua.LState) int {
+		a := L.CheckUserData(1)
+		b := L.CheckUserData(2)
+		L.Push(lua.LBool(classValuesEqual(a.Value, b.Value)))
+		return 1
+	}))
+
+	// __len is opt-in via Class.Len — see there for why it isn't set by default.
+	if c.lenFn != nil {
+		lenFn := c.lenFn
+		L.SetField(mt, "__len", L.NewFunction(func(L *lua.LState) int {
+			receiver := c.Check(L, 1)
+			L.Push(lua.LNumber(lenFn(receiver)))
+			return 1
+		}))
+	}
+}
+
+// classValuesEqual: compares two wrapped Go values for __eq. Pointer types
+// compare by pointer identity (matching Go's own == semantics); other
+// comparable types (structs of comparable fields, primitives) compare by
+// value. Go's == panics on uncomparable dynamic types (slices, maps, funcs,
+// or structs embedding them); rather than risk that panic reaching a Lua
+// script — or silently falling back to userdata-wrapper identity, which the
+// __eq contract here explicitly avoids — an uncomparable Go type is defined
+// to never equal anything via __eq, including another wrapper around the
+// exact same value. This is a conservative, documented default: it never
+// panics and never reports a false positive, at the cost of "==" being
+// always false for classes backed by such types.
+func classValuesEqual(a, b any) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	ta, tb := reflect.TypeOf(a), reflect.TypeOf(b)
+	if ta != tb {
+		return false
+	}
+	if !ta.Comparable() {
+		return false
+	}
+	return a == b
+}
+
+// checkClassTypeCollision: panics if the type metatable for luaName is
+// already bound to a Go type other than typ. Because L.NewTypeMetatable is
+// keyed globally by name across every module sharing L, the marker recording
+// which Go type "owns" a name is stored in a hidden field on the metatable
+// itself rather than in a package-level registry keyed by name. A
+// package-level map would leak across independent lua.LState instances —
+// this codebase's own tests routinely reuse short class names like "Foo" or
+// "m.Counter" across many short-lived LStates, which would produce false
+// positives once one test's name choice collided with another's. Scoping the
+// marker to the metatable means collisions are only detected where they can
+// actually occur: two classes sharing one Lua state.
+//
+// Registering the exact same (name, type) pair again — e.g. Module.PushTo
+// called more than once — is legal and a no-op here.
+func checkClassTypeCollision(L *lua.LState, mt *lua.LTable, luaName string, typ reflect.Type) {
+	existing := L.GetField(mt, classTypeMarkerField)
+	if existing == lua.LNil {
+		marker := L.NewUserData()
+		marker.Value = typ
+		L.SetField(mt, classTypeMarkerField, marker)
+		return
+	}
+
+	ud, ok := existing.(*lua.LUserData)
+	if !ok {
+		// Unreachable in practice — nothing else writes this field — but fail
+		// loud rather than silently ignoring a corrupted marker.
+		panic(fmt.Sprintf("luareg: class %q: type marker field was overwritten with a non-userdata value", luaName))
+	}
+	existingType, ok := ud.Value.(reflect.Type)
+	if !ok || existingType != typ {
+		panic(fmt.Sprintf(
+			"luareg: class name %q is already registered for Go type %v; cannot also register it for %v — Lua class names must be unique across every module pushed to the same Lua state",
+			luaName, existingType, typ,
+		))
+	}
 }
 
 // buildMethodWrapper: reflects on meta.GoFn (a method expression whose first
