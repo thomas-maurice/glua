@@ -845,7 +845,7 @@ import (
 
 func main() {
     reg := luareg.NewRegistry()
-    modules.RegisterAll(reg)   // glua's 17 built-in modules
+    modules.RegisterAll(reg)   // glua's 19 built-in modules
     widget.Register(reg)       // your module
 
     gen := stubgen.NewGenerator()
@@ -1687,6 +1687,113 @@ count = strings.count("banana", "a")  -- 3
 
 -- Replace
 result = strings.replace("hello world", "world", "there", -1)  -- "hello there"
+```
+
+#### bit32
+
+32-bit unsigned bitwise operations. gopher-lua implements Lua 5.1, which has
+no bitwise operators and no `bit`/`bit32` library at all, so this fills a real
+gap rather than duplicating something Lua already has.
+
+The module is named `bit32`, not `bit`, and it is deliberate: Lua numbers are
+float64, which can only represent integers exactly up to 2^53. A 64-bit
+bitwise result would routinely exceed that and silently lose bits — worse
+than no bitwise support at all. Restricting every operand and result to
+`[0, 2^32)` keeps everything exactly representable. Results are always
+unsigned, so `bit32.bnot(0)` is `4294967295`, never `-1`. **LuaJIT users
+reaching for `require("bit")` should note the different name and the
+unsigned result convention** — this is not that library.
+
+Negative operands are accepted as two's complement (`-1` behaves as
+`0xFFFFFFFF`); non-integer floats, `NaN`/`Inf`, and operands outside
+`[-2^53, 2^53]` all raise. Shift counts must be non-negative (negative
+raises); `n >= 32` clamps to `0` (or `0xFFFFFFFF` for `arshift` on a
+negative value) rather than raising. Bit positions for `test`/`set`/`clear`
+must be in `[0, 31]` — out of range raises, unlike shift counts.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/bit32"
+
+L.PreloadModule("bit32", bit32.Loader)
+```
+
+**Lua API:**
+
+```lua
+local bit32 = require("bit32")
+
+-- band/bor/bxor take a variadic tail
+local rw = bit32.bor(0x4, 0x2)              -- 6
+local masked = bit32.band(0xFF, 0x0F, 0x03) -- 3
+
+-- Two's complement: -1 behaves as 0xFFFFFFFF
+print(bit32.band(-1, 0xFF))                 -- 255
+print(bit32.bnot(0))                        -- 4294967295, not -1
+
+-- arshift sign-extends bit 31; rshift never does
+print(bit32.rshift(0x80000000, 4))          -- 0x08000000
+print(bit32.arshift(0x80000000, 4))         -- 0xF8000000
+
+-- test/set/clear operate on individual bit positions [0, 31]
+local mode = 0x1A4                          -- 0644 octal
+if bit32.test(mode, 8) then
+  print("owner can read")
+end
+```
+
+#### strconv
+
+Numeric parsing/formatting and Go-syntax string quoting, with errors that
+actually say what went wrong.
+
+Lua 5.1 already has `tonumber(s)` / `tonumber(s, base)`, so `parse_int` and
+`parse_float` are admittedly thin wrappers over them — the value this module
+adds is narrow but real:
+
+- `tonumber` returns `nil` with no explanation. `strconv.parse_int` and
+  `strconv.parse_float` **raise** with Go's own message
+  (`strconv.ParseInt: parsing "12a": invalid syntax`), matching this
+  library's fail-loud convention.
+- `tonumber` silently hands back a float for an integer that doesn't fit.
+  `parse_int`/`format_int` instead **raise** when a value's magnitude
+  exceeds 2^53 — the largest integer a Lua number (a float64) can represent
+  exactly — rather than silently rounding it.
+- `format_int(n, base)` and `format_float(f, fmt, prec)` (with shortest
+  round-trip formatting via `prec = -1`) have no Lua 5.1 equivalent at all.
+- `quote`/`unquote` (Go-syntax string literals with escapes) have no
+  equivalent in Lua 5.1.
+
+There is no `itoa` — it is exactly `format_int(n, 10)`.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/strconv"
+
+L.PreloadModule("strconv", strconv.Loader)
+```
+
+**Lua API:**
+
+```lua
+local strconv = require("strconv")
+
+local mode = strconv.parse_int("644", 8)     -- 420
+print(strconv.format_int(mode, 8))           -- "644"
+print(strconv.format_float(1/3, "g", -1))    -- "0.3333333333333333"
+
+-- tonumber("12a") would silently return nil; strconv raises with a reason.
+local ok, err = pcall(strconv.atoi, "12a")
+print(ok, err) -- false, ".../strconv.ParseInt: parsing "12a": invalid syntax"
+
+-- parse_bool accepts Go's spelling set
+print(strconv.parse_bool("TRUE"))            -- true
+
+-- quote/unquote round-trip Go-syntax string literals
+local q = strconv.quote("line one\nline two")
+print(strconv.unquote(q) == "line one\nline two") -- true
 ```
 
 ## Features

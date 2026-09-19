@@ -87,6 +87,12 @@ intentional, not a bug: a k8s `Secret.Data` renders as base64 in
 `kubectl get -o yaml`, which is the mental model module users already have.
 Do not "fix" the nested case without a deliberate decision.
 
+**gopher-lua's `math.huge` is `math.MaxFloat64`, not `+Inf`.** Stock Lua 5.1 sets
+it to `HUGE_VAL`, i.e. infinity. So `math.huge == 1/0` is **false** here, and a
+test that expects `math.huge` to behave as infinity will fail confusingly. Real
+IEEE infinities do exist — produce one with `1/0` (and `NaN` with `0/0`). Verified
+against gopher-lua v1.1.2.
+
 **gopher-lua diverges from stock Lua 5.1 on `setmetatable`.** Stock Lua requires
 a table as arg 1, so userdata is protected for free. gopher-lua's
 `baseSetMetatable` only type-checks arg 2, so a script CAN reassign a metatable

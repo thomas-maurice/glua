@@ -28,13 +28,14 @@ import (
 	"github.com/thomas-maurice/glua/pkg/luareg"
 )
 
-// TestRegisterAll_AllModulesWired: A5 migrated all 17 modules; RegisterAll
-// must wire every one of them. Locking in the exact count catches a module
-// being silently dropped from the aggregator (which would silently disappear
-// from the regenerated library/*.gen.lua too).
+// TestRegisterAll_AllModulesWired: A5 migrated all 17 original modules;
+// S1/S2 added bit32 and strconv, bringing the count to 19. RegisterAll must
+// wire every one of them. Locking in the exact count catches a module being
+// silently dropped from the aggregator (which would silently disappear from
+// the regenerated library/*.gen.lua too).
 func TestRegisterAll_AllModulesWired(t *testing.T) {
 	reg := luareg.NewRegistry()
 	require.NotPanics(t, func() { RegisterAll(reg) })
-	assert.Equal(t, 17, len(reg.Modules()),
+	assert.Equal(t, 19, len(reg.Modules()),
 		"RegisterAll must wire every module; missing module would silently drop from the stub regen")
 }

@@ -31,6 +31,7 @@ package modules
 import (
 	"github.com/thomas-maurice/glua/pkg/luareg"
 	"github.com/thomas-maurice/glua/pkg/modules/base64"
+	"github.com/thomas-maurice/glua/pkg/modules/bit32"
 	"github.com/thomas-maurice/glua/pkg/modules/filepath"
 	"github.com/thomas-maurice/glua/pkg/modules/fs"
 	"github.com/thomas-maurice/glua/pkg/modules/hash"
@@ -43,6 +44,7 @@ import (
 	"github.com/thomas-maurice/glua/pkg/modules/osmod"
 	"github.com/thomas-maurice/glua/pkg/modules/regexp"
 	"github.com/thomas-maurice/glua/pkg/modules/spew"
+	"github.com/thomas-maurice/glua/pkg/modules/strconv"
 	"github.com/thomas-maurice/glua/pkg/modules/strings"
 	"github.com/thomas-maurice/glua/pkg/modules/template"
 	"github.com/thomas-maurice/glua/pkg/modules/time"
@@ -58,6 +60,7 @@ import (
 // aggregator.
 func RegisterAll(reg *luareg.Registry) {
 	base64.Register(reg)
+	bit32.Register(reg)
 	filepath.Register(reg)
 	fs.Register(reg)
 	hash.Register(reg)
@@ -70,6 +73,7 @@ func RegisterAll(reg *luareg.Registry) {
 	osmod.Register(reg)
 	regexp.Register(reg)
 	spew.Register(reg)
+	strconv.Register(reg)
 	strings.Register(reg)
 	template.Register(reg)
 	time.Register(reg)
