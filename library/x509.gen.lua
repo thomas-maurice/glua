@@ -44,15 +44,15 @@ function x509.parse_chain(pem) end
 
 --- returns the number of days between now and the certificate's not_after; may be negative (already expired) or fractional
 ---@param pem string PEM-encoded certificate text
----@param now number the current time as Unix seconds, e.g. time.now()
+---@param at_time number the current time as Unix seconds, e.g. time.now()
 ---@return number days fractional days until expiry; negative if already expired
-function x509.expires_in_days(pem, now) end
+function x509.expires_in_days(pem, at_time) end
 
---- reports whether when falls within [not_before, not_after], inclusive of both bounds
+--- reports whether at_time falls within [not_before, not_after], inclusive of both bounds
 ---@param pem string PEM-encoded certificate text
----@param when number the time to check, as Unix seconds
----@return boolean ok true if not_before <= when <= not_after
-function x509.is_valid_at(pem, when) end
+---@param at_time number the time to check, as Unix seconds
+---@return boolean ok true if not_before <= at_time <= not_after
+function x509.is_valid_at(pem, at_time) end
 
 --- verifies leaf against intermediates and roots; NEVER consults the system trust store, so an empty roots argument can never succeed
 ---@param leaf string PEM-encoded leaf certificate to verify

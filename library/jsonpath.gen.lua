@@ -19,7 +19,7 @@ function jsonpath.first(data, path, default) end
 --- reports whether path has at least one match in data
 ---@param data any the value to query, normally a table
 ---@param path string a kubectl-jsonpath path; bare, $-rooted and braced forms are all accepted
----@return boolean found true if path matched at least one value in data
+---@return boolean ok true if path matched at least one value in data
 function jsonpath.exists(data, path) end
 
 --- renders template against data using the native kubectl jsonpath text-template mode, concatenating matched values and literal text

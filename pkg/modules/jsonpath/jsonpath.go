@@ -287,7 +287,7 @@ func build() *luareg.Module {
 		luareg.Args("data", "path"),
 		luareg.ArgDoc("data", "the value to query, normally a table"),
 		luareg.ArgDoc("path", "a kubectl-jsonpath path; bare, $-rooted and braced forms are all accepted"),
-		luareg.ReturnDoc(0, "found", "true if path matched at least one value in data"))
+		luareg.ReturnDoc(0, "ok", "true if path matched at least one value in data"))
 
 	m.Fn("render", renderFn, "renders template against data using the native kubectl jsonpath text-template mode, concatenating matched values and literal text",
 		luareg.Args("data", "template"),

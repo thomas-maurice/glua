@@ -419,17 +419,17 @@ func build() *luareg.Module {
 
 	m.Fn("expires_in_days", expiresInDaysFn,
 		"returns the number of days between now and the certificate's not_after; may be negative (already expired) or fractional",
-		luareg.Args("pem", "now"),
+		luareg.Args("pem", "at_time"),
 		luareg.ArgDoc("pem", "PEM-encoded certificate text"),
-		luareg.ArgDoc("now", "the current time as Unix seconds, e.g. time.now()"),
+		luareg.ArgDoc("at_time", "the current time as Unix seconds, e.g. time.now()"),
 		luareg.ReturnDoc(0, "days", "fractional days until expiry; negative if already expired"))
 
 	m.Fn("is_valid_at", isValidAtFn,
-		"reports whether when falls within [not_before, not_after], inclusive of both bounds",
-		luareg.Args("pem", "when"),
+		"reports whether at_time falls within [not_before, not_after], inclusive of both bounds",
+		luareg.Args("pem", "at_time"),
 		luareg.ArgDoc("pem", "PEM-encoded certificate text"),
-		luareg.ArgDoc("when", "the time to check, as Unix seconds"),
-		luareg.ReturnDoc(0, "ok", "true if not_before <= when <= not_after"))
+		luareg.ArgDoc("at_time", "the time to check, as Unix seconds"),
+		luareg.ReturnDoc(0, "ok", "true if not_before <= at_time <= not_after"))
 
 	m.Fn("verify_chain", verifyChainFn,
 		"verifies leaf against intermediates and roots; NEVER consults the system trust store, so an empty roots argument can never succeed",
