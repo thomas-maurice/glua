@@ -845,7 +845,7 @@ import (
 
 func main() {
     reg := luareg.NewRegistry()
-    modules.RegisterAll(reg)   // glua's 20 built-in modules
+    modules.RegisterAll(reg)   // glua's 23 built-in modules
     widget.Register(reg)       // your module
 
     gen := stubgen.NewGenerator()
@@ -1974,6 +1974,134 @@ local img = c.get_path(obj, "spec.containers.1.image", "<none>")
 if not c.deep_equal(desired, actual) then
   apply(c.deep_copy(desired))
 end
+```
+
+#### netaddr
+
+IP address and CIDR arithmetic as pure computation: `parse_ip`, `parse_cidr`,
+`cidr_contains`, `subnet_of`, `cidr_overlaps`, `is_private`, `is_loopback`,
+`is_global`, `normalize_ip`, `ip_version`, `is_ip`.
+
+**No name resolution, ever.** The module is built on `net/netip` and
+`math/big` only and deliberately never imports `net` — the package that
+carries the DNS resolver — so "no DNS" is a property of the import list, not
+a comment.
+
+**IPv6 is a first-class citizen, not an afterthought:**
+
+- A v4-mapped v6 address (`::ffff:192.0.2.1`) is unwrapped to its plain v4
+  form everywhere in this module (`parse_ip`, `normalize_ip`,
+  `is_private`/`is_global`/`is_loopback`, and as the host argument to
+  `cidr_contains`), so it behaves identically to typing the v4 form.
+- `cidr_contains`, `subnet_of` and `cidr_overlaps` return `false` — never
+  raise — when comparing across address families (a v4 host/prefix against a
+  v6 one). Only a malformed IP/CIDR string raises.
+- `is_private`/`is_global` cover the v6 special ranges (ULA `fc00::/7`,
+  link-local `fe80::/10`, loopback `::1`, unspecified `::`) alongside the v4
+  RFC 1918/documentation sets.
+- `num_addresses` in `parse_cidr`'s result is a **decimal string, not a
+  number** — a v6 `/0` holds 2^128 addresses, far past what a float64 can
+  represent exactly. This costs v4 callers a `tonumber()` call for the common
+  case, in exchange for v6 callers never getting a silently-wrong count.
+- Prefix-length errors name the actual bound (0-32 for v4, 0-128 for v6).
+- `parse_cidr` normalizes non-canonical input: `"10.0.0.5/8"` becomes
+  `"10.0.0.0/8"` rather than being rejected.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/netaddr"
+
+L.PreloadModule("netaddr", netaddr.Loader)
+```
+
+**Lua API:**
+
+```lua
+local netaddr = require("netaddr")
+
+if not netaddr.cidr_contains("10.0.0.0/8", clientIP) then
+  return deny("client outside the corp range")
+end
+
+local c = netaddr.parse_cidr("192.168.1.0/24")
+print(c.first, c.last, c.num_addresses)   -- 192.168.1.0  192.168.1.255  256
+
+-- IPv6: a v6 /64 holds 2^64 addresses -- num_addresses is a string because
+-- that value cannot round-trip through a float64 exactly.
+local v6 = netaddr.parse_cidr("2001:db8::/64")
+print(v6.num_addresses)                   -- "18446744073709551616"
+
+if netaddr.is_global(svcIP) then
+  return deny("service must not use a globally routable address")
+end
+
+netaddr.is_private("fc00::1")             -- true (IPv6 ULA)
+netaddr.cidr_contains("2001:db8::/32", "2001:db8::1")  -- true
+netaddr.cidr_contains("10.0.0.0/8", "2001:db8::1")     -- false, not an error
+```
+
+#### url
+
+URL parsing, construction, escaping and RFC 3986 reference resolution, built
+on `net/url` only: `parse`, `build`, `resolve`, `query_escape`/`unescape`,
+`path_escape`/`unescape`, `parse_query`, `build_query`.
+
+**IPv6 literal hosts are the trap this module is designed around.**
+`url.parse("http://[::1]:8080/path")` splits the authority into `hostname =
+"::1"` (unbracketed) and `port = "8080"`, separately from `host = "[::1]:8080"`
+(the raw authority, brackets included, mirroring Go's `net/url.URL.Host`).
+`url.build` re-adds the brackets around a bare IPv6 literal automatically —
+callers who only set `hostname`/`port` never have to learn the bracket rule.
+A zone id (`http://[fe80::1%25eth0]/`) round-trips through `parse` then
+`build` without corruption.
+
+`parse` returns and `build` accepts the same table shape: `scheme, opaque,
+username, password, host, hostname, port, path, raw_path, raw_query,
+fragment`. `username`/`password` are flattened out of the URL's userinfo into
+two plain strings, empty when absent.
+
+`parse_query` always returns `table<string, string[]>` — every key maps to
+an array of values, even a single one, because a repeated key (`?a=1&a=2`) is
+legal and would otherwise silently lose a value; it returns an empty (never
+`nil`) table for an empty query string. `build_query` accepts `table<string,
+string|string[]>` (a plain string, or an array for a repeated key) and sorts
+its output by key — `net/url.Values.Encode`'s own behaviour — so the same
+input always produces the same output.
+
+Only `url.resolve` is provided for reference resolution (RFC 3986's
+`ResolveReference`, not naive path-joining): `resolve("https://x/a/b", "c")`
+→ `"https://x/a/c"`, while `resolve("https://x/a/b/", "c")` →
+`"https://x/a/b/c"`.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/url"
+
+L.PreloadModule("url", url.Loader)
+```
+
+**Lua API:**
+
+```lua
+local url = require("url")
+
+local u = url.parse("https://user:pw@example.com:8443/a/b?x=1&x=2#frag")
+print(u.hostname, u.port, u.path)        -- example.com  8443  /a/b
+
+local q = url.parse_query(u.raw_query)
+print(#q.x)                               -- 2
+
+print(url.build_query({ ns = "default", label = {"a", "b"} }))
+print(url.resolve("https://example.com/a/b", "../c"))
+
+-- IPv6 literal host: hostname is unbracketed, build re-adds the brackets.
+local v6 = url.parse("http://[::1]:8080/path")
+print(v6.hostname, v6.port)               -- ::1  8080
+print(url.build(v6))                      -- http://[::1]:8080/path
+print(url.build({scheme = "http", hostname = "::1", port = "8080", path = "/"}))
+-- http://[::1]:8080/ -- brackets added automatically
 ```
 
 ## Features

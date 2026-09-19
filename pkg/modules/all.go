@@ -42,6 +42,7 @@ import (
 	k8sclient "github.com/thomas-maurice/glua/pkg/modules/k8sclient"
 	"github.com/thomas-maurice/glua/pkg/modules/kubernetes"
 	logmod "github.com/thomas-maurice/glua/pkg/modules/log"
+	"github.com/thomas-maurice/glua/pkg/modules/netaddr"
 	"github.com/thomas-maurice/glua/pkg/modules/osmod"
 	"github.com/thomas-maurice/glua/pkg/modules/regexp"
 	"github.com/thomas-maurice/glua/pkg/modules/spew"
@@ -50,6 +51,7 @@ import (
 	"github.com/thomas-maurice/glua/pkg/modules/template"
 	"github.com/thomas-maurice/glua/pkg/modules/text"
 	"github.com/thomas-maurice/glua/pkg/modules/time"
+	neturl "github.com/thomas-maurice/glua/pkg/modules/url"
 	"github.com/thomas-maurice/glua/pkg/modules/yaml"
 )
 
@@ -73,6 +75,7 @@ func RegisterAll(reg *luareg.Registry) {
 	k8sclient.Register(reg)
 	kubernetes.Register(reg)
 	logmod.Register(reg)
+	netaddr.Register(reg)
 	osmod.Register(reg)
 	regexp.Register(reg)
 	spew.Register(reg)
@@ -81,5 +84,6 @@ func RegisterAll(reg *luareg.Registry) {
 	template.Register(reg)
 	text.Register(reg)
 	time.Register(reg)
+	neturl.Register(reg)
 	yaml.Register(reg)
 }
