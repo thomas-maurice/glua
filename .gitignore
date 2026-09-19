@@ -1,11 +1,14 @@
 # Claude AI
-.claude/
-.claude
+# Ignore everything under .claude EXCEPT the checked-in skills, which document
+# how to work on this repo and are meant to be shared with contributors.
+# Note: git cannot re-include a path whose parent directory is excluded, so
+# this must exclude .claude/* rather than .claude/ itself.
+.claude/*
+!.claude/skills/
 CLAUDE.md
 claude.md
 .clauderc
 **/CLAUDE.md
-**/.claude
 SPECS.md
 
 # Build artifacts
