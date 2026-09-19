@@ -687,6 +687,23 @@ Notes:
 
   generates `---@param handler fun(evt: core.Event)` instead of
   `---@param handler any`. It has no runtime effect — stub generation only.
+- The same escape hatch exists for return values: `luareg.ReturnType(index,
+  luaType)` overrides the Nth return's inferred type (0-indexed, excluding a
+  trailing `error` return). Use it when a return type's Go type carries no
+  useful Lua type on its own — e.g. a `*lua.LTable` built by hand and returned
+  as an escape hatch, where a more specific type (`any[]`, `table<string,
+  string>`, ...) is more useful to callers than the generic fallback:
+
+  ```go
+  m.Fn("keys", collectionsKeys, "returns a table's keys as a new table",
+      luareg.ReturnDoc(0, "keys", "the table's keys"),
+      luareg.ReturnType(0, "any[]"),
+  )
+  ```
+
+  Without an override, an un-annotated `*lua.LTable` return stubs as `table`
+  and a `lua.LValue` return stubs as `any` — never a bogus class reference.
+  It has no runtime effect — stub generation only.
 - A top-level `[]byte` argument or return value (directly in a function or
   method signature, not nested inside a struct/map field) maps to a raw Lua
   string, not base64 and not a table of numbers — Lua strings are 8-bit

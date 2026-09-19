@@ -42,6 +42,13 @@ import (
 var (
 	errorType    = reflect.TypeOf((*error)(nil)).Elem()
 	luaStateType = reflect.TypeOf((*lua.LState)(nil))
+	// luaTableType and luaValueIfType are gopher-lua's escape-hatch types
+	// (mirrors the same vars in pkg/luareg/reflect.go). Matched by concrete
+	// reflect.Type rather than name so goTypeToLua can special-case them
+	// before the generic struct/interface handling would otherwise emit a
+	// bogus "lua.LTable" class reference.
+	luaTableType   = reflect.TypeOf((*lua.LTable)(nil))
+	luaValueIfType = reflect.TypeOf((*lua.LValue)(nil)).Elem()
 )
 
 // Generator: builds Lua LSP stubs from a luareg.Registry and an optional set of
@@ -519,12 +526,25 @@ func buildReturnList(ft reflect.Type, fn *luareg.FnMeta, classLookup map[reflect
 	}
 
 	var rets []returnInfo
+	visibleIdx := 0 // index into ReturnDocs/ReturnTypes (counts only visible Lua returns)
 	for i := 0; i < nonErrCount; i++ {
 		rt := ft.Out(i)
+		// *lua.LState must never appear in a stub: it is the escape hatch
+		// receiver, not a value a Go function can meaningfully return (the
+		// runtime wrapper's goToLua has no conversion for it either). No
+		// current function does this; this guard just makes sure one never
+		// silently leaks a "lua.LState" reference into a stub if it did.
+		if isLStateType(rt) {
+			continue
+		}
+
 		luaType := goTypeToLua(rt, classLookup)
+		if override := findReturnType(fn, visibleIdx); override != "" {
+			luaType = override
+		}
 
 		var name, doc string
-		if d, ok := docByIndex[i]; ok {
+		if d, ok := docByIndex[visibleIdx]; ok {
 			name = d.Name
 			doc = d.Doc
 		}
@@ -534,6 +554,7 @@ func buildReturnList(ft reflect.Type, fn *luareg.FnMeta, classLookup map[reflect
 			name:    name,
 			doc:     doc,
 		})
+		visibleIdx++
 	}
 	return rets
 }
@@ -545,6 +566,20 @@ func goTypeToLua(t reflect.Type, classLookup map[reflect.Type]luareg.AnyClass) s
 	// Check if it's a registered class first (before dereferencing pointer).
 	if cls, ok := classLookup[t]; ok {
 		return cls.Name()
+	}
+
+	// gopher-lua escape-hatch types: *lua.LTable is a *struct* under
+	// reflection, so without this check it would fall into the generic
+	// struct-pointer branch below and emit structLuaName(lua.LTable) — a
+	// reference to a "lua.LTable" class that is never registered and never
+	// will be. lua.LValue is an interface, which the generic switch below
+	// already maps to "any" via reflect.Interface, but it is special-cased
+	// here too so the mapping is explicit rather than incidental.
+	if t == luaTableType {
+		return "table"
+	}
+	if t == luaValueIfType {
+		return "any"
 	}
 
 	// Dereference pointer.
@@ -650,6 +685,18 @@ func findArgType(fn *luareg.FnMeta, name string) string {
 	for _, at := range fn.ArgTypes {
 		if at.Name == name {
 			return at.LuaType
+		}
+	}
+	return ""
+}
+
+// findReturnType: looks up the explicit LuaLS type override for the Nth
+// return value (0-indexed, excluding a trailing error return) in
+// fn.ReturnTypes. Returns "" if no override was registered.
+func findReturnType(fn *luareg.FnMeta, index int) string {
+	for _, rt := range fn.ReturnTypes {
+		if rt.Index == index {
+			return rt.LuaType
 		}
 	}
 	return ""

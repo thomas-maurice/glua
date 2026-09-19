@@ -40,7 +40,7 @@ function strings.trim_right(s, cutset) end
 function strings.split(s, sep) end
 
 --- joins a table of strings with a separator, coercing values to strings
----@param parts gopher-lua.LTable table (array) of values to join; non-string values are coerced via tostring
+---@param parts table table (array) of values to join; non-string values are coerced via tostring
 ---@param sep string the separator to place between elements
 ---@return string out the joined string
 function strings.join(parts, sep) end
