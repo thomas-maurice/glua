@@ -66,6 +66,39 @@ func TestRender_InvalidTemplate(t *testing.T) {
 	require.NoError(t, L.DoString(code))
 }
 
+// TestRender_CyclicData_ViaLuaPcall: a self-referential data table raises a
+// catchable error instead of crashing the process, and the Lua state keeps
+// working afterwards.
+//
+// Regression test: template.render/render_file used to hand-roll their own
+// unguarded recursive Lua->Go conversion (luaTableToGoMap/luaValueToGo), so
+// handing them a cyclic data table (`t.self = t`) recursed forever and
+// killed the whole host process with an unrecoverable "fatal error: stack
+// overflow" -- not something pcall could ever catch. They now share
+// pkg/glua's TableGuard, so the same input raises an ordinary, catchable
+// Lua error.
+func TestRender_CyclicData_ViaLuaPcall(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	L.PreloadModule("template", Loader)
+
+	code := `
+		local template = require("template")
+
+		local t = {}
+		t.self = t
+
+		local ok, err = pcall(template.render, "{{.Name}}", t)
+		assert(not ok, "Expected error for a self-referential data table")
+		assert(string.find(err, "cycle") ~= nil, "Expected error to mention 'cycle', got: " .. err)
+
+		-- Prove the Lua state is still usable after the caught error.
+		local result = template.render("Hello {{.Name}}", {Name = "World"})
+		assert(result == "Hello World", "Expected normal render to still work, got: " .. result)
+	`
+	require.NoError(t, L.DoString(code))
+}
+
 func TestRenderFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "test.tmpl")

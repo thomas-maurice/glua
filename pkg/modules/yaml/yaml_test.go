@@ -84,3 +84,35 @@ func TestRoundTrip(t *testing.T) {
 	`
 	require.NoError(t, L.DoString(code))
 }
+
+// TestStringify_CyclicTable_ViaLuaPcall: a self-referential table raises a
+// catchable error instead of crashing the process, and the Lua state keeps
+// working afterwards.
+//
+// Regression test: yaml.stringify used to hand-roll its own unguarded
+// recursive Lua->Go conversion (luaToGo), so handing it a cyclic table
+// (`t.self = t`) recursed forever and killed the whole host process with an
+// unrecoverable "fatal error: stack overflow" -- not something pcall could
+// ever catch. It now shares pkg/glua's TableGuard, so the same input raises
+// an ordinary, catchable Lua error.
+func TestStringify_CyclicTable_ViaLuaPcall(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	L.PreloadModule("yaml", Loader)
+
+	code := `
+		local yaml = require("yaml")
+
+		local t = {}
+		t.self = t
+
+		local ok, err = pcall(yaml.stringify, t)
+		assert(not ok, "Expected error for a self-referential table")
+		assert(string.find(err, "cycle") ~= nil, "Expected error to mention 'cycle', got: " .. err)
+
+		-- Prove the Lua state is still usable after the caught error.
+		local result = yaml.stringify({hello = "world"})
+		assert(string.find(result, "hello") ~= nil, "Expected normal stringify to still work, got: " .. result)
+	`
+	require.NoError(t, L.DoString(code))
+}

@@ -146,8 +146,22 @@ func (t *Translator) FromLua(_ *lua.LState, lv lua.LValue, output interface{}) e
 	return nil
 }
 
-// fromLuaValue: recursively converts Lua values to Go values
+// fromLuaValue: recursively converts Lua values to Go values.
+// Delegates the table-walking cases to fromLuaValueGuarded, threading a fresh
+// TableGuard through the walk so a cyclic or pathologically deep table
+// produces a normal Go error instead of overflowing the stack.
 func (t *Translator) fromLuaValue(lv lua.LValue) (interface{}, error) {
+	return t.fromLuaValueGuarded(lv, NewTableGuard())
+}
+
+// fromLuaValueGuarded: recursively converts Lua values to Go values, the same
+// as fromLuaValue, but takes the TableGuard used to reject the two ways a Lua
+// table can make this function recurse forever: a table that references
+// itself (directly or through intermediates), and a table nested deeper than
+// is realistic for any legitimate payload. See TableGuard's doc comment for
+// why this matters more than an ordinary panic, and why it must be shared
+// rather than reimplemented per table walker.
+func (t *Translator) fromLuaValueGuarded(lv lua.LValue, guard *TableGuard) (interface{}, error) {
 	switch v := lv.(type) {
 	case *lua.LNilType:
 		return nil, nil
@@ -162,6 +176,11 @@ func (t *Translator) fromLuaValue(lv lua.LValue) (interface{}, error) {
 		return bool(v), nil
 
 	case *lua.LTable:
+		if err := guard.Enter(v); err != nil {
+			return nil, err
+		}
+		defer guard.Leave(v)
+
 		// Check if it's an array or a map
 		maxN := v.MaxN()
 
@@ -170,7 +189,7 @@ func (t *Translator) fromLuaValue(lv lua.LValue) (interface{}, error) {
 			arr := make([]interface{}, 0, maxN)
 			for i := 1; i <= maxN; i++ {
 				val := v.RawGetInt(i)
-				item, err := t.fromLuaValue(val)
+				item, err := t.fromLuaValueGuarded(val, guard)
 				if err != nil {
 					return nil, fmt.Errorf("failed to convert array element %d: %w", i, err)
 				}
@@ -194,7 +213,7 @@ func (t *Translator) fromLuaValue(lv lua.LValue) (interface{}, error) {
 				return
 			}
 			keyStr := key.String()
-			val, err := t.fromLuaValue(value)
+			val, err := t.fromLuaValueGuarded(value, guard)
 			if err != nil {
 				forEachErr = fmt.Errorf("failed to convert value for key %q: %w", keyStr, err)
 				return
