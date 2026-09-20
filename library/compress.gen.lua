@@ -17,7 +17,7 @@ function compress.gzip_compress(data, level) end
 
 --- decompresses a gzip stream, raising if the output would exceed max_bytes
 ---@param data string the gzip stream to decompress
----@param max_bytes number the maximum number of decompressed bytes to allow; must be >= 1, no unlimited option
+---@param max_bytes number the maximum number of decompressed bytes to allow; must be finite and in [1, 4 GiB], no unlimited option
 ---@return string data the decompressed bytes
 function compress.gzip_decompress(data, max_bytes) end
 
@@ -29,7 +29,7 @@ function compress.zlib_compress(data, level) end
 
 --- decompresses a zlib stream, raising if the output would exceed max_bytes
 ---@param data string the zlib stream to decompress
----@param max_bytes number the maximum number of decompressed bytes to allow; must be >= 1, no unlimited option
+---@param max_bytes number the maximum number of decompressed bytes to allow; must be finite and in [1, 4 GiB], no unlimited option
 ---@return string data the decompressed bytes
 function compress.zlib_decompress(data, max_bytes) end
 
@@ -41,7 +41,7 @@ function compress.flate_compress(data, level) end
 
 --- decompresses a raw DEFLATE stream, raising if the output would exceed max_bytes
 ---@param data string the raw DEFLATE stream to decompress
----@param max_bytes number the maximum number of decompressed bytes to allow; must be >= 1, no unlimited option
+---@param max_bytes number the maximum number of decompressed bytes to allow; must be finite and in [1, 4 GiB], no unlimited option
 ---@return string data the decompressed bytes
 function compress.flate_decompress(data, max_bytes) end
 

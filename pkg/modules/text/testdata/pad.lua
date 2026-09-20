@@ -22,4 +22,11 @@ assert(string.find(err, "exactly one rune") ~= nil, "pad_left error should expla
 ok, err = pcall(text.pad_right, "x", 5, "")
 assert(ok == false, "pad_right should raise when pad is the empty string (zero runes)")
 
+-- width is capped so a typo'd huge width cannot turn into an unbounded
+-- allocation (security review LOW 3): a value far past the cap must raise,
+-- not silently allocate.
+local okHuge, errHuge = pcall(text.pad_left, "x", 1e8, "-")
+assert(okHuge == false, "pad_left with a width far past the cap should raise")
+assert(string.find(errHuge, "width must be") ~= nil, "pad_left error should name the width constraint, got: " .. tostring(errHuge))
+
 return true

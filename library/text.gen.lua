@@ -29,14 +29,14 @@ function text.truncate(s, width, ellipsis) end
 
 --- left-pads a string with a single rune to a minimum rune width
 ---@param s string the string to pad
----@param width number minimum runes of the result; s is never truncated if it is already this wide or wider
+---@param width number minimum runes of the result; s is never truncated if it is already this wide or wider; must be <= 1048576
 ---@param pad string the single rune to pad with; exactly one rune is required
 ---@return string out s left-padded with pad to width runes, or s unchanged if already >= width runes
 function text.pad_left(s, width, pad) end
 
 --- right-pads a string with a single rune to a minimum rune width
 ---@param s string the string to pad
----@param width number minimum runes of the result; s is never truncated if it is already this wide or wider
+---@param width number minimum runes of the result; s is never truncated if it is already this wide or wider; must be <= 1048576
 ---@param pad string the single rune to pad with; exactly one rune is required
 ---@return string out s right-padded with pad to width runes, or s unchanged if already >= width runes
 function text.pad_right(s, width, pad) end

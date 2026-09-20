@@ -54,6 +54,13 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
+// maxPadWidth: the largest width accepted by pad_left/pad_right. Same
+// reasoning and same bound as pkg/modules/strings' maxRepCount and
+// pkg/modules/random's maxLen: generous enough for any realistic layout
+// use, small enough that a typo'd width argument cannot turn into an
+// unbounded allocation that OOMs the host Go process.
+const maxPadWidth = 1 << 20
+
 // wrapParagraph: greedily word-wraps a single line (no embedded newlines) to
 // at most width runes per output line. Words are whitespace-separated
 // (strings.Fields semantics); a single word longer than width is placed on
@@ -216,12 +223,27 @@ func singlePadRune(fnName, pad string) (rune, error) {
 	return padRunes[0], nil
 }
 
+// validatePadWidth: rejects a width argument that could turn pad_left/
+// pad_right into an unbounded allocation (e.g. a typo'd width meant to be a
+// column count). fnName is the Lua-visible function name, used to make the
+// error greppable back to its call site.
+func validatePadWidth(fnName string, width int) error {
+	if width > maxPadWidth {
+		return fmt.Errorf("text.%s: width must be <= %d, got %d", fnName, maxPadWidth, width)
+	}
+	return nil
+}
+
 // padLeft: left-pads s with copies of pad until it is width runes long.
 // Never truncates: if s is already width runes or wider, it is returned
-// unchanged. Raises if pad is not exactly one rune.
+// unchanged. Raises if pad is not exactly one rune, or if width exceeds
+// maxPadWidth.
 func padLeft(s string, width int, pad string) (string, error) {
 	r, err := singlePadRune("pad_left", pad)
 	if err != nil {
+		return "", err
+	}
+	if err := validatePadWidth("pad_left", width); err != nil {
 		return "", err
 	}
 	n := utf8.RuneCountInString(s)
@@ -233,10 +255,14 @@ func padLeft(s string, width int, pad string) (string, error) {
 
 // padRight: right-pads s with copies of pad until it is width runes long.
 // Never truncates: if s is already width runes or wider, it is returned
-// unchanged. Raises if pad is not exactly one rune.
+// unchanged. Raises if pad is not exactly one rune, or if width exceeds
+// maxPadWidth.
 func padRight(s string, width int, pad string) (string, error) {
 	r, err := singlePadRune("pad_right", pad)
 	if err != nil {
+		return "", err
+	}
+	if err := validatePadWidth("pad_right", width); err != nil {
 		return "", err
 	}
 	n := utf8.RuneCountInString(s)
@@ -272,13 +298,13 @@ func build() *luareg.Module {
 	m.Fn("pad_left", padLeft, "left-pads a string with a single rune to a minimum rune width",
 		luareg.Args("s", "width", "pad"),
 		luareg.ArgDoc("s", "the string to pad"),
-		luareg.ArgDoc("width", "minimum runes of the result; s is never truncated if it is already this wide or wider"),
+		luareg.ArgDoc("width", "minimum runes of the result; s is never truncated if it is already this wide or wider; must be <= 1048576"),
 		luareg.ArgDoc("pad", "the single rune to pad with; exactly one rune is required"),
 		luareg.ReturnDoc(0, "out", "s left-padded with pad to width runes, or s unchanged if already >= width runes"))
 	m.Fn("pad_right", padRight, "right-pads a string with a single rune to a minimum rune width",
 		luareg.Args("s", "width", "pad"),
 		luareg.ArgDoc("s", "the string to pad"),
-		luareg.ArgDoc("width", "minimum runes of the result; s is never truncated if it is already this wide or wider"),
+		luareg.ArgDoc("width", "minimum runes of the result; s is never truncated if it is already this wide or wider; must be <= 1048576"),
 		luareg.ArgDoc("pad", "the single rune to pad with; exactly one rune is required"),
 		luareg.ReturnDoc(0, "out", "s right-padded with pad to width runes, or s unchanged if already >= width runes"))
 	return m

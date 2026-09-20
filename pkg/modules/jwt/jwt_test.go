@@ -129,6 +129,27 @@ func TestAlgorithmConfusion_ForgedHS256UsingRSAPublicKey(t *testing.T) {
 	// key it always uses for RS256 verification.
 	_, err = verifyFn(forged, pubPEM, VerifyOptions{Algorithms: []string{"RS256"}})
 	require.Error(t, err, "forged HS256 token must be rejected when the server only accepts RS256")
+
+	// Assert on the SPECIFIC error jwt/v5's WithValidMethods produces
+	// (parser.go: newError(fmt.Sprintf("signing method %v is invalid", alg),
+	// ErrTokenSignatureInvalid)), not just "an error occurred". Both the
+	// protected path (WithValidMethods rejects the header's declared alg
+	// before any key is used) and jwt/v5's later HMAC-key-type-mismatch path
+	// wrap the SAME ErrTokenSignatureInvalid sentinel, so errors.Is alone
+	// cannot tell them apart -- confirmed by reproducing both call paths
+	// directly against golang-jwt/jwt/v5 v5.3.1:
+	//   with WithValidMethods:    "token signature is invalid: signing method HS256 is invalid"
+	//   without WithValidMethods: "token signature is invalid: key is of invalid type: HMAC verify expects []byte"
+	// Only the first message proves the algorithm-family defence fired; the
+	// second would still occur (with a different message) if
+	// WithValidMethods were ever removed from verifyFn, which is exactly
+	// the regression this test must catch (repo Rule 9: the previous
+	// assertion, require.Error only, passed whether or not the defence
+	// existed, because the RSA-public-key-as-HMAC-secret type mismatch
+	// alone was enough to fail verification).
+	require.ErrorIs(t, err, jwt.ErrTokenSignatureInvalid)
+	assert.Contains(t, err.Error(), "signing method HS256 is invalid",
+		"error must show WithValidMethods rejected the token's declared alg, not merely that some later step failed")
 }
 
 func TestVerify_NoneAlgHeader_Rejected(t *testing.T) {
@@ -156,6 +177,50 @@ func TestVerify_LeewayAllowsJustExpiredToken(t *testing.T) {
 	// With enough leeway: accepted.
 	_, err = verifyFn(token, "secret", VerifyOptions{Algorithms: []string{"HS256"}, LeewaySeconds: 10})
 	require.NoError(t, err)
+}
+
+// TestVerify_LeewaySeconds_Unbounded_Rejected is the exact regression this
+// chunk fixes (security review MEDIUM 2): an unvalidated leeway_seconds lets
+// a caller pass math.huge (gopher-lua's math.huge is math.MaxFloat64, not
+// +Inf) or another absurdly large value and have an hours-expired token
+// verify successfully. Each case here must be rejected before ever reaching
+// jwt/v5's exp check.
+func TestVerify_LeewaySeconds_Unbounded_Rejected(t *testing.T) {
+	// A token that expired 100 hours ago -- the scenario from the security
+	// review, confirmed to verify successfully on arm64 before this fix.
+	token, err := signFn(map[string]interface{}{
+		"sub": "svc-a",
+		"exp": float64(time.Now().Add(-100 * time.Hour).Unix()),
+	}, "secret", SignOptions{Algorithm: "HS256"})
+	require.NoError(t, err)
+
+	cases := map[string]float64{
+		"math.MaxFloat64 (gopher-lua's math.huge)": math.MaxFloat64,
+		"1e18":                        1e18,
+		"NaN":                         math.NaN(),
+		"negative":                    -1,
+		"just over the ceiling (301)": 301,
+	}
+	for name, leeway := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := verifyFn(token, "secret", VerifyOptions{Algorithms: []string{"HS256"}, LeewaySeconds: leeway})
+			require.Error(t, err, "leeway_seconds=%v must be rejected, not silently disable exp enforcement", leeway)
+		})
+	}
+}
+
+// TestVerify_LeewaySeconds_AtCeiling_Accepted: the ceiling itself
+// (maxLeewaySeconds) must still work for a legitimate small-clock-skew use
+// -- the fix must reject only what is out of bounds, not the bound itself.
+func TestVerify_LeewaySeconds_AtCeiling_Accepted(t *testing.T) {
+	token, err := signFn(map[string]interface{}{
+		"sub": "svc-a",
+		"exp": float64(time.Now().Add(-1 * time.Minute).Unix()),
+	}, "secret", SignOptions{Algorithm: "HS256"})
+	require.NoError(t, err)
+
+	_, err = verifyFn(token, "secret", VerifyOptions{Algorithms: []string{"HS256"}, LeewaySeconds: maxLeewaySeconds})
+	require.NoError(t, err, "leeway_seconds at the ceiling must still be accepted")
 }
 
 func TestVerify_WrongSubject_Rejected(t *testing.T) {

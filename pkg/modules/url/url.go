@@ -38,6 +38,14 @@
 //     through net/url.URL.String(), which re-escapes '%' back to '%25' when
 //     rendering a bracketed IPv6 host.
 //
+// build raises if host is present together with a hostname and/or port that
+// are inconsistent with it, rather than silently ignoring hostname/port (see
+// buildHost). Without this, a caller doing
+// `local u = url.parse(s); u.hostname = "good.com"; url.build(u)` would get
+// the ORIGINAL host back -- an SSRF allow-list rewritten that way is inert
+// and looks like it worked. Setting only hostname/port (host == ""), or
+// setting host alone, both still work with no consistency check.
+//
 // The url.URL table shape returned by parse and accepted by build is:
 // scheme, opaque, username, password, host, hostname, port, path, raw_path,
 // raw_query, fragment. username/password are flattened out of
@@ -50,6 +58,7 @@
 package url
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -103,16 +112,45 @@ func parseURL(s string) (URL, error) {
 
 // buildHost: derives the Host field for the reconstructed URL. Prefers the
 // caller-supplied host verbatim (the common case: a table came from parse,
-// so host is already correctly bracketed/escaped) and falls back to
-// composing hostname+port, auto-bracketing hostname if it looks like an
-// IPv6 literal, so a caller who only knows about hostname/port never has to
-// learn the bracket rule.
-func buildHost(parts URL) string {
+// so host is already correctly bracketed/escaped -- and, for a zone-id IPv6
+// literal, verbatim is the ONLY way to reproduce the '%'-vs-'%25' escaping
+// exactly, see the package doc) and falls back to composing hostname+port,
+// auto-bracketing hostname if it looks like an IPv6 literal, so a caller who
+// only knows about hostname/port never has to learn the bracket rule.
+//
+// Raises if host is present together with a hostname and/or port that
+// disagree with it, rather than silently ignoring hostname/port. Before this
+// check existed, `local u = url.parse(s); u.hostname = "good.com";
+// url.build(u)` silently returned the ORIGINAL host, because build always
+// preferred host verbatim -- an SSRF allow-list rewritten that way was inert
+// and looked like it worked. Consistency is checked by parsing host's own
+// hostname/port (via net/url, so it round-trips correctly regardless of
+// escaping) rather than re-composing and string-comparing, which would
+// false-positive on exactly the zone-id case host-verbatim exists to
+// preserve.
+func buildHost(parts URL) (string, error) {
 	if parts.Host != "" {
-		return parts.Host
+		if parts.Hostname != "" || parts.Port != "" {
+			derived := &url.URL{Host: parts.Host}
+			if parts.Hostname != "" && parts.Hostname != derived.Hostname() {
+				return "", fmt.Errorf(
+					"url.build: host %q is inconsistent with hostname %q (host implies hostname %q); "+
+						"host is used verbatim when present, so a mismatched hostname/port is ignored silently unless rejected -- "+
+						"pass a consistent host, or omit host and set only hostname/port",
+					parts.Host, parts.Hostname, derived.Hostname())
+			}
+			if parts.Port != "" && parts.Port != derived.Port() {
+				return "", fmt.Errorf(
+					"url.build: host %q is inconsistent with port %q (host implies port %q); "+
+						"host is used verbatim when present, so a mismatched hostname/port is ignored silently unless rejected -- "+
+						"pass a consistent host, or omit host and set only hostname/port",
+					parts.Host, parts.Port, derived.Port())
+			}
+		}
+		return parts.Host, nil
 	}
 	if parts.Hostname == "" {
-		return ""
+		return "", nil
 	}
 	host := parts.Hostname
 	if strings.Contains(host, ":") && !strings.HasPrefix(host, "[") {
@@ -121,17 +159,22 @@ func buildHost(parts URL) string {
 	if parts.Port != "" {
 		host += ":" + parts.Port
 	}
-	return host
+	return host, nil
 }
 
 // buildURL: reconstructs a URL string from parts, the same table shape
-// parse returns. Raises if the resulting string does not itself parse back
-// as a valid URL.
+// parse returns. Raises if host and hostname/port are both present but
+// inconsistent (see buildHost), or if the resulting string does not itself
+// parse back as a valid URL.
 func buildURL(parts URL) (string, error) {
+	host, err := buildHost(parts)
+	if err != nil {
+		return "", err
+	}
 	u := &url.URL{
 		Scheme:   parts.Scheme,
 		Opaque:   parts.Opaque,
-		Host:     buildHost(parts),
+		Host:     host,
 		Path:     parts.Path,
 		RawQuery: parts.RawQuery,
 		Fragment: parts.Fragment,
@@ -144,8 +187,21 @@ func buildURL(parts URL) (string, error) {
 		}
 	}
 	result := u.String()
-	if _, err := url.Parse(result); err != nil {
-		return "", fmt.Errorf("url.build: constructed URL %q is not valid: %w", result, err)
+	if _, parseErr := url.Parse(result); parseErr != nil {
+		// Neither result nor parseErr may appear here: result may embed a
+		// userinfo password verbatim, and net/url.Error.Error() embeds its
+		// input URL string verbatim too (so merely swapping the %q operand
+		// below is not enough -- the wrapped error's own message would
+		// still leak the password). This error text is exactly the kind of
+		// string that ends up in log.error, a 500 body, or a webhook
+		// status, so unwrap to the underlying reason (no URL text) and use
+		// Redacted() for the one URL that IS shown.
+		reason := error(parseErr)
+		var uerr *url.Error
+		if errors.As(parseErr, &uerr) {
+			reason = uerr.Err
+		}
+		return "", fmt.Errorf("url.build: constructed URL %q is not valid: %w", u.Redacted(), reason)
 	}
 	return result, nil
 }
@@ -262,7 +318,7 @@ func build() *luareg.Module {
 		luareg.ReturnDoc(0, "u", "url.URL table: scheme, opaque, username, password, host, hostname, port, path, raw_path, raw_query, fragment"))
 	m.Fn("build", buildURL, "reconstructs a URL string from a url.URL-shaped table, raises if the result is not a valid URL",
 		luareg.Args("parts"),
-		luareg.ArgDoc("parts", "a table with the same shape parse returns; host is preferred verbatim when present, otherwise hostname+port are combined and hostname is auto-bracketed if it looks like an IPv6 literal"),
+		luareg.ArgDoc("parts", "a table with the same shape parse returns; host is used verbatim when present (raises if hostname/port are also set and disagree with it), otherwise hostname+port are combined and hostname is auto-bracketed if it looks like an IPv6 literal"),
 		luareg.ReturnDoc(0, "s", "the reconstructed URL string"))
 	m.Fn("resolve", resolve, "resolves ref against base per RFC 3986 reference resolution, raises if either fails to parse",
 		luareg.Args("base", "ref"),

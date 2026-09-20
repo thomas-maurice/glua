@@ -127,7 +127,7 @@ func TestTags_BinaryKey(t *testing.T) {
 	binaryKey := string([]byte{0x00, 0xff, 0x80, 0x01, 0xfe})
 	got := sha256Tag("message", binaryKey)
 	assert.Len(t, got, 64)
-	assert.True(t, verifySHA256("message", binaryKey, got))
+	assert.True(t, verifySHA256("message", binaryKey, lua.LString(got)))
 }
 
 // TestVerify_MatchingTag: verify_* must return true for a tag it itself
@@ -135,7 +135,7 @@ func TestTags_BinaryKey(t *testing.T) {
 // contrasts against.
 func TestVerify_MatchingTag(t *testing.T) {
 	tag := sha256Tag("payload", "secret")
-	assert.True(t, verifySHA256("payload", "secret", tag))
+	assert.True(t, verifySHA256("payload", "secret", lua.LString(tag)))
 }
 
 // TestVerify_BitFlippedTag: a single-bit flip in an otherwise valid tag must
@@ -149,7 +149,7 @@ func TestVerify_BitFlippedTag(t *testing.T) {
 	if flipped == tag {
 		flipped = "1" + tag[1:]
 	}
-	assert.False(t, verifySHA256("payload", "secret", flipped))
+	assert.False(t, verifySHA256("payload", "secret", lua.LString(flipped)))
 }
 
 // TestVerify_NeverRaises: every malformed-tag shape (non-hex garbage, empty,
@@ -172,7 +172,7 @@ func TestVerify_NeverRaises(t *testing.T) {
 	for name, tag := range cases {
 		t.Run(name, func(t *testing.T) {
 			assert.NotPanics(t, func() {
-				ok := verifySHA256("payload", "secret", tag)
+				ok := verifySHA256("payload", "secret", lua.LString(tag))
 				assert.False(t, ok, "expected verify to return false for %s", name)
 			})
 		})
@@ -194,7 +194,7 @@ func TestVerify_UppercaseHexAccepted(t *testing.T) {
 		}
 		upper[i] = c
 	}
-	assert.True(t, verifySHA256("payload", "secret", string(upper)))
+	assert.True(t, verifySHA256("payload", "secret", lua.LString(string(upper))))
 }
 
 // TestVerifySHA1_MatchAndMismatch: sanity check that verify_sha1 has the
@@ -202,14 +202,41 @@ func TestVerify_UppercaseHexAccepted(t *testing.T) {
 // verify() helper.
 func TestVerifySHA1_MatchAndMismatch(t *testing.T) {
 	tag := sha1Tag("m", "k")
-	assert.True(t, verifySHA1("m", "k", tag))
-	assert.False(t, verifySHA1("m", "k", "0000000000000000000000000000000000000a"))
+	assert.True(t, verifySHA1("m", "k", lua.LString(tag)))
+	assert.False(t, verifySHA1("m", "k", lua.LString("0000000000000000000000000000000000000a")))
 }
 
 // TestVerifySHA512_MatchAndMismatch: sanity check that verify_sha512 has the
 // same match/mismatch shape as verify_sha256.
 func TestVerifySHA512_MatchAndMismatch(t *testing.T) {
 	tag := sha512Tag("m", "k")
-	assert.True(t, verifySHA512("m", "k", tag))
-	assert.False(t, verifySHA512("m", "k", tag[:len(tag)-1]+"0"))
+	assert.True(t, verifySHA512("m", "k", lua.LString(tag)))
+	assert.False(t, verifySHA512("m", "k", lua.LString(tag[:len(tag)-1]+"0")))
+}
+
+// TestVerify_NonStringTag_ReturnsFalseNeverRaises: the exact regression this
+// chunk fixes (security review MEDIUM 1). The package doc's own recommended
+// call, hmac.verify_sha256(payload, secret, request.headers["x-signature"]),
+// passes nil whenever the header is absent -- verify_* must treat that (and
+// every other non-string Lua value) as "does not match", not raise a
+// bad-argument error. Before the fix, a nil/number/boolean/table tag raised
+// "bad argument #3 ... expected string", which in an admission webhook with
+// failurePolicy: Ignore turns "no signature" from DENIED into POLICY
+// SKIPPED.
+func TestVerify_NonStringTag_ReturnsFalseNeverRaises(t *testing.T) {
+	cases := map[string]lua.LValue{
+		"nil":     lua.LNil,
+		"number":  lua.LNumber(42),
+		"boolean": lua.LFalse,
+		"table":   &lua.LTable{},
+	}
+	for name, tag := range cases {
+		t.Run(name, func(t *testing.T) {
+			assert.NotPanics(t, func() {
+				assert.False(t, verifySHA1("m", "k", tag), "verify_sha1 must return false for a %s tag", name)
+				assert.False(t, verifySHA256("m", "k", tag), "verify_sha256 must return false for a %s tag", name)
+				assert.False(t, verifySHA512("m", "k", tag), "verify_sha512 must return false for a %s tag", name)
+			})
+		})
+	}
 }

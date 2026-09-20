@@ -256,3 +256,102 @@ func TestBuildRaisesOnInvalidResult(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not valid")
 }
+
+// TestBuildHost_ConsistentHostAndHostname_RoundTrips: host present together
+// with a hostname/port that agree with it must still work -- the fix must
+// not break the legitimate case of rebuilding a table produced by parse.
+func TestBuildHost_ConsistentHostAndHostname_RoundTrips(t *testing.T) {
+	parts, err := parseURL("https://example.com:8443/a")
+	require.NoError(t, err)
+	require.Equal(t, "example.com:8443", parts.Host)
+	require.Equal(t, "example.com", parts.Hostname)
+	require.Equal(t, "8443", parts.Port)
+
+	s, err := buildURL(parts)
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com:8443/a", s)
+}
+
+// TestBuildHost_MutatedHostnameAfterParse_Raises is the exact regression
+// this chunk fixes (security review LOW 1): mutating .hostname on a table
+// obtained from parse, while leaving .host untouched, must raise -- not
+// silently return the original (pre-mutation) host. Before the fix, this
+// was a silent no-op: an SSRF allow-list written as
+// `u.hostname = "good.com"; url.build(u)` looked like it worked but did
+// nothing, because build always preferred host verbatim.
+func TestBuildHost_MutatedHostnameAfterParse_Raises(t *testing.T) {
+	parts, err := parseURL("https://evil.com/path")
+	require.NoError(t, err)
+	require.Equal(t, "evil.com", parts.Host)
+
+	parts.Hostname = "good.com" // host is untouched, still "evil.com"
+
+	_, err = buildURL(parts)
+	require.Error(t, err, "build must not silently keep the original host when hostname was changed")
+	assert.Contains(t, err.Error(), "evil.com")
+	assert.Contains(t, err.Error(), "good.com")
+}
+
+// TestBuildHost_MutatedPortAfterParse_Raises: same as the hostname case,
+// but for a port left inconsistent with host.
+func TestBuildHost_MutatedPortAfterParse_Raises(t *testing.T) {
+	parts, err := parseURL("https://example.com:443/path")
+	require.NoError(t, err)
+
+	parts.Port = "9999" // host is untouched, still "example.com:443"
+
+	_, err = buildURL(parts)
+	require.Error(t, err, "build must not silently keep the original host when port was changed")
+	assert.Contains(t, err.Error(), "9999")
+}
+
+// TestBuildHost_HostAloneWorks: a caller who sets only host (no
+// hostname/port at all) must not trip the new consistency check.
+func TestBuildHost_HostAloneWorks(t *testing.T) {
+	s, err := buildURL(URL{Scheme: "https", Host: "example.com:8080", Path: "/x"})
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com:8080/x", s)
+}
+
+// TestBuildHost_HostnameAloneWorks: a caller who sets only hostname/port
+// (no host field at all) must not trip the new consistency check -- this is
+// the pre-existing "build from scratch" path (TestBuildAddsBracketsAutomatically
+// covers its IPv6 form).
+func TestBuildHost_HostnameAloneWorks(t *testing.T) {
+	s, err := buildURL(URL{Scheme: "https", Hostname: "example.com", Port: "8080", Path: "/x"})
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com:8080/x", s)
+}
+
+// TestBuildHost_ZoneIDRoundTrip_StillWorks: the consistency check must not
+// false-positive on the case host-verbatim exists to handle: a zone-id IPv6
+// literal, where re-composing hostname+port would not reproduce host
+// byte-for-byte (host keeps '%25', Hostname() decodes it to a literal '%').
+// This pins that the new check compares DECODED forms, not raw strings.
+func TestBuildHost_ZoneIDRoundTrip_StillWorks(t *testing.T) {
+	const original = "http://[fe80::1%25eth0]/"
+	parts, err := parseURL(original)
+	require.NoError(t, err)
+
+	rebuilt, err := buildURL(parts)
+	require.NoError(t, err)
+	assert.Equal(t, original, rebuilt)
+}
+
+// TestBuildRaisesOnInvalidResult_PasswordNotLeaked is the exact regression
+// this chunk fixes (security review LOW 2): the error raised when the
+// constructed URL fails to re-parse must not embed the userinfo password
+// verbatim -- that text is exactly the kind of string that ends up in
+// log.error, a 500 body, or a webhook status.
+func TestBuildRaisesOnInvalidResult_PasswordNotLeaked(t *testing.T) {
+	_, err := buildURL(URL{
+		Scheme:   "ht tp", // the space makes String() produce an unparseable result
+		Username: "alice",
+		Password: "s3cr3t",
+		Host:     "example.com",
+		Path:     "/x",
+	})
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "s3cr3t", "the raw password must never appear in a raised error")
+	assert.Contains(t, err.Error(), "xxxxx", "the error should show the redacted form (net/url.URL.Redacted)")
+}

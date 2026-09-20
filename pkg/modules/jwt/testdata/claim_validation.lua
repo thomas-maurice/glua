@@ -44,6 +44,14 @@ local okAud, errAud = pcall(jwt.verify, issAudToken, secret, { algorithms = { "H
 assert(not okAud, "verify must reject a wrong audience")
 assert(string.find(tostring(errAud), "audience"), "error should mention audience, got: " .. tostring(errAud))
 
+-- leeway_seconds must be bounded: math.huge (gopher-lua's math.huge is
+-- math.MaxFloat64, not +Inf) must not be able to disable exp enforcement
+-- for a token that expired long ago (security review MEDIUM 2).
+local farExpiredToken = jwt.sign({ sub = "svc-a", exp = 1000 }, secret, { algorithm = "HS256" })
+local okHugeLeeway, errHugeLeeway = pcall(jwt.verify, farExpiredToken, secret, { algorithms = { "HS256" }, leeway_seconds = math.huge })
+assert(not okHugeLeeway, "verify must reject an unbounded leeway_seconds rather than silently accept a long-expired token")
+assert(string.find(tostring(errHugeLeeway), "leeway_seconds"), "error should mention leeway_seconds, got: " .. tostring(errHugeLeeway))
+
 -- Correct issuer and audience together must succeed.
 local okBoth, claimsBoth = pcall(jwt.verify, issAudToken, secret, {
   algorithms = { "HS256" },

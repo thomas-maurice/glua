@@ -84,6 +84,36 @@ func TestTruncateBoundary(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestPadWidthCapped is the exact regression this chunk fixes (security
+// review LOW 3): pad_left/pad_right had no ceiling on width, so a typo'd
+// width could allocate an unbounded amount of memory -- an allocation
+// failure there is a Go FATAL error, not something a caller's pcall can
+// recover from. Same reasoning and bound as strings.rep's maxRepCount.
+func TestPadWidthCapped(t *testing.T) {
+	// A normal use well under the cap must still work, for both functions.
+	out, err := padLeft("x", 1000, "-")
+	require.NoError(t, err)
+	require.Len(t, out, 1000)
+
+	out, err = padRight("x", 1000, "-")
+	require.NoError(t, err)
+	require.Len(t, out, 1000)
+
+	// At the cap: still accepted.
+	out, err = padLeft("", maxPadWidth, "-")
+	require.NoError(t, err)
+	require.Len(t, out, maxPadWidth)
+
+	// Just over the cap: rejected, naming the bound.
+	_, err = padLeft("", maxPadWidth+1, "-")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "1048576")
+
+	_, err = padRight("", maxPadWidth+1, "-")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "1048576")
+}
+
 // TestLuaScripts: runs all Lua test scripts in testdata/ directory.
 func TestLuaScripts(t *testing.T) {
 	files, err := filepath.Glob("testdata/*.lua")

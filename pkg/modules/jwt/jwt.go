@@ -66,7 +66,12 @@
 // exp and nbf are always validated when present (there is no option to
 // disable either) via golang-jwt/jwt/v5's own Validator, which is exactly
 // the code this dependency is being taken FOR -- exp/nbf semantics with
-// leeway are where hand-rolled JWT validation tends to go subtly wrong. iat
+// leeway are where hand-rolled JWT validation tends to go subtly wrong.
+// leeway_seconds is capped at maxLeewaySeconds (300s / 5 minutes): it is the
+// one option that can effectively switch OFF exp/nbf enforcement if left
+// unbounded (an unvalidated math.huge or 1e18 makes an hours-expired token
+// verify successfully), so unlike the other options it gets a hard ceiling,
+// not just a sign check. iat
 // is never validated (RFC 7519 defines it as informational, not a security
 // control, and comparing it invites clock-skew noise for no benefit).
 // leeway_seconds applies equally to exp and nbf. issuer/audience/subject are
@@ -86,6 +91,7 @@ package jwt
 import (
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -104,6 +110,18 @@ const (
 	familyRSA // RS* and PS*: both use *rsa.PublicKey / *rsa.PrivateKey
 	familyEC
 )
+
+// maxLeewaySeconds: the ceiling accepted for VerifyOptions.LeewaySeconds.
+// 300s (5 minutes) is a generous bound for real clock skew between an
+// issuer and a verifier (NTP-synced clocks are typically within seconds;
+// this covers even badly-drifted hosts) while remaining far below anything
+// that could meaningfully weaken exp/nbf enforcement. leeway_seconds is the
+// one VerifyOptions field that can switch OFF the check this module exists
+// to perform (see MEDIUM 2 in the security review this const references),
+// so unlike other options it needs a hard ceiling, not just a sign check --
+// math.huge (which gopher-lua maps to math.MaxFloat64, not +Inf) or 1e18
+// both make an exp-hours-ago token verify successfully if left unbounded.
+const maxLeewaySeconds = 300
 
 // algFamilies: the complete, closed set of algorithms this package accepts.
 // "none" and anything not listed here (including EdDSA, deferred to a later
@@ -176,6 +194,27 @@ func validateAlgorithms(algs []string, context string) (algFamily, error) {
 		}
 	}
 	return family, nil
+}
+
+// validateLeeway: rejects a LeewaySeconds value before it is ever converted
+// to a time.Duration. This MUST validate the raw float64, not a value
+// already converted to an integer type: Go's float64->int64 conversion for
+// an out-of-range value is architecture-defined (it saturates to MaxInt64
+// on arm64 and produces MinInt64 on amd64), so checking a post-conversion
+// value would behave differently per platform and CI (which runs amd64)
+// would not catch an arm64-only bypass. Rejects NaN, +/-Inf, negative
+// values and anything above maxLeewaySeconds.
+func validateLeeway(seconds float64) (time.Duration, error) {
+	if math.IsNaN(seconds) || math.IsInf(seconds, 0) {
+		return 0, fmt.Errorf("jwt.verify: leeway_seconds must be a finite number, got %v", seconds)
+	}
+	if seconds < 0 {
+		return 0, fmt.Errorf("jwt.verify: leeway_seconds must be >= 0, got %v", seconds)
+	}
+	if seconds > maxLeewaySeconds {
+		return 0, fmt.Errorf("jwt.verify: leeway_seconds must be <= %d, got %v", maxLeewaySeconds, seconds)
+	}
+	return time.Duration(seconds * float64(time.Second)), nil
 }
 
 // parseVerifyKey: interprets key according to family, NEVER according to
@@ -273,9 +312,14 @@ func verifyFn(token, key string, opts VerifyOptions) (map[string]interface{}, er
 		return nil, fmt.Errorf("jwt.verify: invalid key: %w", err)
 	}
 
+	leeway, err := validateLeeway(opts.LeewaySeconds)
+	if err != nil {
+		return nil, err
+	}
+
 	parserOpts := []jwt.ParserOption{
 		jwt.WithValidMethods(opts.Algorithms),
-		jwt.WithLeeway(time.Duration(opts.LeewaySeconds * float64(time.Second))),
+		jwt.WithLeeway(leeway),
 	}
 	if opts.Issuer != "" {
 		parserOpts = append(parserOpts, jwt.WithIssuer(opts.Issuer))
@@ -350,7 +394,7 @@ func build() *luareg.Module {
 		luareg.Args("token", "key", "opts"),
 		luareg.ArgDoc("token", "the compact JWT string"),
 		luareg.ArgDoc("key", "HS*: the raw shared secret; RS*/PS*/ES*: a PEM public key or certificate"),
-		luareg.ArgDoc("opts", "required options: algorithms (non-empty, single family, never \"none\"), issuer, audience, subject, leeway_seconds, allow_missing_exp"),
+		luareg.ArgDoc("opts", "required options: algorithms (non-empty, single family, never \"none\"), issuer, audience, subject, leeway_seconds (0..300, seconds), allow_missing_exp"),
 		luareg.ReturnDoc(0, "claims", "the token's verified claims"))
 
 	m.Fn("sign", signFn,

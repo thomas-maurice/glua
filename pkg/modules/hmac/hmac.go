@@ -53,7 +53,13 @@
 // attacker-controlled input (e.g. a request header), so a non-hex or
 // wrong-length tag is a normal "verification failed" outcome (false), not a
 // script-aborting error — raising here would turn an authentication failure
-// into a 500. Contrast this with password.verify (pkg/modules/password),
+// into a 500. This includes a tag that is not a Lua string at all: the
+// tag argument is typed lua.LValue and anything other than an LString
+// (nil, a number, a boolean, a table) also returns false rather than
+// raising a type error, because the most common way to reach this function
+// is exactly `hmac.verify_sha256(payload, secret, headers["x-signature"])`,
+// which is nil whenever the signature header is simply absent. Contrast
+// this with password.verify (pkg/modules/password),
 // which DOES raise on a malformed stored hash, because that hash is the
 // application's own data and a malformed one means the database or a
 // migration is broken, not that the user typed the wrong password.
@@ -119,22 +125,44 @@ func sha512Tag(message, key string) string {
 	return tag(sha512.New, message, key)
 }
 
-// verifySHA1: reports whether tagHex is the correct HMAC-SHA1 tag for
-// message under key. Never raises; a malformed tagHex returns false.
-func verifySHA1(message, key, tagHex string) bool {
-	return verify(sha1.New, message, key, tagHex)
+// verifyTagValue: like verify, but accepts the tag as a raw lua.LValue
+// instead of a Go string, so a caller can pass verify_* the result of a
+// lookup that may be absent (e.g. request.headers["x-signature"], which is
+// nil when the header is missing). Anything that is not an LString --
+// including nil, a number, a boolean or a table -- is treated as "does not
+// match" (false), never a raised error: the tag is attacker-controlled
+// input, and the whole point of verify_* is that a malformed or absent tag
+// is a normal verification failure, not a script-aborting error (see the
+// package doc). Deliberately typed lua.LValue rather than taking
+// *lua.LState, which would opt this function out of exact-arity checking
+// (pkg/luareg's F2) -- a real loss on a security-critical function.
+func verifyTagValue(newHash func() hash.Hash, message, key string, tagValue lua.LValue) bool {
+	tagStr, ok := tagValue.(lua.LString)
+	if !ok {
+		return false
+	}
+	return verify(newHash, message, key, string(tagStr))
 }
 
-// verifySHA256: reports whether tagHex is the correct HMAC-SHA256 tag for
-// message under key. Never raises; a malformed tagHex returns false.
-func verifySHA256(message, key, tagHex string) bool {
-	return verify(sha256.New, message, key, tagHex)
+// verifySHA1: reports whether tag is the correct HMAC-SHA1 tag for message
+// under key. Never raises, not even if tag is not a string (see
+// verifyTagValue) -- a malformed or absent tag simply returns false.
+func verifySHA1(message, key string, tag lua.LValue) bool {
+	return verifyTagValue(sha1.New, message, key, tag)
 }
 
-// verifySHA512: reports whether tagHex is the correct HMAC-SHA512 tag for
-// message under key. Never raises; a malformed tagHex returns false.
-func verifySHA512(message, key, tagHex string) bool {
-	return verify(sha512.New, message, key, tagHex)
+// verifySHA256: reports whether tag is the correct HMAC-SHA256 tag for
+// message under key. Never raises, not even if tag is not a string (see
+// verifyTagValue) -- a malformed or absent tag simply returns false.
+func verifySHA256(message, key string, tag lua.LValue) bool {
+	return verifyTagValue(sha256.New, message, key, tag)
+}
+
+// verifySHA512: reports whether tag is the correct HMAC-SHA512 tag for
+// message under key. Never raises, not even if tag is not a string (see
+// verifyTagValue) -- a malformed or absent tag simply returns false.
+func verifySHA512(message, key string, tag lua.LValue) bool {
+	return verifyTagValue(sha512.New, message, key, tag)
 }
 
 // build: constructs the module definition. Reused by Loader and Register.
@@ -158,25 +186,28 @@ func build() *luareg.Module {
 		luareg.ReturnDoc(0, "tag", "the lowercase hex-encoded HMAC-SHA512 tag"))
 
 	m.Fn("verify_sha1", verifySHA1,
-		"verifies an HMAC-SHA1 tag in constant time; never raises, a malformed tag simply returns false",
+		"verifies an HMAC-SHA1 tag in constant time; never raises, a malformed or non-string tag (including nil, e.g. a missing header) simply returns false",
 		luareg.Args("message", "key", "tag"),
 		luareg.ArgDoc("message", "the message that was authenticated"),
 		luareg.ArgDoc("key", "the shared secret key"),
-		luareg.ArgDoc("tag", "the hex-encoded tag to verify (case-insensitive); a non-hex or wrong-length tag returns false"),
+		luareg.ArgDoc("tag", "the hex-encoded tag to verify (case-insensitive); anything that is not a string -- including nil, a non-hex string, or a wrong-length string -- returns false"),
+		luareg.ArgType("tag", "any"),
 		luareg.ReturnDoc(0, "ok", "true if tag is the correct HMAC-SHA1 tag for message under key"))
 	m.Fn("verify_sha256", verifySHA256,
-		"verifies an HMAC-SHA256 tag in constant time; never raises, a malformed tag simply returns false",
+		"verifies an HMAC-SHA256 tag in constant time; never raises, a malformed or non-string tag (including nil, e.g. a missing header) simply returns false",
 		luareg.Args("message", "key", "tag"),
 		luareg.ArgDoc("message", "the message that was authenticated"),
 		luareg.ArgDoc("key", "the shared secret key"),
-		luareg.ArgDoc("tag", "the hex-encoded tag to verify (case-insensitive); a non-hex or wrong-length tag returns false"),
+		luareg.ArgDoc("tag", "the hex-encoded tag to verify (case-insensitive); anything that is not a string -- including nil, a non-hex string, or a wrong-length string -- returns false"),
+		luareg.ArgType("tag", "any"),
 		luareg.ReturnDoc(0, "ok", "true if tag is the correct HMAC-SHA256 tag for message under key"))
 	m.Fn("verify_sha512", verifySHA512,
-		"verifies an HMAC-SHA512 tag in constant time; never raises, a malformed tag simply returns false",
+		"verifies an HMAC-SHA512 tag in constant time; never raises, a malformed or non-string tag (including nil, e.g. a missing header) simply returns false",
 		luareg.Args("message", "key", "tag"),
 		luareg.ArgDoc("message", "the message that was authenticated"),
 		luareg.ArgDoc("key", "the shared secret key"),
-		luareg.ArgDoc("tag", "the hex-encoded tag to verify (case-insensitive); a non-hex or wrong-length tag returns false"),
+		luareg.ArgDoc("tag", "the hex-encoded tag to verify (case-insensitive); anything that is not a string -- including nil, a non-hex string, or a wrong-length string -- returns false"),
+		luareg.ArgType("tag", "any"),
 		luareg.ReturnDoc(0, "ok", "true if tag is the correct HMAC-SHA512 tag for message under key"))
 
 	return m

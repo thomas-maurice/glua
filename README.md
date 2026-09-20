@@ -1143,9 +1143,12 @@ The clearest worked example is the deliberate mirror image of `hmac` and
 `password`:
 
 - `hmac.verify_sha256(message, key, tag)` **never raises**, even for a
-  garbage or wrong-length `tag` — the tag is attacker/network-controlled
+  garbage or wrong-length `tag`, or a `tag` that isn't even a string (`nil`,
+  a number, a boolean, a table) — the tag is attacker/network-controlled
   input, and "this signature doesn't match" is an expected outcome, not a
-  bug.
+  bug. This matters in practice because `tag` commonly comes from a header
+  lookup like `request.headers["x-signature"]`, which is `nil` whenever the
+  header is simply absent.
 - `password.verify(plaintext, hash)` **raises** on a malformed `hash`,
   because the hash is the application's own stored data — a malformed one
   means the database or a migration is broken, not that a user mistyped
@@ -1400,10 +1403,14 @@ base64, so compressed output composes directly with `base64`:
 and policy engines that routinely decompress untrusted input (a base64
 annotation, an HTTP body, a ConfigMap). An unbounded read of a decompression
 stream turns a tiny input into a decompression bomb that OOMs the **host Go
-process** — strictly worse than a catchable Lua error. `max_bytes < 1`
-raises immediately; exceeding it raises naming the limit that fired, and the
-implementation never buffers more than `max_bytes + 1` bytes regardless of
-how large the compressed input claims to decompress to.
+process** — strictly worse than a catchable Lua error. `max_bytes` must be a
+finite number in `[1, 4 GiB]` — outside that range (including `0`, negative,
+`NaN`, `math.huge`, or anything that would overflow the internal bounds
+check) raises immediately, rather than silently truncating to an empty
+result; exceeding the requested limit at decompress time raises naming the
+limit that fired; and the implementation never buffers more than
+`max_bytes + 1` bytes regardless of how large the compressed input claims to
+decompress to.
 
 Compression levels are validated against `[-2, 9]` for all three codecs (they
 are all backed by `compress/flate`): `NO_COMPRESSION = 0`, `BEST_SPEED = 1`,
@@ -1718,9 +1725,13 @@ against:
   `opts.algorithms` is required, non-empty, and can never contain `"none"`.
 
 `exp`/`nbf` are always validated when present (no option disables either);
-`iat` is never validated. `leeway_seconds` applies to both. Every
-`VerifyOptions` field is named so its Go zero value is the safe one — most
-notably `allow_missing_exp` (default `false`): a token with no `exp` claim is
+`iat` is never validated. `leeway_seconds` applies to both, and is capped at
+**300 seconds (5 minutes)** — generous for real clock skew, but bounded,
+because it is the one option that can effectively switch off `exp`/`nbf`
+enforcement if left unbounded (an unvalidated `math.huge` or `1e18` would
+make an hours-expired token verify successfully). Every `VerifyOptions`
+field is named so its Go zero value is the safe one — most notably
+`allow_missing_exp` (default `false`): a token with no `exp` claim is
 **rejected** unless you opt in, not silently accepted.
 
 **Load in Go:**
@@ -2268,7 +2279,9 @@ s = strings.trim_suffix("app.tar.gz", ".gz")      -- "app.tar"
 parts = strings.fields("  the quick  brown fox  ")  -- {"the", "quick", "brown", "fox"}
 
 -- Repeat. Named rep, not repeat: "repeat" is a reserved word in Lua, so
--- strings.repeat(s, n) would be a syntax error at the call site.
+-- strings.repeat(s, n) would be a syntax error at the call site. count is
+-- capped at 1048576 (1 MiB) -- a typo'd huge count raises rather than
+-- silently allocating an unbounded amount of memory.
 s = strings.rep("ab", 3)  -- "ababab"
 
 -- index/last_index are 1-based, returning 0 when absent -- NOT Go's
@@ -2365,7 +2378,9 @@ print(text.dedent(code))  -- "def f():\n    return 1\n"
 print(text.truncate("sha256:0123456789abcdef", 12, "…"))  -- "sha256:0123…"
 
 -- Pad with a single rune. Never truncates -- an already-wider string is
--- returned unchanged.
+-- returned unchanged. width is capped at 1048576 (1 MiB) -- a typo'd huge
+-- width raises rather than silently allocating an unbounded amount of
+-- memory.
 print(text.pad_right("NAME", 20, " ") .. "STATUS")
 print(text.pad_left("42", 5, "0"))  -- "00042"
 ```
@@ -2419,6 +2434,15 @@ on `net/url` only: `parse`, `build`, `resolve`, `query_escape`/`unescape`,
 callers who only set `hostname`/`port` never have to learn the bracket rule.
 A zone id (`http://[fe80::1%25eth0]/`) round-trips through `parse` then
 `build` without corruption.
+
+**`build` uses `host` verbatim when present, and raises if `hostname`/`port`
+are also set but disagree with it.** Before this rule existed, mutating only
+`hostname` on a table obtained from `parse` (`local u = url.parse(s);
+u.hostname = "good.com"; url.build(u)`) silently returned the *original*
+`host` — an SSRF allow-list rewritten that way was inert and looked like it
+worked. Setting only `host`, or only `hostname`/`port`, both still work with
+no consistency check; the check only fires when `host` and `hostname`/`port`
+are both present and inconsistent.
 
 `parse` returns and `build` accepts the same table shape: `scheme, opaque,
 username, password, host, hostname, port, path, raw_path, raw_query,

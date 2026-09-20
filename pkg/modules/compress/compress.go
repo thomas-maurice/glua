@@ -33,7 +33,11 @@
 // Lua error, which a caller can pcall and handle. The limit is enforced by
 // reading at most max_bytes+1 bytes from the decompressor, so memory use is
 // bounded by the limit regardless of how large the compressed input claims
-// to decompress to.
+// to decompress to. max_bytes is also capped at maxBytesCeiling (4 GiB) and
+// must be finite: an unvalidated max_bytes = math.huge (gopher-lua's
+// math.huge is math.MaxFloat64) previously overflowed the internal
+// max_bytes+1 arithmetic and produced an empty result with NO error --
+// silently worse than either a correct decompress or a raised error.
 package compress
 
 import (
@@ -44,6 +48,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
@@ -64,6 +69,13 @@ const (
 	// calls, exposed as compress.MAX_BYTES_DEFAULT so the common call site
 	// is only one token longer than an unbounded call would have been.
 	maxBytesDefault = 64 * 1024 * 1024
+
+	// maxBytesCeiling: the largest max_bytes a caller may request. Chosen
+	// far above any legitimate decompress budget (4 GiB vs. the 64 MiB
+	// default) while staying many orders of magnitude below MaxInt64, so
+	// drainLimited's "maxBytes+1" arithmetic can never overflow regardless
+	// of what a caller passes here.
+	maxBytesCeiling = 4 * 1024 * 1024 * 1024
 )
 
 // validateLevel: rejects a compression level outside the range every codec
@@ -77,13 +89,31 @@ func validateLevel(fnName string, level int) error {
 }
 
 // validateMaxBytes: rejects a max_bytes argument that would reopen the
-// unbounded-decompression footgun. There is deliberately no "0 means
-// unlimited" escape hatch.
-func validateMaxBytes(fnName string, maxBytes int) error {
-	if maxBytes < 1 {
-		return fmt.Errorf("%s: max_bytes must be >= 1, got %d", fnName, maxBytes)
+// unbounded-decompression footgun, or that cannot be safely turned into a
+// bounded byte count. There is deliberately no "0 means unlimited" escape
+// hatch.
+//
+// maxBytes is taken as float64 -- the raw Lua number, BEFORE any conversion
+// to an integer type -- and validated as a float, not converted first. This
+// matters because Go's float64->int64 conversion for an out-of-range value
+// is architecture-defined: it saturates to MaxInt64 on arm64 and produces
+// MinInt64 on amd64. gopher-lua's math.huge is math.MaxFloat64 (~1.8e308),
+// which is exactly such an out-of-range value once multiplied through by
+// this function's ceiling math -- if this validated an already-converted
+// int, the check itself would silently differ between arm64 and amd64
+// (which is what CI runs, so it would not have caught the arm64 bug).
+// Confirmed: passing math.huge as max_bytes previously made
+// gzip_decompress return an empty string with NO error for a 100 KB
+// payload, because int64(maxBytes)+1 overflowed negative and io.CopyN with
+// a negative count reads nothing.
+func validateMaxBytes(fnName string, maxBytes float64) (int64, error) {
+	if math.IsNaN(maxBytes) || math.IsInf(maxBytes, 0) {
+		return 0, fmt.Errorf("%s: max_bytes must be a finite number, got %v", fnName, maxBytes)
 	}
-	return nil
+	if maxBytes < 1 || maxBytes > maxBytesCeiling {
+		return 0, fmt.Errorf("%s: max_bytes must be in [1, %d], got %v", fnName, maxBytesCeiling, maxBytes)
+	}
+	return int64(maxBytes), nil
 }
 
 // nonNilBytes: a nil []byte at the top level crosses into Lua as nil, not an
@@ -103,14 +133,16 @@ func nonNilBytes(b []byte) []byte {
 // raises if more than maxBytes were available. It never buffers more than
 // maxBytes+1 bytes, which is what makes it safe against a decompression
 // bomb regardless of how large the compressed input claims to decompress
-// to. fnName is used to prefix any error raised.
-func drainLimited(fnName string, r io.Reader, maxBytes int) ([]byte, error) {
+// to. fnName is used to prefix any error raised. maxBytes must already be
+// validated (validateMaxBytes) to be within [1, maxBytesCeiling], so
+// maxBytes+1 cannot overflow int64 here.
+func drainLimited(fnName string, r io.Reader, maxBytes int64) ([]byte, error) {
 	var buf bytes.Buffer
-	n, err := io.CopyN(&buf, r, int64(maxBytes)+1)
+	n, err := io.CopyN(&buf, r, maxBytes+1)
 	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("%s: %w", fnName, err)
 	}
-	if n > int64(maxBytes) {
+	if n > maxBytes {
 		return nil, fmt.Errorf("%s: output exceeds max_bytes (%d)", fnName, maxBytes)
 	}
 	return nonNilBytes(buf.Bytes()), nil
@@ -137,8 +169,9 @@ func gzipCompress(data []byte, level int) ([]byte, error) {
 
 // gzipDecompress: decompresses a gzip stream, raising if the decompressed
 // output would exceed maxBytes.
-func gzipDecompress(data []byte, maxBytes int) ([]byte, error) {
-	if err := validateMaxBytes("compress.gzip_decompress", maxBytes); err != nil {
+func gzipDecompress(data []byte, maxBytes float64) ([]byte, error) {
+	mb, err := validateMaxBytes("compress.gzip_decompress", maxBytes)
+	if err != nil {
 		return nil, err
 	}
 	r, err := gzip.NewReader(bytes.NewReader(data))
@@ -146,7 +179,7 @@ func gzipDecompress(data []byte, maxBytes int) ([]byte, error) {
 		return nil, fmt.Errorf("compress.gzip_decompress: %w", err)
 	}
 	defer func() { _ = r.Close() }()
-	return drainLimited("compress.gzip_decompress", r, maxBytes)
+	return drainLimited("compress.gzip_decompress", r, mb)
 }
 
 // zlibCompress: compresses data as a zlib stream at the given level.
@@ -170,8 +203,9 @@ func zlibCompress(data []byte, level int) ([]byte, error) {
 
 // zlibDecompress: decompresses a zlib stream, raising if the decompressed
 // output would exceed maxBytes.
-func zlibDecompress(data []byte, maxBytes int) ([]byte, error) {
-	if err := validateMaxBytes("compress.zlib_decompress", maxBytes); err != nil {
+func zlibDecompress(data []byte, maxBytes float64) ([]byte, error) {
+	mb, err := validateMaxBytes("compress.zlib_decompress", maxBytes)
+	if err != nil {
 		return nil, err
 	}
 	r, err := zlib.NewReader(bytes.NewReader(data))
@@ -179,7 +213,7 @@ func zlibDecompress(data []byte, maxBytes int) ([]byte, error) {
 		return nil, fmt.Errorf("compress.zlib_decompress: %w", err)
 	}
 	defer func() { _ = r.Close() }()
-	return drainLimited("compress.zlib_decompress", r, maxBytes)
+	return drainLimited("compress.zlib_decompress", r, mb)
 }
 
 // flateCompress: compresses data as a raw DEFLATE stream (no gzip/zlib
@@ -207,13 +241,14 @@ func flateCompress(data []byte, level int) ([]byte, error) {
 // unlike gzip/zlib, feeding it framed input does not necessarily fail fast —
 // it may simply fail (or in rare cases silently misparse) partway through
 // the stream. This is an inherent limitation of the format, not a bug here.
-func flateDecompress(data []byte, maxBytes int) ([]byte, error) {
-	if err := validateMaxBytes("compress.flate_decompress", maxBytes); err != nil {
+func flateDecompress(data []byte, maxBytes float64) ([]byte, error) {
+	mb, err := validateMaxBytes("compress.flate_decompress", maxBytes)
+	if err != nil {
 		return nil, err
 	}
 	r := flate.NewReader(bytes.NewReader(data))
 	defer func() { _ = r.Close() }()
-	return drainLimited("compress.flate_decompress", r, maxBytes)
+	return drainLimited("compress.flate_decompress", r, mb)
 }
 
 // build: constructs the module definition. Reused by Loader and Register.
@@ -228,7 +263,7 @@ func build() *luareg.Module {
 	m.Fn("gzip_decompress", gzipDecompress, "decompresses a gzip stream, raising if the output would exceed max_bytes",
 		luareg.Args("data", "max_bytes"),
 		luareg.ArgDoc("data", "the gzip stream to decompress"),
-		luareg.ArgDoc("max_bytes", "the maximum number of decompressed bytes to allow; must be >= 1, no unlimited option"),
+		luareg.ArgDoc("max_bytes", "the maximum number of decompressed bytes to allow; must be finite and in [1, 4 GiB], no unlimited option"),
 		luareg.ReturnDoc(0, "data", "the decompressed bytes"))
 
 	m.Fn("zlib_compress", zlibCompress, "compresses data as a zlib stream",
@@ -239,7 +274,7 @@ func build() *luareg.Module {
 	m.Fn("zlib_decompress", zlibDecompress, "decompresses a zlib stream, raising if the output would exceed max_bytes",
 		luareg.Args("data", "max_bytes"),
 		luareg.ArgDoc("data", "the zlib stream to decompress"),
-		luareg.ArgDoc("max_bytes", "the maximum number of decompressed bytes to allow; must be >= 1, no unlimited option"),
+		luareg.ArgDoc("max_bytes", "the maximum number of decompressed bytes to allow; must be finite and in [1, 4 GiB], no unlimited option"),
 		luareg.ReturnDoc(0, "data", "the decompressed bytes"))
 
 	m.Fn("flate_compress", flateCompress, "compresses data as a raw DEFLATE stream (no gzip/zlib framing)",
@@ -250,7 +285,7 @@ func build() *luareg.Module {
 	m.Fn("flate_decompress", flateDecompress, "decompresses a raw DEFLATE stream, raising if the output would exceed max_bytes",
 		luareg.Args("data", "max_bytes"),
 		luareg.ArgDoc("data", "the raw DEFLATE stream to decompress"),
-		luareg.ArgDoc("max_bytes", "the maximum number of decompressed bytes to allow; must be >= 1, no unlimited option"),
+		luareg.ArgDoc("max_bytes", "the maximum number of decompressed bytes to allow; must be finite and in [1, 4 GiB], no unlimited option"),
 		luareg.ReturnDoc(0, "data", "the decompressed bytes"))
 
 	m.Const("NO_COMPRESSION", noCompression, "number", "no compression, framing only")

@@ -21,24 +21,24 @@ function hmac.sha256(message, key) end
 ---@return string tag the lowercase hex-encoded HMAC-SHA512 tag
 function hmac.sha512(message, key) end
 
---- verifies an HMAC-SHA1 tag in constant time; never raises, a malformed tag simply returns false
+--- verifies an HMAC-SHA1 tag in constant time; never raises, a malformed or non-string tag (including nil, e.g. a missing header) simply returns false
 ---@param message string the message that was authenticated
 ---@param key string the shared secret key
----@param tag string the hex-encoded tag to verify (case-insensitive); a non-hex or wrong-length tag returns false
+---@param tag any the hex-encoded tag to verify (case-insensitive); anything that is not a string -- including nil, a non-hex string, or a wrong-length string -- returns false
 ---@return boolean ok true if tag is the correct HMAC-SHA1 tag for message under key
 function hmac.verify_sha1(message, key, tag) end
 
---- verifies an HMAC-SHA256 tag in constant time; never raises, a malformed tag simply returns false
+--- verifies an HMAC-SHA256 tag in constant time; never raises, a malformed or non-string tag (including nil, e.g. a missing header) simply returns false
 ---@param message string the message that was authenticated
 ---@param key string the shared secret key
----@param tag string the hex-encoded tag to verify (case-insensitive); a non-hex or wrong-length tag returns false
+---@param tag any the hex-encoded tag to verify (case-insensitive); anything that is not a string -- including nil, a non-hex string, or a wrong-length string -- returns false
 ---@return boolean ok true if tag is the correct HMAC-SHA256 tag for message under key
 function hmac.verify_sha256(message, key, tag) end
 
---- verifies an HMAC-SHA512 tag in constant time; never raises, a malformed tag simply returns false
+--- verifies an HMAC-SHA512 tag in constant time; never raises, a malformed or non-string tag (including nil, e.g. a missing header) simply returns false
 ---@param message string the message that was authenticated
 ---@param key string the shared secret key
----@param tag string the hex-encoded tag to verify (case-insensitive); a non-hex or wrong-length tag returns false
+---@param tag any the hex-encoded tag to verify (case-insensitive); anything that is not a string -- including nil, a non-hex string, or a wrong-length string -- returns false
 ---@return boolean ok true if tag is the correct HMAC-SHA512 tag for message under key
 function hmac.verify_sha512(message, key, tag) end
 

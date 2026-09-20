@@ -31,6 +31,14 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
+// maxRepCount: the largest count accepted by rep. random.maxLen
+// (pkg/modules/random) applies the same reasoning to its length arguments:
+// generous enough for any realistic use, small enough that a typo'd
+// argument (e.g. a count meant to be a width) cannot turn into an unbounded
+// allocation that OOMs the host Go process -- an allocation failure there is
+// a Go FATAL error, not something a caller's pcall can recover from.
+const maxRepCount = 1 << 20
+
 // join: joins array values with separator, coercing all elements to strings
 // via Lua's tostring semantics. Uses *lua.LState escape hatch so non-string
 // table elements (numbers, booleans) are coerced rather than rejected.
@@ -70,10 +78,16 @@ func lastIndex(s, substr string) int {
 // word in Lua, so strings.repeat(s, n) is a syntax error at the call site,
 // not a runtime one. Go's strings.Repeat panics on a negative count; that is
 // validated here and turned into a raised Lua error instead, per this
-// module's fail-loud convention.
+// module's fail-loud convention. count is also capped at maxRepCount: an
+// uncapped count (e.g. a typo'd 1e8) lets strings.rep("a", 1e8) allocate
+// 100 MB silently, and scaling the typo up further reaches process OOM,
+// which is a Go FATAL error a caller's pcall cannot recover from.
 func rep(s string, count int) (string, error) {
 	if count < 0 {
 		return "", fmt.Errorf("strings.rep: count must be >= 0, got %d", count)
+	}
+	if count > maxRepCount {
+		return "", fmt.Errorf("strings.rep: count must be <= %d, got %d", maxRepCount, count)
 	}
 	return strings.Repeat(s, count), nil
 }
@@ -208,7 +222,7 @@ func build() *luareg.Module {
 	m.Fn("rep", rep, "repeats a string count times",
 		luareg.Args("s", "count"),
 		luareg.ArgDoc("s", "the string to repeat"),
-		luareg.ArgDoc("count", "number of repetitions; must be >= 0"),
+		luareg.ArgDoc("count", "number of repetitions; must be in [0, 1048576]"),
 		luareg.ReturnDoc(0, "out", "s repeated count times"))
 	m.Fn("index", index, "returns the 1-based position of the first occurrence of substr in s, or 0 if absent",
 		luareg.Args("s", "substr"),

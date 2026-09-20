@@ -28,7 +28,7 @@ function jwt.decode_unverified(token) end
 --- verifies a JWT's signature and claims; raises on ANY failure: bad signature, alg not in opts.algorithms, alg:none, expired, not yet valid, issuer/audience/subject mismatch, or an unparseable key
 ---@param token string the compact JWT string
 ---@param key string HS*: the raw shared secret; RS*/PS*/ES*: a PEM public key or certificate
----@param opts jwt.VerifyOptions required options: algorithms (non-empty, single family, never "none"), issuer, audience, subject, leeway_seconds, allow_missing_exp
+---@param opts jwt.VerifyOptions required options: algorithms (non-empty, single family, never "none"), issuer, audience, subject, leeway_seconds (0..300, seconds), allow_missing_exp
 ---@return table<string, any> claims the token's verified claims
 function jwt.verify(token, key, opts) end
 

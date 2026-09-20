@@ -5,6 +5,7 @@ package compress
 
 import (
 	"bytes"
+	"math"
 	"path/filepath"
 	"testing"
 
@@ -46,7 +47,7 @@ func TestLuaScripts(t *testing.T) {
 type codec struct {
 	name       string
 	compress   func([]byte, int) ([]byte, error)
-	decompress func([]byte, int) ([]byte, error)
+	decompress func([]byte, float64) ([]byte, error)
 }
 
 var codecs = []codec{
@@ -110,11 +111,54 @@ func TestDecompress_MaxBytesLessThanOne_Raises(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, c := range codecs {
-		for _, maxBytes := range []int{0, -1, -100} {
+		for _, maxBytes := range []float64{0, -1, -100} {
 			_, err := c.decompress(blob, maxBytes)
-			assert.Error(t, err, "%s: expected error for max_bytes=%d", c.name, maxBytes)
+			assert.Error(t, err, "%s: expected error for max_bytes=%v", c.name, maxBytes)
 		}
 	}
+}
+
+// TestDecompress_MaxBytesOutOfRange_Raises is the exact regression this
+// chunk fixes (security review MEDIUM 3): math.huge (gopher-lua's
+// math.huge is math.MaxFloat64), a value near MaxInt64, and NaN must all be
+// rejected explicitly rather than silently truncating during the
+// float->int64 conversion and producing an empty result with no error.
+// Confirmed before the fix: math.huge made a 100 KB gzip payload decompress
+// to length 0 with err == nil, because int64(math.MaxFloat64)+1 overflows
+// (saturating differently per architecture) and io.CopyN with a resulting
+// negative count reads nothing.
+func TestDecompress_MaxBytesOutOfRange_Raises(t *testing.T) {
+	const payload = "a payload that must not silently vanish"
+	blob, err := gzipCompress([]byte(payload), defaultCompression)
+	require.NoError(t, err)
+
+	cases := map[string]float64{
+		"math.MaxFloat64 (gopher-lua's math.huge)": math.MaxFloat64,
+		"near MaxInt64": 9.2e18,
+		"NaN":           math.NaN(),
+		"+Inf":          math.Inf(1),
+	}
+	for _, c := range codecs {
+		for name, maxBytes := range cases {
+			t.Run(c.name+"/"+name, func(t *testing.T) {
+				out, err := c.decompress(blob, maxBytes)
+				require.Error(t, err, "max_bytes=%v must be rejected, not silently return a truncated/empty result", maxBytes)
+				assert.Nil(t, out, "no partial output should be returned alongside the error")
+			})
+		}
+	}
+}
+
+// TestDecompress_MaxBytesNearCeiling_Works: a normal large-but-valid limit
+// (well above the 64 MiB default, at the module's ceiling) must still work
+// -- the fix must reject only what is unsafe, not shrink the usable range.
+func TestDecompress_MaxBytesNearCeiling_Works(t *testing.T) {
+	blob, err := gzipCompress([]byte("hello, ceiling"), defaultCompression)
+	require.NoError(t, err)
+
+	out, err := gzipDecompress(blob, maxBytesCeiling)
+	require.NoError(t, err)
+	assert.Equal(t, "hello, ceiling", string(out))
 }
 
 // TestCrossCodecRejection: feeding a zlib stream to gzip_decompress must

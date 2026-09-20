@@ -22,7 +22,7 @@ local url = {}
 function url.parse(s) end
 
 --- reconstructs a URL string from a url.URL-shaped table, raises if the result is not a valid URL
----@param parts url.URL a table with the same shape parse returns; host is preferred verbatim when present, otherwise hostname+port are combined and hostname is auto-bracketed if it looks like an IPv6 literal
+---@param parts url.URL a table with the same shape parse returns; host is used verbatim when present (raises if hostname/port are also set and disagree with it), otherwise hostname+port are combined and hostname is auto-bracketed if it looks like an IPv6 literal
 ---@return string s the reconstructed URL string
 function url.build(parts) end
 

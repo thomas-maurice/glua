@@ -99,7 +99,7 @@ function strings.fields(s) end
 
 --- repeats a string count times
 ---@param s string the string to repeat
----@param count number number of repetitions; must be >= 0
+---@param count number number of repetitions; must be in [0, 1048576]
 ---@return string out s repeated count times
 function strings.rep(s, count) end
 
