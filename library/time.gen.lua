@@ -42,11 +42,11 @@ function time.sleep(seconds) end
 
 --- converts a Unix timestamp to an os.date-compatible table
 ---@param timestamp number seconds since the Unix epoch (UTC)
----@return gopher-lua.LTable date table with year, month, day, hour, min, sec, wday, yday, isdst fields, in UTC
+---@return table date table with year, month, day, hour, min, sec, wday, yday, isdst fields, in UTC
 function time.to_osdate(timestamp) end
 
 --- converts an os.date-compatible table to a Unix timestamp, raises on invalid input
----@param date_table gopher-lua.LTable table with required year, month, day and optional hour, min, sec (default 0)
+---@param date_table table table with required year, month, day and optional hour, min, sec (default 0)
 ---@return number timestamp seconds since the Unix epoch, interpreting the fields as UTC
 function time.from_osdate(date_table) end
 

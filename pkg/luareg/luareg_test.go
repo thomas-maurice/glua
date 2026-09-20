@@ -529,6 +529,32 @@ func TestOptionMetadata(t *testing.T) {
 	assert.Equal(t, "arg2", fns[0].ArgName(1))
 }
 
+// TestReturnTypeMetadata: ReturnType records an {Index, LuaType} entry on
+// FnMeta, mirroring how ArgType records {Name, LuaType} for parameters. This
+// is the plumbing pkg/stubgen reads to override a reflected return type —
+// e.g. mapping a *lua.LTable escape-hatch return to "table" instead of the
+// bogus class name reflection alone would produce.
+func TestReturnTypeMetadata(t *testing.T) {
+	reg := luareg.NewRegistry()
+	mod := luareg.NewModule("m", "my module")
+	mod.Fn("keys", func() *lua.LTable { return nil }, "returns a table's keys",
+		luareg.ReturnDoc(0, "keys", "the table's keys"),
+		luareg.ReturnType(0, "any[]"),
+	)
+	mod.Register(reg)
+
+	fns := reg.Modules()[0].Funcs()
+	require.Len(t, fns, 1)
+
+	require.Len(t, fns[0].ReturnTypes, 1)
+	assert.Equal(t, 0, fns[0].ReturnTypes[0].Index)
+	assert.Equal(t, "any[]", fns[0].ReturnTypes[0].LuaType)
+
+	// ReturnDoc must coexist untouched — the two opts are independent slices.
+	require.Len(t, fns[0].ReturnDocs, 1)
+	assert.Equal(t, "keys", fns[0].ReturnDocs[0].Name)
+}
+
 // ---- 14. PushTo idempotency ------------------------------------------------
 
 func TestPushToIdempotency(t *testing.T) {

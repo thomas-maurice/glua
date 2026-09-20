@@ -109,7 +109,7 @@ go mod download
 
 ### Requirements
 
-- Go 1.24 or later
+- Go 1.26 or later (matches the `go` directive in `go.mod`)
 - For Kubernetes support: `k8s.io/client-go`, `k8s.io/api`, `k8s.io/apimachinery`
 - For integration tests: `kind` and `kubectl`
 
@@ -687,6 +687,23 @@ Notes:
 
   generates `---@param handler fun(evt: core.Event)` instead of
   `---@param handler any`. It has no runtime effect — stub generation only.
+- The same escape hatch exists for return values: `luareg.ReturnType(index,
+  luaType)` overrides the Nth return's inferred type (0-indexed, excluding a
+  trailing `error` return). Use it when a return type's Go type carries no
+  useful Lua type on its own — e.g. a `*lua.LTable` built by hand and returned
+  as an escape hatch, where a more specific type (`any[]`, `table<string,
+  string>`, ...) is more useful to callers than the generic fallback:
+
+  ```go
+  m.Fn("keys", collectionsKeys, "returns a table's keys as a new table",
+      luareg.ReturnDoc(0, "keys", "the table's keys"),
+      luareg.ReturnType(0, "any[]"),
+  )
+  ```
+
+  Without an override, an un-annotated `*lua.LTable` return stubs as `table`
+  and a `lua.LValue` return stubs as `any` — never a bogus class reference.
+  It has no runtime effect — stub generation only.
 - A top-level `[]byte` argument or return value (directly in a function or
   method signature, not nested inside a struct/map field) maps to a raw Lua
   string, not base64 and not a table of numbers — Lua strings are 8-bit
@@ -828,7 +845,7 @@ import (
 
 func main() {
     reg := luareg.NewRegistry()
-    modules.RegisterAll(reg)   // glua's 17 built-in modules
+    modules.RegisterAll(reg)   // glua's 31 built-in modules
     widget.Register(reg)       // your module
 
     gen := stubgen.NewGenerator()
@@ -1106,56 +1123,672 @@ os.WriteFile("annotations.gen.lua", []byte(stubs), 0644)
 
 These are the modules available to your Lua scripts via `require()`. Load them in Go with `L.PreloadModule()`.
 
-#### kubernetes
+Three conventions apply across all 31 modules below. Knowing them up front avoids
+re-deriving the same surprise in each module's section.
 
-Utility functions for parsing and formatting Kubernetes resource quantities and timestamps.
+#### Time representation
+
+There are exactly two time representations in this library, and every module
+commits to one of them:
+
+- **Unix-second numbers.** `time` (`now`/`parse`/`format`), `x509`
+  (`not_before`/`not_after`, `expires_in_days`) and `uuid` (`parse(...).timestamp`
+  for v1/v6/v7 UUIDs) all speak a plain Lua number of seconds since the epoch.
+  These compose directly with each other — `time.format(cert.not_after, "2006-01-02")`
+  needs no conversion.
+- **RFC3339 strings.** The `kubernetes` module (`parse_time`/`format_time`) and
+  any Kubernetes object field that already carries a timestamp
+  (`metadata.creationTimestamp`, etc.) speak RFC3339 strings — that is the wire
+  format Kubernetes itself uses, and what `kubectl get -o yaml` shows.
+
+`kubernetes.parse_time(rfc3339_string)` and `kubernetes.format_time(unix_seconds)`
+are the bridge between the two. There is no third representation, and no
+function silently accepts either — check which camp a module is in before
+passing it a value from the other one.
+
+#### Error behaviour
+
+Every function either **raises** (aborts the script; catch with `pcall`) or
+**returns a falsy value** as an ordinary result. The rule (F1) is: raise for
+malformed input or a programmer/data-integrity error; return `false`/`nil`
+for a legitimate negative answer whose outcome the caller doesn't control.
+
+The clearest worked example is the deliberate mirror image of `hmac` and
+`password`:
+
+- `hmac.verify_sha256(message, key, tag)` **never raises**, even for a
+  garbage or wrong-length `tag`, or a `tag` that isn't even a string (`nil`,
+  a number, a boolean, a table) — the tag is attacker/network-controlled
+  input, and "this signature doesn't match" is an expected outcome, not a
+  bug. This matters in practice because `tag` commonly comes from a header
+  lookup like `request.headers["x-signature"]`, which is `nil` whenever the
+  header is simply absent.
+- `password.verify(plaintext, hash)` **raises** on a malformed `hash`,
+  because the hash is the application's own stored data — a malformed one
+  means the database or a migration is broken, not that a user mistyped
+  their password. It still returns `false` (not raise) for a wrong
+  `plaintext`, since the plaintext guess is the part the caller doesn't
+  control.
+
+When adding a new module, ask the same question of every failure mode: is the
+bad value something the *caller's data* legitimately produced (return falsy),
+or does it indicate the input/state is malformed in a way that is always a
+bug (raise)?
+
+#### Binary data
+
+`[]byte` has two representations depending on where it appears, not one:
+
+- A **top-level** `[]byte` argument or return value (directly in a function
+  or method signature) crosses into Lua as a raw, 8-bit-clean Lua string —
+  never base64, never a table of numbers. `compress` (`gzip_compress`/
+  `*_decompress`), `random` (`bytes`, and `token`'s base64url encoding is
+  applied on top of this raw form) and `hmac`'s hex-encoded tags all build on
+  this: `base64.encode(compress.gzip_compress(s, ...))` works because the
+  compressed output is already a raw string, not pre-encoded.
+- A `[]byte` **nested inside a struct or map field** (e.g. a Kubernetes
+  `Secret.Data`) goes through the JSON round-trip `Translator` instead, and
+  arrives as a **base64** Lua string — matching what `kubectl get -o yaml`
+  already shows for the same field.
+
+See "Go to Lua Conversion" above for the full explanation of why the nested
+case differs; the short version is that the top-level case is a zero-copy
+special case in `luareg`, while the nested case rides the ordinary
+`json.Marshal` path, which base64-encodes `[]byte` by definition.
+
+#### base64, hex, hash
+
+Encoding and hashing utilities.
 
 **Load in Go:**
 
 ```go
-import "github.com/thomas-maurice/glua/pkg/modules/kubernetes"
+import (
+    "github.com/thomas-maurice/glua/pkg/modules/base64"
+    "github.com/thomas-maurice/glua/pkg/modules/hex"
+    "github.com/thomas-maurice/glua/pkg/modules/hash"
+)
 
-L.PreloadModule("kubernetes", kubernetes.Loader)
+L.PreloadModule("base64", base64.Loader)
+L.PreloadModule("hex", hex.Loader)
+L.PreloadModule("hash", hash.Loader)
 ```
 
 **Lua API:**
 
 ```lua
-local k8s = require("kubernetes")
+local base64 = require("base64")
+local hex = require("hex")
+local hash = require("hash")
 
--- Parse memory: "256Mi" → 268435456 (bytes)
-bytes = k8s.parse_memory(quantity)
+-- Base64
+encoded = base64.encode("hello")
+decoded = base64.decode(encoded)  -- raises on invalid base64
 
--- Parse CPU: "100m" → 100 (millicores)
-millis = k8s.parse_cpu(quantity)
+-- Hex
+encoded = hex.encode("hello")
+decoded = hex.decode(encoded)  -- raises on invalid hex
 
--- Parse duration: "5m" → 300 (seconds)
-seconds = k8s.parse_duration(duration)
+-- Hash strings
+md5 = hash.md5("hello")
+sha1 = hash.sha1("hello")
+sha256 = hash.sha256("hello")
+sha512 = hash.sha512("hello")
 
--- Parse time: "2025-10-03T16:39:00Z" → 1759509540 (Unix timestamp)
-timestamp = k8s.parse_time(timestr)
-
--- Format time: 1759509540 → "2025-10-03T16:39:00Z"
-timestr = k8s.format_time(timestamp)
-
--- Format duration: 300 → "5m0s"
-duration = k8s.format_duration(seconds)
-
--- Initialize defaults: ensures metadata.labels and metadata.annotations exist
-obj = k8s.init_defaults(obj)
-
--- Add/manipulate labels and annotations
-obj = k8s.add_label(obj, "app", "nginx")
-obj = k8s.add_annotation(obj, "version", "1.0")
-has = k8s.has_label(obj, "app")
-value = k8s.get_label(obj, "app")
-obj = k8s.remove_label(obj, "app")
-
--- Match GVK (Group/Version/Kind)
-matches = k8s.match_gvk(obj, {group="apps", version="v1", kind="Deployment"})
+-- Hash Lua tables (converted to JSON; raises on conversion error)
+hash_val = hash.md5_obj({name="John", age=30})
+hash_val = hash.sha1_obj({key="value"})
+hash_val = hash.sha256_obj({foo="bar", nested={data=123}})
+hash_val = hash.sha512_obj({items={1, 2, 3}})
 ```
 
-All functions raise a Lua error on invalid input. Use `pcall` to handle errors gracefully.
+**Object Hashing:**
+
+The `*_obj` functions convert Lua tables to JSON before hashing, making them useful for:
+
+- Content-based resource identifiers
+- Detecting configuration changes
+- Caching keys for complex data structures
+- Checksums for nested objects
+
+```lua
+-- Example: Detect if a Pod spec has changed
+local hash = require("hash")
+local pod_hash = hash.sha256_obj(pod.spec)
+-- Store/compare this hash to detect changes
+```
+
+`hash.hmac_sha256` is deprecated in favour of the `hmac` module below — kept for compatibility, but new code should use `hmac.sha256`/`hmac.verify_sha256`.
+
+#### bit32
+
+32-bit unsigned bitwise operations. gopher-lua implements Lua 5.1, which has
+no bitwise operators and no `bit`/`bit32` library at all, so this fills a real
+gap rather than duplicating something Lua already has.
+
+The module is named `bit32`, not `bit`, and it is deliberate: Lua numbers are
+float64, which can only represent integers exactly up to 2^53. A 64-bit
+bitwise result would routinely exceed that and silently lose bits — worse
+than no bitwise support at all. Restricting every operand and result to
+`[0, 2^32)` keeps everything exactly representable. Results are always
+unsigned, so `bit32.bnot(0)` is `4294967295`, never `-1`. **LuaJIT users
+reaching for `require("bit")` should note the different name and the
+unsigned result convention** — this is not that library.
+
+Negative operands are accepted as two's complement (`-1` behaves as
+`0xFFFFFFFF`); non-integer floats, `NaN`/`Inf`, and operands outside
+`[-2^53, 2^53]` all raise. Shift counts must be non-negative (negative
+raises); `n >= 32` clamps to `0` (or `0xFFFFFFFF` for `arshift` on a
+negative value) rather than raising. Bit positions for `test`/`set`/`clear`
+must be in `[0, 31]` — out of range raises, unlike shift counts.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/bit32"
+
+L.PreloadModule("bit32", bit32.Loader)
+```
+
+**Lua API:**
+
+```lua
+local bit32 = require("bit32")
+
+-- band/bor/bxor take a variadic tail
+local rw = bit32.bor(0x4, 0x2)              -- 6
+local masked = bit32.band(0xFF, 0x0F, 0x03) -- 3
+
+-- Two's complement: -1 behaves as 0xFFFFFFFF
+print(bit32.band(-1, 0xFF))                 -- 255
+print(bit32.bnot(0))                        -- 4294967295, not -1
+
+-- arshift sign-extends bit 31; rshift never does
+print(bit32.rshift(0x80000000, 4))          -- 0x08000000
+print(bit32.arshift(0x80000000, 4))         -- 0xF8000000
+
+-- test/set/clear operate on individual bit positions [0, 31]
+local mode = 0x1A4                          -- 0644 octal
+if bit32.test(mode, 8) then
+  print("owner can read")
+end
+```
+
+#### collections
+
+Table utilities: the functional trio (`map`/`filter`/`reduce`), grouping,
+sorting, shaping helpers, and deep structural operations (`deep_equal`,
+`deep_copy`, `get_path`).
+
+**This is an ergonomics module, not a performance one.** `collections.map(t,
+fn)` is slower than `for i, v in ipairs(t) do ... end` in pure Lua, because
+every element crosses Lua -> Go -> Lua through a protected call, where a plain
+Lua loop never leaves the VM. Reach for these for clarity; drop to a
+hand-written loop in a hot path.
+
+It also deliberately bypasses the JSON-round-trip Translator and operates
+directly on the Lua table, which preserves number precision, non-string keys,
+function/userdata values and table identity. Every function documents which
+part of the table it reads:
+
+- **array mode** (`map filter reduce find any all group_by sort_by partition
+  uniq flatten reverse zip chunk`): iterates `1..#t` only; hash-part keys are
+  ignored, not an error.
+- **map mode** (`keys values merge pick omit get_path`): iterates every key,
+  array part and hash part together, in gopher-lua's unspecified order.
+- `deep_equal`/`deep_copy` recurse in map mode and therefore cover both parts
+  of every nested table.
+
+Empty results are always an empty table, never `nil`. Callbacks always
+receive `(value, index)` in that order (`sort_by`'s key function is the one
+exception: `fun(v): number|string`, no index). A callback that raises
+propagates as a normal Lua error naming the function and the failing index
+(`collections.filter: callback failed at index 7: <message>`), not a Go
+panic. `deep_equal`/`deep_copy` guard against self-referencing tables instead
+of hanging.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/collections"
+
+L.PreloadModule("collections", collections.Loader)
+```
+
+**Lua API:**
+
+```lua
+local c = require("collections")
+
+local pods = {
+  {name = "a", phase = "Running"},
+  {name = "b", phase = "Failed"},
+  {name = "c", phase = "Failed"},
+}
+
+-- The functional trio: callbacks always see (value, index).
+local failed = c.filter(pods, function(p) return p.phase == "Failed" end)
+local names = c.map(failed, function(p) return p.name end)
+local total = c.reduce(pods, function(acc) return acc + 1 end, 0)
+
+-- find returns value, index -- nil, 0 (not an error) when nothing matches.
+local pod, idx = c.find(pods, function(p) return p.name == "b" end)
+
+-- Grouping and stable sorting.
+local byPhase = c.group_by(pods, function(p) return p.phase end)
+local byName = c.sort_by(pods, function(p) return p.name end)
+local failing, ok = c.partition(pods, function(p) return p.phase == "Failed" end)
+
+-- Pure table shaping -- no callbacks, and the highest-value part of the module.
+c.uniq({1, 2, 2, 3})              -- {1, 2, 3}
+c.flatten({1, {2, {3, 4}}}, -1)   -- {1, 2, 3, 4}, -1 = fully
+c.reverse({1, 2, 3})              -- {3, 2, 1}
+c.zip({1, 2}, {"a", "b"})         -- {{1,"a"}, {2,"b"}}
+c.chunk({1, 2, 3, 4, 5}, 2)       -- {{1,2}, {3,4}, {5}}
+
+-- Map-shaped tables.
+c.keys(pods)                                    -- {1, 2, 3} (order unspecified)
+c.merge({a = 1}, {a = 2, b = 3})                -- {a = 2, b = 3}, later wins
+c.pick(pods[1], {"name"})                       -- {name = "a"}
+c.omit(pods[1], {"phase"})                      -- {name = "a"}
+
+-- get_path always takes a default -- pass nil explicitly for "no default",
+-- since `x or default` breaks when the stored value is `false`.
+local img = c.get_path(obj, "spec.containers.1.image", "<none>")
+
+-- Deep structural operations, cycle-safe.
+if not c.deep_equal(desired, actual) then
+  apply(c.deep_copy(desired))
+end
+```
+
+#### compress
+
+gzip, zlib and raw DEFLATE compression and decompression: `gzip_compress`/
+`gzip_decompress`, `zlib_compress`/`zlib_decompress`, `flate_compress`/
+`flate_decompress`.
+
+`[]byte` at the top level crosses into Lua as a raw, 8-bit-clean string, not
+base64, so compressed output composes directly with `base64`:
+`base64.encode(compress.gzip_compress(s, compress.BEST_COMPRESSION))`.
+
+**Every decompress function takes a required `max_bytes` argument, with no
+"0 means unlimited" escape hatch.** glua is embedded in admission controllers
+and policy engines that routinely decompress untrusted input (a base64
+annotation, an HTTP body, a ConfigMap). An unbounded read of a decompression
+stream turns a tiny input into a decompression bomb that OOMs the **host Go
+process** — strictly worse than a catchable Lua error. `max_bytes` must be a
+finite number in `[1, 4 GiB]` — outside that range (including `0`, negative,
+`NaN`, `math.huge`, or anything that would overflow the internal bounds
+check) raises immediately, rather than silently truncating to an empty
+result; exceeding the requested limit at decompress time raises naming the
+limit that fired; and the implementation never buffers more than
+`max_bytes + 1` bytes regardless of how large the compressed input claims to
+decompress to.
+
+Compression levels are validated against `[-2, 9]` for all three codecs (they
+are all backed by `compress/flate`): `NO_COMPRESSION = 0`, `BEST_SPEED = 1`,
+`BEST_COMPRESSION = 9`, `DEFAULT_COMPRESSION = -1`, `HUFFMAN_ONLY = -2`, plus
+`MAX_BYTES_DEFAULT = 67108864` (64 MiB) for the common decompress call.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/compress"
+
+L.PreloadModule("compress", compress.Loader)
+```
+
+**Lua API:**
+
+```lua
+local compress, base64 = require("compress"), require("base64")
+
+local blob = base64.encode(compress.gzip_compress(payload, compress.BEST_COMPRESSION))
+
+local ok, out = pcall(compress.gzip_decompress,
+                      base64.decode(annotation), 1024 * 1024)
+if not ok then
+  return deny("annotation payload too large or corrupt")
+end
+```
+
+#### filepath
+
+Path manipulation utilities for file and directory paths.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/filepath"
+
+L.PreloadModule("filepath", filepath.Loader)
+```
+
+**Lua API:**
+
+```lua
+local filepath = require("filepath")
+
+-- Join path components. Takes ONE array-table argument, not varargs.
+path = filepath.join({"/usr", "local", "bin"})  -- "/usr/local/bin"
+
+-- Split path into directory and file
+dir, file = filepath.split("/usr/local/bin/tool")  -- "/usr/local/bin", "tool"
+
+-- Get absolute path (raises on error)
+abspath = filepath.abs("../relative/path")
+
+-- Get file extension
+ext = filepath.ext("/path/to/file.txt")  -- ".txt"
+
+-- Get base name
+base = filepath.base("/path/to/file.txt")  -- "file.txt"
+
+-- Get directory
+dir = filepath.dir("/path/to/file.txt")  -- "/path/to"
+
+-- Clean path (simplify)
+clean = filepath.clean("/path//to/../file")  -- "/path/file"
+```
+
+#### fs
+
+Filesystem operations.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/fs"
+
+L.PreloadModule("fs", fs.Loader)
+```
+
+**Lua API:**
+
+```lua
+local fs = require("fs")
+
+-- Read file (raises on error)
+content = fs.read_file("/path/to/file.txt")
+
+-- Write file (raises on error)
+fs.write_file("/path/to/file.txt", "content")
+
+-- Check existence
+exists = fs.exists("/path/to/file")
+
+-- Create directory (raises on error)
+fs.mkdir("/path/to/dir")
+fs.mkdir_all("/path/to/nested/dir")
+
+-- Remove (raises on error)
+fs.remove("/path/to/file")
+fs.remove_all("/path/to/dir")
+
+-- List directory (raises on error)
+files = fs.list("/path/to/dir")
+
+-- Get file info (raises on error)
+info = fs.stat("/path/to/file")
+-- info = {size=1234, mode=420, mod_time=1234567890, is_dir=false}
+-- mode is the raw Go FileMode as a number (420 == 0644), not an octal string
+```
+
+#### hmac
+
+HMAC tag computation and verification, where the constant-time comparison is impossible to get wrong because it never appears in Lua.
+
+A script that does `if hash.hmac_sha256(msg, key) == tag then` has written a timing oracle without realizing it — Go's `==` is an early-exit string comparison, so its timing leaks how many leading bytes matched. This module never exposes a comparison primitive at all: `verify_*` computes and compares internally with `crypto/hmac.Equal`. There is deliberately no `hmac.equal`.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/hmac"
+
+L.PreloadModule("hmac", hmac.Loader)
+```
+
+**Lua API:**
+
+```lua
+local hmac = require("hmac")
+
+-- Compute a tag (lowercase hex)
+tag = hmac.sha1(message, key)
+tag = hmac.sha256(message, key)
+tag = hmac.sha512(message, key)
+
+-- Verify a tag. This is the ONLY way to check one — never raises, even on
+-- garbage input, because the tag is attacker-controlled.
+ok = hmac.verify_sha1(message, key, tag)
+ok = hmac.verify_sha256(message, key, tag)
+ok = hmac.verify_sha512(message, key, tag)
+```
+
+**Example — verifying a webhook signature:**
+
+```lua
+local hmac = require("hmac")
+
+local tag = hmac.sha256(payload, secret)  -- computed by the sender
+
+-- The only way to check it. No == on tags anywhere.
+if not hmac.verify_sha256(payload, secret, request.headers["x-signature"]) then
+  return deny("bad signature")
+end
+```
+
+Verification is per-algorithm (`verify_sha256`, not `verify(m, k, tag, algorithm)`) so an algorithm name can never arrive from attacker-controlled data. `verify_*` accepts the tag as lowercase or uppercase hex and returns `false` — never raises — for a wrong, malformed, or wrong-length tag. Contrast this with `password.verify` below, which raises on a malformed hash because that hash is the application's own data.
+
+#### http
+
+HTTP client for making requests. Every request (get/post/put/delete/request)
+is bounded by a 30-second timeout so a slow or unresponsive endpoint cannot
+block the calling goroutine forever; a timed-out request raises a Lua error
+like any other network failure.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/http"
+
+L.PreloadModule("http", http.Loader)
+```
+
+**Lua API:**
+
+```lua
+local http = require("http")
+
+-- GET request (raises on network/HTTP error). headers is a required
+-- argument -- pass nil explicitly when there are none.
+response = http.get("https://api.example.com/data", nil)
+-- response = {status=200, body="...", headers={...}}
+
+-- POST request (raises on network/HTTP error)
+-- Arguments are positional: (url, body, headers)
+response = http.post(
+    "https://api.example.com/data",
+    '{"key":"value"}',
+    {["Content-Type"] = "application/json"}
+)
+
+-- Body is required (pass "" for none); headers is still required -- pass nil
+response = http.post("https://api.example.com/ping", "", nil)
+
+-- Other fixed-method calls: put, delete (both also take a required,
+-- nilable headers argument). For any other verb (e.g. PATCH), use the
+-- generic request(method, url, body, headers) -- there is no http.patch.
+response = http.request("PATCH", "https://api.example.com/data", '{"key":"value"}', nil)
+```
+
+#### json
+
+JSON encoding and decoding.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/json"
+
+L.PreloadModule("json", json.Loader)
+```
+
+**Lua API:**
+
+```lua
+local json = require("json")
+
+-- Parse JSON string to Lua table (raises on invalid JSON)
+table = json.parse('{"name":"John","age":30}')
+
+-- Stringify Lua table to JSON (raises on error)
+jsonstr = json.stringify({name="John", age=30})
+```
+
+#### jsonpath
+
+Query nested Lua tables with JSONPath: `query(data, path)`, `first(data, path,
+default)`, `exists(data, path)`, `render(data, template)`. Zero new
+dependencies — backed by `k8s.io/client-go/util/jsonpath`, which is already a
+direct dependency of this module.
+
+**This is the "kubectl jsonpath" dialect, not Goessner-canonical JSONPath and
+not RFC 9535.** It is the same engine `kubectl -o jsonpath=` uses: `$`, `.a`,
+`['a']`, `[0]`, `[0:2]` slices, `..` recursive descent, `[*]` wildcard and
+`?(@.x==y)` filters are supported; there is no `length()`/`min()`/`max()`,
+and the filter grammar is narrower than RFC 9535. If a path works in
+`kubectl get -o jsonpath=`, it works here.
+
+- **Auto-brace.** A bare path (`.spec.replicas`), a `$`-rooted path
+  (`$.spec.replicas`) and an explicitly braced path (`{.spec.replicas}`) are
+  all accepted — anything not already starting with `{` is wrapped for you.
+- **`query` always returns a table** — empty, one element or many — never
+  the bare value and never `nil`, so calling code never has to branch on
+  cardinality. `first` is for the common "one value or a default" case.
+- **Missing keys: `query`/`first`/`exists` vs `render`.** A field that is
+  not present is a miss for `query`/`first`/`exists` (empty result, `false`,
+  or the given default) — it does not raise, because "is this field set?" is
+  the point. `render` is the odd one out: a text template that silently
+  renders a gap is a template bug, so a missing key raises there.
+- Data is converted through `pkg/glua.Translator`, so it rides the same JSON
+  data path as the rest of glua: all numbers arrive as float64 (a Lua
+  integer above 2^53 will not round-trip exactly), and an empty Lua table
+  reads back as an empty JSON object rather than an array.
+- A path/template that fails to parse always raises a catchable error naming
+  it, on every function.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/jsonpath"
+
+L.PreloadModule("jsonpath", jsonpath.Loader)
+```
+
+**Lua API (general-purpose data):**
+
+```lua
+local jsonpath = require("jsonpath")
+
+local order = {
+  customer = "acme",
+  items = {
+    {sku = "widget", qty = 3, price = 9.99},
+    {sku = "gadget", qty = 1, price = 49.99},
+  },
+}
+
+local skus = jsonpath.query(order, "{.items[*].sku}")        -- {"widget", "gadget"}
+local first_qty = jsonpath.first(order, "{.items[0].qty}", 0) -- 3
+local has_gadget = jsonpath.exists(order, "{.items[?(@.sku==\"gadget\")]}") -- true
+local summary = jsonpath.render(order, "{.customer}: {.items[*].sku}")     -- "acme: widget gadget"
+```
+
+**Lua API (Kubernetes, the dialect's home turf):**
+
+```lua
+local jsonpath = require("jsonpath")
+
+local images = jsonpath.query(pod, "{.spec.containers[*].image}")
+if jsonpath.exists(pod, "{.spec.containers[?(@.securityContext.privileged==true)]}") then
+  return deny("privileged container")
+end
+```
+
+#### jwt
+
+Decodes, verifies and signs JSON Web Tokens, with the two classic JWT
+footguns designed out of the API shape rather than merely documented
+against:
+
+- **`decode_unverified`, never `decode`.** There is no `decode` alias — the
+  dangerous, signature-skipping read can't be reached by the shorter, more
+  inviting name. Use it only to read `kid`/`iss` before choosing a key.
+- **Algorithm confusion is structurally blocked.** `verify`'s acceptable
+  algorithm set comes ONLY from `opts.algorithms`, never from the token's own
+  header — the header's `alg` is checked for membership in that list and is
+  never used to pick how `key` is interpreted. `opts.algorithms` may not mix
+  key-type families (HMAC vs. RSA-ish vs. EC): a caller passing
+  `{"HS256", "RS256"}` gets a raised error before the token is even touched,
+  because a single `key` argument cannot safely be interpreted as both a raw
+  HMAC secret and an RSA public key — which is exactly how an attacker forges
+  an HS256 token using a server's own RSA public key as the "secret".
+- **`alg: none` is refused unconditionally**, at option-validation time —
+  `opts.algorithms` is required, non-empty, and can never contain `"none"`.
+
+`exp`/`nbf` are always validated when present (no option disables either);
+`iat` is never validated. `leeway_seconds` applies to both, and is capped at
+**300 seconds (5 minutes)** — generous for real clock skew, but bounded,
+because it is the one option that can effectively switch off `exp`/`nbf`
+enforcement if left unbounded (an unvalidated `math.huge` or `1e18` would
+make an hours-expired token verify successfully). Every `VerifyOptions`
+field is named so its Go zero value is the safe one — most notably
+`allow_missing_exp` (default `false`): a token with no `exp` claim is
+**rejected** unless you opt in, not silently accepted.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/jwt"
+
+L.PreloadModule("jwt", jwt.Loader)
+```
+
+**Lua API:**
+
+```lua
+local jwt = require("jwt")
+
+-- Read kid WITHOUT trusting anything -- decode_unverified performs NO
+-- signature check.
+local unsafe = jwt.decode_unverified(token)
+local key = keyring[unsafe.header.kid]
+
+-- Always verify with an explicit algorithms list -- never taken from the
+-- token itself.
+local ok, claims = pcall(jwt.verify, token, key, {
+  algorithms = { "RS256" },
+  issuer     = "https://idp.example.com",
+  audience   = "api.example.com",
+  leeway_seconds = 30,
+})
+if not ok then return deny("token rejected: " .. tostring(claims)) end
+return allow(claims.sub)
+
+local signed = jwt.sign({ sub = "svc-a", exp = time.now() + 300 }, secret,
+                        { algorithm = "HS256" })
+```
+
+- Supported algorithms: `HS256/384/512`, `RS256/384/512`, `PS256/384/512`,
+  `ES256/384/512`. `EdDSA` is deferred to a later version.
+- `key` for `HS*` is the raw shared secret; for `RS*`/`PS*`/`ES*` it is a PEM
+  public key (or certificate, for `verify`) or PEM private key (for `sign`).
+  `sign` raises with a clear error if `key` doesn't match the requested
+  algorithm's key type, rather than producing a broken token.
+- Numeric claims (`exp`/`iat`/`nbf`) cross the Lua boundary as float64, well
+  inside the range where that's exact.
 
 #### k8sclient
 
@@ -1227,274 +1860,56 @@ local updated = client:update(fetched)
 client:delete(k8sclient.CONFIGMAP, "default", "my-config")
 ```
 
-#### json
+#### kubernetes
 
-JSON encoding and decoding.
+Utility functions for parsing and formatting Kubernetes resource quantities and timestamps.
 
 **Load in Go:**
 
 ```go
-import "github.com/thomas-maurice/glua/pkg/modules/json"
+import "github.com/thomas-maurice/glua/pkg/modules/kubernetes"
 
-L.PreloadModule("json", json.Loader)
+L.PreloadModule("kubernetes", kubernetes.Loader)
 ```
 
 **Lua API:**
 
 ```lua
-local json = require("json")
+local k8s = require("kubernetes")
 
--- Parse JSON string to Lua table (raises on invalid JSON)
-table = json.parse('{"name":"John","age":30}')
+-- Parse memory: "256Mi" → 268435456 (bytes)
+bytes = k8s.parse_memory(quantity)
 
--- Stringify Lua table to JSON (raises on error)
-jsonstr = json.stringify({name="John", age=30})
+-- Parse CPU: "100m" → 100 (millicores)
+millis = k8s.parse_cpu(quantity)
+
+-- Parse duration: "5m" → 300 (seconds)
+seconds = k8s.parse_duration(duration)
+
+-- Parse time: "2025-10-03T16:39:00Z" → 1759509540 (Unix timestamp)
+timestamp = k8s.parse_time(timestr)
+
+-- Format time: 1759509540 → "2025-10-03T16:39:00Z"
+timestr = k8s.format_time(timestamp)
+
+-- Format duration: 300 → "5m0s"
+duration = k8s.format_duration(seconds)
+
+-- Initialize defaults: ensures metadata.labels and metadata.annotations exist
+obj = k8s.init_defaults(obj)
+
+-- Add/manipulate labels and annotations
+obj = k8s.add_label(obj, "app", "nginx")
+obj = k8s.add_annotation(obj, "version", "1.0")
+has = k8s.has_label(obj, "app")
+value = k8s.get_label(obj, "app")
+obj = k8s.remove_label(obj, "app")
+
+-- Match GVK (Group/Version/Kind)
+matches = k8s.match_gvk(obj, {group="apps", version="v1", kind="Deployment"})
 ```
 
-#### yaml
-
-YAML encoding and decoding.
-
-**Load in Go:**
-
-```go
-import "github.com/thomas-maurice/glua/pkg/modules/yaml"
-
-L.PreloadModule("yaml", yaml.Loader)
-```
-
-**Lua API:**
-
-```lua
-local yaml = require("yaml")
-
--- Parse YAML string to Lua table (raises on invalid YAML)
-table = yaml.parse("name: John\nage: 30")
-
--- Stringify Lua table to YAML (raises on error)
-yamlstr = yaml.stringify({name="John", age=30})
-```
-
-#### spew
-
-Pretty-printing for debugging (like Go's spew package).
-
-**Load in Go:**
-
-```go
-import "github.com/thomas-maurice/glua/pkg/modules/spew"
-
-L.PreloadModule("spew", spew.Loader)
-```
-
-**Lua API:**
-
-```lua
-local spew = require("spew")
-
--- Dump to string (returns formatted string)
-str = spew.sdump({name="John", nested={deep={value=42}}})
-
--- Dump to stdout (prints directly)
-spew.dump({name="John", age=30})
-```
-
-#### http
-
-HTTP client for making requests. Every request (get/post/put/delete/request)
-is bounded by a 30-second timeout so a slow or unresponsive endpoint cannot
-block the calling goroutine forever; a timed-out request raises a Lua error
-like any other network failure.
-
-**Load in Go:**
-
-```go
-import "github.com/thomas-maurice/glua/pkg/modules/http"
-
-L.PreloadModule("http", http.Loader)
-```
-
-**Lua API:**
-
-```lua
-local http = require("http")
-
--- GET request (raises on network/HTTP error)
-response = http.get("https://api.example.com/data")
--- response = {status=200, body="...", headers={...}}
-
--- POST request (raises on network/HTTP error)
--- Arguments are positional: (url, body, headers)
-response = http.post(
-    "https://api.example.com/data",
-    '{"key":"value"}',
-    {["Content-Type"] = "application/json"}
-)
-
--- Body is required (pass "" for none); headers may be nil
-response = http.post("https://api.example.com/ping", "")
-
--- Other methods: put, patch, delete
-```
-
-#### template
-
-Go template rendering.
-
-**Load in Go:**
-
-```go
-import "github.com/thomas-maurice/glua/pkg/modules/template"
-
-L.PreloadModule("template", template.Loader)
-```
-
-**Lua API:**
-
-```lua
-local template = require("template")
-
--- Render template with data (raises on template parse/execute error)
-result = template.render("Hello {{.name}}, you are {{.age}} years old",
-    {name="John", age=30})
--- result = "Hello John, you are 30 years old"
-```
-
-#### fs
-
-Filesystem operations.
-
-**Load in Go:**
-
-```go
-import "github.com/thomas-maurice/glua/pkg/modules/fs"
-
-L.PreloadModule("fs", fs.Loader)
-```
-
-**Lua API:**
-
-```lua
-local fs = require("fs")
-
--- Read file (raises on error)
-content = fs.read_file("/path/to/file.txt")
-
--- Write file (raises on error)
-fs.write_file("/path/to/file.txt", "content")
-
--- Check existence
-exists = fs.exists("/path/to/file")
-
--- Create directory (raises on error)
-fs.mkdir("/path/to/dir")
-fs.mkdir_all("/path/to/nested/dir")
-
--- Remove (raises on error)
-fs.remove("/path/to/file")
-fs.remove_all("/path/to/dir")
-
--- List directory (raises on error)
-files = fs.list("/path/to/dir")
-
--- Get file info (raises on error)
-info = fs.stat("/path/to/file")
--- info = {size=1234, mode=420, mod_time=1234567890, is_dir=false}
--- mode is the raw Go FileMode as a number (420 == 0644), not an octal string
-```
-
-#### time
-
-Time manipulation and formatting.
-
-**Load in Go:**
-
-```go
-import "github.com/thomas-maurice/glua/pkg/modules/time"
-
-L.PreloadModule("time", time.Loader)
-```
-
-**Lua API:**
-
-```lua
-local time = require("time")
-
--- Current Unix timestamp
-now = time.now()
-
--- Parse date string (raises on parse error)
--- Arguments are (timestr, layout) - the value first, the Go layout second
-timestamp = time.parse("2025-10-21 14:30:00", "2006-01-02 15:04:05")
-
--- Format timestamp
-datestr = time.format(timestamp, "2006-01-02 15:04:05")
-
--- Sleep
-time.sleep(2)  -- sleep for 2 seconds
-```
-
-#### base64, hex, hash
-
-Encoding and hashing utilities.
-
-**Load in Go:**
-
-```go
-import (
-    "github.com/thomas-maurice/glua/pkg/modules/base64"
-    "github.com/thomas-maurice/glua/pkg/modules/hex"
-    "github.com/thomas-maurice/glua/pkg/modules/hash"
-)
-
-L.PreloadModule("base64", base64.Loader)
-L.PreloadModule("hex", hex.Loader)
-L.PreloadModule("hash", hash.Loader)
-```
-
-**Lua API:**
-
-```lua
-local base64 = require("base64")
-local hex = require("hex")
-local hash = require("hash")
-
--- Base64
-encoded = base64.encode("hello")
-decoded = base64.decode(encoded)  -- raises on invalid base64
-
--- Hex
-encoded = hex.encode("hello")
-decoded = hex.decode(encoded)  -- raises on invalid hex
-
--- Hash strings
-md5 = hash.md5("hello")
-sha1 = hash.sha1("hello")
-sha256 = hash.sha256("hello")
-sha512 = hash.sha512("hello")
-
--- Hash Lua tables (converted to JSON; raises on conversion error)
-hash_val = hash.md5_obj({name="John", age=30})
-hash_val = hash.sha1_obj({key="value"})
-hash_val = hash.sha256_obj({foo="bar", nested={data=123}})
-hash_val = hash.sha512_obj({items={1, 2, 3}})
-```
-
-**Object Hashing:**
-
-The `*_obj` functions convert Lua tables to JSON before hashing, making them useful for:
-
-- Content-based resource identifiers
-- Detecting configuration changes
-- Caching keys for complex data structures
-- Checksums for nested objects
-
-```lua
--- Example: Detect if a Pod spec has changed
-local hash = require("hash")
-local pod_hash = hash.sha256_obj(pod.spec)
--- Store/compare this hash to detect changes
-```
+All functions raise a Lua error on invalid input. Use `pcall` to handle errors gracefully.
 
 #### log
 
@@ -1537,6 +1952,71 @@ logger:debug("Debug information")
 logger:warn("Deprecated feature used")
 ```
 
+#### netaddr
+
+IP address and CIDR arithmetic as pure computation: `parse_ip`, `parse_cidr`,
+`cidr_contains`, `subnet_of`, `cidr_overlaps`, `is_private`, `is_loopback`,
+`is_global`, `normalize_ip`, `ip_version`, `is_ip`.
+
+**No name resolution, ever.** The module is built on `net/netip` and
+`math/big` only and deliberately never imports `net` — the package that
+carries the DNS resolver — so "no DNS" is a property of the import list, not
+a comment.
+
+**IPv6 is a first-class citizen, not an afterthought:**
+
+- A v4-mapped v6 address (`::ffff:192.0.2.1`) is unwrapped to its plain v4
+  form everywhere in this module (`parse_ip`, `normalize_ip`,
+  `is_private`/`is_global`/`is_loopback`, and as the host argument to
+  `cidr_contains`), so it behaves identically to typing the v4 form.
+- `cidr_contains`, `subnet_of` and `cidr_overlaps` return `false` — never
+  raise — when comparing across address families (a v4 host/prefix against a
+  v6 one). Only a malformed IP/CIDR string raises.
+- `is_private`/`is_global` cover the v6 special ranges (ULA `fc00::/7`,
+  link-local `fe80::/10`, loopback `::1`, unspecified `::`) alongside the v4
+  RFC 1918/documentation sets.
+- `num_addresses` in `parse_cidr`'s result is a **decimal string, not a
+  number** — a v6 `/0` holds 2^128 addresses, far past what a float64 can
+  represent exactly. This costs v4 callers a `tonumber()` call for the common
+  case, in exchange for v6 callers never getting a silently-wrong count.
+- Prefix-length errors name the actual bound (0-32 for v4, 0-128 for v6).
+- `parse_cidr` normalizes non-canonical input: `"10.0.0.5/8"` becomes
+  `"10.0.0.0/8"` rather than being rejected.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/netaddr"
+
+L.PreloadModule("netaddr", netaddr.Loader)
+```
+
+**Lua API:**
+
+```lua
+local netaddr = require("netaddr")
+
+if not netaddr.cidr_contains("10.0.0.0/8", clientIP) then
+  return deny("client outside the corp range")
+end
+
+local c = netaddr.parse_cidr("192.168.1.0/24")
+print(c.first, c.last, c.num_addresses)   -- 192.168.1.0  192.168.1.255  256
+
+-- IPv6: a v6 /64 holds 2^64 addresses -- num_addresses is a string because
+-- that value cannot round-trip through a float64 exactly.
+local v6 = netaddr.parse_cidr("2001:db8::/64")
+print(v6.num_addresses)                   -- "18446744073709551616"
+
+if netaddr.is_global(svcIP) then
+  return deny("service must not use a globally routable address")
+end
+
+netaddr.is_private("fc00::1")             -- true (IPv6 ULA)
+netaddr.cidr_contains("2001:db8::/32", "2001:db8::1")  -- true
+netaddr.cidr_contains("10.0.0.0/8", "2001:db8::1")     -- false, not an error
+```
+
 #### osmod
 
 Operating system utilities for environment variables, hostname, and temp directories.
@@ -1566,43 +2046,83 @@ hostname = osmod.hostname()
 tmpdir = osmod.tmpdir()
 ```
 
-#### filepath
+#### password
 
-Path manipulation utilities for file and directory paths.
+bcrypt password hashing and verification. argon2id is deliberately deferred — bcrypt's hash string is self-describing (cost and salt travel with it), so `verify` needs no extra parameters and cost rotation needs no schema migration.
 
 **Load in Go:**
 
 ```go
-import "github.com/thomas-maurice/glua/pkg/modules/filepath"
+import "github.com/thomas-maurice/glua/pkg/modules/password"
 
-L.PreloadModule("filepath", filepath.Loader)
+L.PreloadModule("password", password.Loader)
 ```
 
 **Lua API:**
 
 ```lua
-local filepath = require("filepath")
+local password = require("password")
 
--- Join path components
-path = filepath.join("/usr", "local", "bin")  -- "/usr/local/bin"
+local stored = password.hash(plaintext, password.DEFAULT_COST)  -- raises if cost is out of [4,31] or plaintext > 72 bytes
 
--- Split path into directory and file
-dir, file = filepath.split("/usr/local/bin/tool")  -- "/usr/local/bin", "tool"
+if password.verify(attempt, stored) then
+  if password.cost(stored) < password.DEFAULT_COST then
+    stored = password.hash(attempt, password.DEFAULT_COST)   -- rehash on login
+  end
+  return allow()
+end
+return deny("invalid credentials")
+```
 
--- Get absolute path (raises on error)
-abspath = filepath.abs("../relative/path")
+- `password.hash(plaintext, cost)` raises on a `cost` outside `[4, 31]` (bcrypt's own range) and on a `plaintext` over 72 bytes. bcrypt silently truncates input beyond 72 bytes internally, which would let two distinct long passwords sharing the same 72-byte prefix verify identically — this module rejects the over-length input outright instead of truncating it.
+- `password.verify(plaintext, hash)` returns `false` (not an error) for a wrong password, since the plaintext is attacker-controlled and a wrong guess is a normal outcome. It **raises** on a malformed/non-bcrypt `hash`, because the hash is the application's own stored data — a malformed one means the database or a migration is broken, not that the user mistyped their password. This is the deliberate mirror image of `hmac.verify_*` above, which never raises because its `tag` argument is the attacker-controlled one.
+- `password.cost(hash)` returns the cost a hash was created with, for rehash-on-login logic; raises on a malformed hash.
+- Comparison is constant-time by construction (`bcrypt.CompareHashAndPassword` re-derives and compares the derived hashes), and — same rule as `hmac` — there is no `password.equal`.
 
--- Get file extension
-ext = filepath.ext("/path/to/file.txt")  -- ".txt"
+#### random
 
--- Get base name
-base = filepath.base("/path/to/file.txt")  -- "file.txt"
+Cryptographically secure randomness, backed by `crypto/rand`: `bytes(n)`,
+`hex(n)`, `token(n)`, `string(n, charset)`, `int(min, max)`.
 
--- Get directory
-dir = filepath.dir("/path/to/file.txt")  -- "/path/to"
+**This is a CSPRNG, not gopher-lua's `math.random`.** `math.random` is a
+seeded, deterministic PRNG — predictable from its seed — and must never be
+used for tokens, keys, salts or nonces. Everything in this module is backed
+by `crypto/rand` and is suitable for exactly those uses. There is
+deliberately no seeding function, so output is never reproducible.
 
--- Clean path (simplify)
-clean = filepath.clean("/path//to/../file")  -- "/path/file"
+- `random.int(min, max)` is **inclusive of both ends**, matching Lua's
+  `math.random(m, n)` rather than Go's half-open convention — a Go reader
+  should not assume half-open semantics here. It is bias-free by
+  construction (`crypto/rand.Int` against a `big.Int` span, never `% n`),
+  and raises if `min > max`, either bound is non-integral, or
+  `max - min >= 2^53`.
+- `random.string(n, charset)` is **rune-oriented**, not byte-oriented, so a
+  UTF-8 charset cannot produce broken UTF-8. Duplicate runes in `charset`
+  are not de-duplicated — they are simply weighted more heavily. An empty
+  `charset` raises.
+- `random.token(n)` is base64url, **unpadded** — safe to drop directly into
+  a URL or header, unlike `base64.encode(random.bytes(n))`, which contains
+  `+`, `/` and `=`.
+- `n <= 0` (for `bytes`/`hex`/`token`/`string`) and `n` beyond `2^20` both
+  raise.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/random"
+
+L.PreloadModule("random", random.Loader)
+```
+
+**Lua API:**
+
+```lua
+local random = require("random")
+
+local apiKey  = random.token(32)                 -- URL-safe, no padding
+local salt    = random.hex(16)
+local pin     = random.string(6, "0123456789")
+local dieRoll = random.int(1, 6)                 -- inclusive, like math.random
 ```
 
 #### regexp
@@ -1642,6 +2162,83 @@ result = regexp.replace_all("([0-9]+)", "version 123 build 456", "X")
 -- Split by pattern (raises on invalid pattern)
 parts = regexp.split("\\s+", "one  two   three", -1)
 -- parts = {"one", "two", "three"}
+```
+
+#### spew
+
+Pretty-printing for debugging (like Go's spew package).
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/spew"
+
+L.PreloadModule("spew", spew.Loader)
+```
+
+**Lua API:**
+
+```lua
+local spew = require("spew")
+
+-- Dump to string (returns formatted string)
+str = spew.sdump({name="John", nested={deep={value=42}}})
+
+-- Dump to stdout (prints directly)
+spew.dump({name="John", age=30})
+```
+
+#### strconv
+
+Numeric parsing/formatting and Go-syntax string quoting, with errors that
+actually say what went wrong.
+
+Lua 5.1 already has `tonumber(s)` / `tonumber(s, base)`, so `parse_int` and
+`parse_float` are admittedly thin wrappers over them — the value this module
+adds is narrow but real:
+
+- `tonumber` returns `nil` with no explanation. `strconv.parse_int` and
+  `strconv.parse_float` **raise** with Go's own message
+  (`strconv.ParseInt: parsing "12a": invalid syntax`), matching this
+  library's fail-loud convention.
+- `tonumber` silently hands back a float for an integer that doesn't fit.
+  `parse_int`/`format_int` instead **raise** when a value's magnitude
+  exceeds 2^53 — the largest integer a Lua number (a float64) can represent
+  exactly — rather than silently rounding it.
+- `format_int(n, base)` and `format_float(f, fmt, prec)` (with shortest
+  round-trip formatting via `prec = -1`) have no Lua 5.1 equivalent at all.
+- `quote`/`unquote` (Go-syntax string literals with escapes) have no
+  equivalent in Lua 5.1.
+
+There is no `itoa` — it is exactly `format_int(n, 10)`.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/strconv"
+
+L.PreloadModule("strconv", strconv.Loader)
+```
+
+**Lua API:**
+
+```lua
+local strconv = require("strconv")
+
+local mode = strconv.parse_int("644", 8)     -- 420
+print(strconv.format_int(mode, 8))           -- "644"
+print(strconv.format_float(1/3, "g", -1))    -- "0.3333333333333333"
+
+-- tonumber("12a") would silently return nil; strconv raises with a reason.
+local ok, err = pcall(strconv.atoi, "12a")
+print(ok, err) -- false, ".../strconv.ParseInt: parsing "12a": invalid syntax"
+
+-- parse_bool accepts Go's spelling set
+print(strconv.parse_bool("TRUE"))            -- true
+
+-- quote/unquote round-trip Go-syntax string literals
+local q = strconv.quote("line one\nline two")
+print(strconv.unquote(q) == "line one\nline two") -- true
 ```
 
 #### strings
@@ -1684,6 +2281,352 @@ count = strings.count("banana", "a")  -- 3
 
 -- Replace
 result = strings.replace("hello world", "world", "there", -1)  -- "hello there"
+
+-- Whitespace trimming (the single most-missed function before this existed)
+trimmed = strings.trim_space("  hello  ")  -- "hello"
+
+-- Prefix/suffix removal (not just checking)
+s = strings.trim_prefix("hello world", "hello ")  -- "world"
+s = strings.trim_suffix("app.tar.gz", ".gz")      -- "app.tar"
+
+-- Split on whitespace runs, with no empty entries
+parts = strings.fields("  the quick  brown fox  ")  -- {"the", "quick", "brown", "fox"}
+
+-- Repeat. Named rep, not repeat: "repeat" is a reserved word in Lua, so
+-- strings.repeat(s, n) would be a syntax error at the call site. count is
+-- capped at 1048576 (1 MiB) -- a typo'd huge count raises rather than
+-- silently allocating an unbounded amount of memory.
+s = strings.rep("ab", 3)  -- "ababab"
+
+-- index/last_index are 1-based, returning 0 when absent -- NOT Go's
+-- 0-based/-1 convention. This composes with string.sub directly.
+pos = strings.index("key=value", "=")        -- 4
+missing = strings.index("hello", "xyz")      -- 0
+pos = strings.last_index("banana", "an")     -- 4
+
+-- Case-insensitive equality (simple Unicode case-folding)
+eq = strings.equal_fold("Hello", "HELLO")  -- true
+
+-- Title-case the first rune of each whitespace-separated word. First-rune
+-- only, not language-aware -- does not implement locale casing exceptions
+-- (e.g. "of"/"the" staying lowercase in real title case).
+s = strings.title("hello world")  -- "Hello World"
+
+-- Cut: split around the first occurrence of a separator
+before, after, found = strings.cut("app=nginx", "=")  -- "app", "nginx", true
+
+-- Split with a limit (the remainder stays unsplit in the last element)
+parts = strings.split_n("a,b,c,d", ",", 2)  -- {"a", "b,c,d"}
+```
+
+#### template
+
+Go template rendering.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/template"
+
+L.PreloadModule("template", template.Loader)
+```
+
+**Lua API:**
+
+```lua
+local template = require("template")
+
+-- Render template with data (raises on template parse/execute error)
+result = template.render("Hello {{.name}}, you are {{.age}} years old",
+    {name="John", age=30})
+-- result = "Hello John, you are 30 years old"
+```
+
+#### text
+
+Presentation/layout string operations that Go's standard library does not
+provide: word wrap, indent/dedent, truncation with an ellipsis, and rune
+padding.
+
+The split from `strings` is deliberate: `strings` binds Go's `strings`
+package one-to-one (if Go has it, it goes there); `text` is for operations Go
+does not have at all.
+
+**Every function here is rune-oriented, not display-width-oriented.**
+"Width" and "length" always mean a count of Unicode code points, never bytes
+and never terminal display cells. A CJK or emoji string will not visually
+align in a monospace terminal even though these functions agree it is "N
+runes wide" — getting real display width right needs a dependency
+(`mattn/go-runewidth`) that is deliberately not taken for this module. This
+is a stated limitation, not a bug.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/text"
+
+L.PreloadModule("text", text.Loader)
+```
+
+**Lua API:**
+
+```lua
+local text = require("text")
+
+-- Greedy word wrap. Existing "\n" are hard paragraph breaks. A word longer
+-- than width is not split -- it overflows its own line. Raises if width < 1.
+local wrapped = text.wrap("the quick brown fox jumps over the lazy dog", 20)
+
+-- Prefix every line. A trailing empty line (s ends with "\n") is not
+-- prefixed, so a trailing newline survives indenting unchanged.
+print(text.indent(wrapped, "  | "))
+
+-- Remove the common leading-whitespace prefix across all non-blank lines.
+-- Tabs and spaces are compared literally, never expanded; blank lines are
+-- normalized to empty rather than participating in the margin calculation.
+local code = "    def f():\n        return 1\n"
+print(text.dedent(code))  -- "def f():\n    return 1\n"
+
+-- Truncate to a maximum rune width (including the ellipsis itself),
+-- appending an ellipsis when shortened.
+print(text.truncate("sha256:0123456789abcdef", 12, "…"))  -- "sha256:0123…"
+
+-- Pad with a single rune. Never truncates -- an already-wider string is
+-- returned unchanged. width is capped at 1048576 (1 MiB) -- a typo'd huge
+-- width raises rather than silently allocating an unbounded amount of
+-- memory.
+print(text.pad_right("NAME", 20, " ") .. "STATUS")
+print(text.pad_left("42", 5, "0"))  -- "00042"
+```
+
+`text.table` (an ASCII table formatter) was considered and deliberately cut
+from this module — its design surface (column alignment, cell wrapping,
+border styles) is a caller concern, not a stdlib concern.
+
+#### time
+
+Time manipulation and formatting.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/time"
+
+L.PreloadModule("time", time.Loader)
+```
+
+**Lua API:**
+
+```lua
+local time = require("time")
+
+-- Current Unix timestamp
+now = time.now()
+
+-- Parse date string (raises on parse error)
+-- Arguments are (timestr, layout) - the value first, the Go layout second
+timestamp = time.parse("2025-10-21 14:30:00", "2006-01-02 15:04:05")
+
+-- Format timestamp
+datestr = time.format(timestamp, "2006-01-02 15:04:05")
+
+-- Sleep
+time.sleep(2)  -- sleep for 2 seconds
+```
+
+#### url
+
+URL parsing, construction, escaping and RFC 3986 reference resolution, built
+on `net/url` only: `parse`, `build`, `resolve`, `query_escape`/`unescape`,
+`path_escape`/`unescape`, `parse_query`, `build_query`.
+
+**IPv6 literal hosts are the trap this module is designed around.**
+`url.parse("http://[::1]:8080/path")` splits the authority into `hostname =
+"::1"` (unbracketed) and `port = "8080"`, separately from `host = "[::1]:8080"`
+(the raw authority, brackets included, mirroring Go's `net/url.URL.Host`).
+`url.build` re-adds the brackets around a bare IPv6 literal automatically —
+callers who only set `hostname`/`port` never have to learn the bracket rule.
+A zone id (`http://[fe80::1%25eth0]/`) round-trips through `parse` then
+`build` without corruption.
+
+**`build` uses `host` verbatim when present, and raises if `hostname`/`port`
+are also set but disagree with it.** Before this rule existed, mutating only
+`hostname` on a table obtained from `parse` (`local u = url.parse(s);
+u.hostname = "good.com"; url.build(u)`) silently returned the *original*
+`host` — an SSRF allow-list rewritten that way was inert and looked like it
+worked. Setting only `host`, or only `hostname`/`port`, both still work with
+no consistency check; the check only fires when `host` and `hostname`/`port`
+are both present and inconsistent.
+
+`parse` returns and `build` accepts the same table shape: `scheme, opaque,
+username, password, host, hostname, port, path, raw_path, raw_query,
+fragment`. `username`/`password` are flattened out of the URL's userinfo into
+two plain strings, empty when absent.
+
+`parse_query` always returns `table<string, string[]>` — every key maps to
+an array of values, even a single one, because a repeated key (`?a=1&a=2`) is
+legal and would otherwise silently lose a value; it returns an empty (never
+`nil`) table for an empty query string. `build_query` accepts `table<string,
+string|string[]>` (a plain string, or an array for a repeated key) and sorts
+its output by key — `net/url.Values.Encode`'s own behaviour — so the same
+input always produces the same output.
+
+Only `url.resolve` is provided for reference resolution (RFC 3986's
+`ResolveReference`, not naive path-joining): `resolve("https://x/a/b", "c")`
+→ `"https://x/a/c"`, while `resolve("https://x/a/b/", "c")` →
+`"https://x/a/b/c"`.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/url"
+
+L.PreloadModule("url", url.Loader)
+```
+
+**Lua API:**
+
+```lua
+local url = require("url")
+
+local u = url.parse("https://user:pw@example.com:8443/a/b?x=1&x=2#frag")
+print(u.hostname, u.port, u.path)        -- example.com  8443  /a/b
+
+local q = url.parse_query(u.raw_query)
+print(#q.x)                               -- 2
+
+print(url.build_query({ ns = "default", label = {"a", "b"} }))
+print(url.resolve("https://example.com/a/b", "../c"))
+
+-- IPv6 literal host: hostname is unbracketed, build re-adds the brackets.
+local v6 = url.parse("http://[::1]:8080/path")
+print(v6.hostname, v6.port)               -- ::1  8080
+print(url.build(v6))                      -- http://[::1]:8080/path
+print(url.build({scheme = "http", hostname = "::1", port = "8080", path = "/"}))
+-- http://[::1]:8080/ -- brackets added automatically
+```
+
+#### uuid
+
+UUID v4 (random), v5 (deterministic) and v7 (time-ordered) generation,
+parsing and formatting, backed by `github.com/google/uuid`.
+
+**`uuid` is a separate module from `random`, deliberately.** v7 is
+*time-ordered*, not random — consecutive v7 values sort by creation time by
+design — so `uuid.v4()`/`uuid.v7()` sitting next to `random.token()` would
+teach the wrong mental model. The `google/uuid` dependency exists
+specifically for v7: RFC 9562 wants a monotonic counter so two UUIDs minted
+in the same millisecond still sort correctly, which needs real
+synchronisation and isn't worth hand-rolling.
+
+`parse`/`is_valid`/`v5`'s namespace argument accept every form
+`google/uuid`'s `Parse` accepts: canonical hyphenated, the raw 32-hex form
+with no hyphens, `urn:uuid:...`, and the `{braced}` form. `format` converts
+a parsed UUID into any of `canonical`, `plain`, `urn` or `braced`.
+
+`uuid.parse(s)` returns `{uuid, version, variant, timestamp}` — `timestamp`
+is Unix seconds, populated for v1/v6/v7 only (`0` otherwise).
+`uuid.NAMESPACE_DNS`/`NAMESPACE_URL`/`NAMESPACE_OID`/`NAMESPACE_X500` are
+provided for use with `v5`, alongside `uuid.NIL`.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/uuid"
+
+L.PreloadModule("uuid", uuid.Loader)
+```
+
+**Lua API:**
+
+```lua
+local uuid = require("uuid")
+
+local id = uuid.v7()                             -- sorts by creation time
+print(uuid.parse(id).timestamp)                  -- Unix seconds
+
+local stable = uuid.v5(uuid.NAMESPACE_DNS, "my-object-name")
+```
+
+#### x509
+
+Parses PEM certificates **from a string** and answers questions about them —
+subject/issuer, SANs, validity window, key usages, a chain verification —
+with two hard invariants:
+
+- **No file reads, ever.** Every function takes PEM text as a Lua string.
+  There is no `x509.parse_file` — read the file with the `fs` module and
+  pass the contents in.
+- **No network and no system trust store.** `crypto/x509.Verify` never does
+  AIA/OCSP/CRL fetching, so "no network" is free. `x509.SystemCertPool` is
+  **never** called anywhere in this module — `verify_chain`'s root and
+  intermediate pools are built exclusively from the PEM text you pass in, so
+  an empty `roots` argument can never verify anything, on any machine.
+
+`not_before`/`not_after` are **Unix-second numbers**, not RFC3339 strings, so
+they compose with the `time` module (`time.format`, `time.diff`) the same way
+`time` and `uuid` do — this deliberately differs from the `kubernetes`
+module, which speaks RFC3339 strings. `serial` is an exact decimal string
+(serials can be up to 20 bytes, past float64's exact range). `ip_addresses`
+reports both IPv4 and IPv6 SANs correctly.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/x509"
+
+L.PreloadModule("x509", x509.Loader)
+```
+
+**Lua API:**
+
+```lua
+local x509, time = require("x509"), require("time")
+
+local c = x509.parse(secret.data["tls.crt"])
+print(c.subject_cn, c.serial)
+print(time.format(c.not_after, "2006-01-02"))          -- composes with the time module
+
+local days = x509.expires_in_days(pem, time.now())
+if days < 30 then warn(("cert expires in %.1f days"):format(days)) end
+
+-- verify_chain NEVER trusts the host's system certificate store: only
+-- roots/intermediates you pass in are considered.
+local ok, reason = x509.verify_chain(leafPem, intermediatesPem, rootsPem,
+  { dns_name = "api.example.com", at_time = time.now(), key_usages = {"server_auth"} })
+if not ok then return deny("chain invalid: " .. reason) end
+```
+
+- `x509.parse`/`x509.parse_chain` raise on missing/wrong-type PEM blocks or
+  bad DER. `x509.verify_chain` does **not** raise on a failed verification —
+  "this chain isn't trusted" is a normal, expected outcome — it returns
+  `ok, reason` instead, with `reason` empty on success.
+- `opts.at_time` for `verify_chain` is required and must not be `0`: a
+  policy check that silently defaults to "verify as of 1970" is not a
+  validity check anyone wants, so a zero time raises rather than defaulting.
+
+#### yaml
+
+YAML encoding and decoding.
+
+**Load in Go:**
+
+```go
+import "github.com/thomas-maurice/glua/pkg/modules/yaml"
+
+L.PreloadModule("yaml", yaml.Loader)
+```
+
+**Lua API:**
+
+```lua
+local yaml = require("yaml")
+
+-- Parse YAML string to Lua table (raises on invalid YAML)
+table = yaml.parse("name: John\nage: 30")
+
+-- Stringify Lua table to YAML (raises on error)
+yamlstr = yaml.stringify({name="John", age=30})
 ```
 
 ## Features
@@ -1819,7 +2762,7 @@ What's tested:
 - Round-trip integrity (Go → Lua → Go preserves data)
 - Stub generation from Go code
 - Race detection enabled
-- CI/CD across Go 1.21, 1.22, 1.23
+- CI/CD on the pinned Go version in `go.mod` (currently 1.26)
 
 ## Example Application
 

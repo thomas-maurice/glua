@@ -24,8 +24,32 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	lua "github.com/yuin/gopher-lua"
 )
+
+// TestRep_CountCapped is the exact regression this chunk fixes (security
+// review LOW 3): strings.rep("a", 1e8) previously allocated 100 MB
+// silently, and scaling the count up further reaches process OOM, which is
+// a Go FATAL error a caller's pcall cannot recover from -- unlike random's
+// length arguments, which already cap at maxRepCount for the same reason.
+func TestRep_CountCapped(t *testing.T) {
+	// A normal use well under the cap must still work.
+	out, err := rep("ab", 1000)
+	require.NoError(t, err)
+	assert.Len(t, out, 2000)
+
+	// At the cap: still accepted.
+	out, err = rep("a", maxRepCount)
+	require.NoError(t, err)
+	assert.Len(t, out, maxRepCount)
+
+	// Just over the cap: rejected, naming the bound.
+	_, err = rep("a", maxRepCount+1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "1048576")
+}
 
 // TestLuaScripts: runs all Lua test scripts in testdata/ directory
 func TestLuaScripts(t *testing.T) {

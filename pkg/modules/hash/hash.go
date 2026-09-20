@@ -21,6 +21,15 @@
 // Package hash provides cryptographic hash utilities for Lua scripts: MD5,
 // SHA1, SHA256, SHA512 and HMAC-SHA256, over strings or arbitrary Lua values
 // serialised to JSON.
+//
+// hmac_sha256 is deprecated in favour of the hmac module
+// (pkg/modules/hmac), which additionally provides HMAC-SHA1/SHA512 and,
+// more importantly, verify_* functions that compare tags in constant time
+// inside Go. hmac_sha256 is kept here byte-identical in behaviour so
+// existing scripts do not break; it will be removed at the next deliberate
+// breaking release. Do not build new HMAC verification against == on this
+// function's result — see the hmac package doc for why that is a timing
+// oracle.
 package hash
 
 import (
@@ -139,7 +148,7 @@ func build() *luareg.Module {
 		luareg.Args("s"),
 		luareg.ArgDoc("s", "the string to hash"),
 		luareg.ReturnDoc(0, "hex", "the lowercase hex-encoded SHA512 digest"))
-	m.Fn("hmac_sha256", hmacSHA256, "computes the hex-encoded HMAC-SHA256 of a message with a key",
+	m.Fn("hmac_sha256", hmacSHA256, "computes the hex-encoded HMAC-SHA256 of a message with a key (deprecated: use hmac.sha256; and never compare its result with == against attacker-supplied input, see the hmac module)",
 		luareg.Args("message", "key"),
 		luareg.ArgDoc("message", "the message to authenticate"),
 		luareg.ArgDoc("key", "the shared secret key"),

@@ -121,6 +121,60 @@ intentional, not a bug: a k8s `Secret.Data` renders as base64 in
 `kubectl get -o yaml`, which is the mental model module users already have.
 Do not "fix" the nested case without a deliberate decision.
 
+**Arity is exact — EXCEPT when the function takes `*lua.LState`.** The reflection
+wrapper normally rejects both too few and too many arguments. But a function
+whose first Go parameter is `*lua.LState` gets a *minimum* check only: too few
+raises, surplus arguments are silently ignored.
+
+This is deliberate, not a bug. The LState is the escape hatch for reading extra
+stack slots yourself, which is exactly how `log.info("msg", {fields})` works —
+`moduleLuaInfo` takes `(L, msg)` and pulls the fields from stack position 2 via
+`extractFields`. Enforcing exact arity would break it.
+
+The consequence to know: any function taking `*lua.LState` — including every one
+that returns a constructed table, since building one needs the state — opts out
+of surplus-argument checking. `collections.map(t, f, "junk")` is accepted.
+If a function does NOT need the state, leave it out and get the stricter check.
+
+**A nil Go slice becomes Lua `nil`, not an empty table.** It travels the JSON
+path, and `json.Marshal` renders a nil slice as `null`. An empty non-nil slice
+renders as `[]` and arrives as an empty table. So a function returning a nil
+slice hands Lua something that breaks `#result` and `ipairs(result)`.
+
+Several stdlib functions return nil rather than an empty slice on "no results" —
+`regexp.FindAllString` and `strings.SplitN(s, sep, 0)` both do. **Always
+normalise before returning:**
+
+```go
+if matches == nil {
+    return []string{}, nil
+}
+```
+
+`pkg/modules/regexp/regexp.go:60` is the precedent. Any new function returning a
+slice needs a test for the empty case that asserts `type(x) == "table"`.
+
+**`[]byte` has the same trap with a different symptom.** It does not take the
+JSON path — it maps to a raw `lua.LString` — but a nil `[]byte` still arrives as
+Lua `nil` rather than `""`. `bytes.Buffer.Bytes()` returns nil for an empty
+buffer, so decompressing to an empty string, or any other empty byte result,
+silently yields nil unless you normalise:
+
+```go
+if b == nil {
+    b = []byte{}
+}
+```
+
+`pkg/modules/compress` does this. Test the empty case asserting
+`type(x) == "string"`.
+
+**gopher-lua's `math.huge` is `math.MaxFloat64`, not `+Inf`.** Stock Lua 5.1 sets
+it to `HUGE_VAL`, i.e. infinity. So `math.huge == 1/0` is **false** here, and a
+test that expects `math.huge` to behave as infinity will fail confusingly. Real
+IEEE infinities do exist — produce one with `1/0` (and `NaN` with `0/0`). Verified
+against gopher-lua v1.1.2.
+
 **gopher-lua diverges from stock Lua 5.1 on `setmetatable`.** Stock Lua requires
 a table as arg 1, so userdata is protected for free. gopher-lua's
 `baseSetMetatable` only type-checks arg 2, so a script CAN reassign a metatable
@@ -201,9 +255,65 @@ with the runtime is worse than no stub.
 
 Stub doc text comes from FnOpts in `pkg/luareg/module.go`:
 `luareg.ArgDoc(name, doc)` for a parameter description, `luareg.ReturnDoc(index,
-name, doc)` for a return value, and `luareg.ArgType(name, luaType)` to override
-the inferred LuaLS type (needed for callbacks — `lua.LValue` carries no useful
-type). **`ArgType` has an external consumer (matrixbot) — do not delete it.**
+name, doc)` for a return value, `luareg.ArgType(name, luaType)` to override the
+inferred LuaLS type for a parameter (needed for callbacks — `lua.LValue`
+carries no useful type), and `luareg.ReturnType(index, luaType)` — the same
+override, indexed like `ReturnDoc`, for a return value (needed for
+`*lua.LTable`/`lua.LValue` escape-hatch returns, which otherwise stub as the
+generic fallback `table`/`any`). **`ArgType` has an external consumer
+(matrixbot) — do not delete it.**
+
+## Module API conventions
+
+Rules for any Go function registered via `luareg.Fn`/`Method`, distilled from
+the stdlib-module batch (SPECS.md "Part 2", F1–F6). Apply these to every new
+module, not just that batch.
+
+- **F1 — errors raise; they do not return `(nil, err)` as a normal value.**
+  A trailing `error` return aborts the script (`pkg/luareg/reflect.go`,
+  `raiseError`). Classify every failure mode: malformed input / programmer
+  error → return a Go `error` (raises); a legitimate negative answer →
+  return `false`/`nil` as a normal value. `hmac.verify_sha256(...)` returning
+  `false` and `x509.parse("garbage")` raising are both correct, for different
+  reasons.
+- **F2 — arity is exact; there are no optional arguments.** Unless the Go
+  func takes `*lua.LState` first or is variadic, a wrong argument count
+  raises, and stubgen always emits `---@param x T` (never `x? T`). Where a
+  default is wanted, use one of: an **options struct** (a Go struct with
+  `json` tags as a required final table argument — the Translator fills it,
+  so missing keys become zero values; this is the preferred mechanism), a
+  **named variant** (`strconv.atoi(s)` alongside `strconv.parse_int(s,
+  base)`), or a **module constant** passed explicitly
+  (`compress.DEFAULT_LEVEL`). Security corollary: name options-struct fields
+  so the zero value is the safe value (`allow_missing_exp bool`, never
+  `require_exp bool`).
+- **F3 — `[]byte` at the top level is a raw, 8-bit-clean Lua string**, not
+  base64 and not a table of numbers (`pkg/luareg/reflect.go`,
+  `pkg/stubgen/generator.go`'s `[]byte` special case). `[]byte` nested inside
+  a struct/map field still goes through the JSON/Translator path and is
+  base64 — see "How the Lua <-> Go translation works" above. Do not put
+  binary data in an options struct field.
+- **F4 — Lua numbers are float64.** Anything that can exceed 2^53 must not
+  silently round: render it as an exact decimal string, or raise. (`bit`
+  sidesteps this by choosing 32-bit semantics; `netaddr` host counts and
+  `x509` serial numbers use exact strings.)
+- **F5 — callbacks are `lua.LValue` + `luareg.ArgType`.** `*lua.LFunction`
+  falls into the pointer-to-struct branch and gets `L.CheckTable`'d, so a
+  callback parameter must be typed `lua.LValue`, validated manually
+  (`v.Type() != lua.LTFunction` → raise), and annotated for the stub with
+  `luareg.ArgType("fn", "fun(v: any, i: integer): any")`. Invoke with
+  `L.CallByParam(lua.P{Fn: fn, NRet: 1, Protect: true}, args...)` — use
+  `Protect: true` and wrap the returned error with context
+  (`collections.map: callback failed at index 3: <msg>`) rather than letting
+  it propagate bare. Accept only `*lua.LFunction`; do not support `__call`
+  tables.
+- **F6 — return-type overrides exist: use `luareg.ReturnType`.** Before this
+  was added, `*lua.LTable`/`lua.LValue` returns had no override and
+  `goTypeToLua` would dereference `*lua.LTable` into an unregistered
+  `lua.LTable` struct and emit a bogus class reference. Un-overridden
+  `*lua.LTable`/`lua.LValue` returns now stub as `table`/`any`; use
+  `luareg.ReturnType(index, luaType)` when a more specific LuaLS type
+  (`any[]`, `table<string, string>`, ...) is more useful to callers.
 
 ## Adding a module
 
