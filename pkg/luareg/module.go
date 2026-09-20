@@ -69,16 +69,25 @@ type ArgTypeEntry struct {
 	LuaType string
 }
 
+// ReturnTypeEntry: index and explicit LuaLS type annotation override for a
+// single return value. Index is 0-based, excluding the trailing error return
+// if present. Consumed by stub generators (A3).
+type ReturnTypeEntry struct {
+	Index   int
+	LuaType string
+}
+
 // FnMeta: all metadata for a single registered function.
 // Returned by Module.Funcs() for use by stub generators (A3).
 type FnMeta struct {
-	LuaName    string
-	GoFn       any
-	Doc        string
-	ArgNames   []string         // positional names; may be shorter than param count
-	ArgDocs    []ArgDocEntry    // per-arg descriptions keyed by name
-	ArgTypes   []ArgTypeEntry   // per-arg LuaLS type overrides keyed by name
-	ReturnDocs []ReturnDocEntry // per-return descriptions keyed by index
+	LuaName     string
+	GoFn        any
+	Doc         string
+	ArgNames    []string          // positional names; may be shorter than param count
+	ArgDocs     []ArgDocEntry     // per-arg descriptions keyed by name
+	ArgTypes    []ArgTypeEntry    // per-arg LuaLS type overrides keyed by name
+	ReturnDocs  []ReturnDocEntry  // per-return descriptions keyed by index
+	ReturnTypes []ReturnTypeEntry // per-return LuaLS type overrides keyed by index
 }
 
 // ArgName: returns the positional name for arg i (0-indexed). Falls back to
@@ -140,6 +149,25 @@ func ArgType(name, luaType string) FnOpt {
 func ReturnDoc(index int, name, doc string) FnOpt {
 	return func(m *FnMeta) {
 		m.ReturnDocs = append(m.ReturnDocs, ReturnDocEntry{Index: index, Name: name, Doc: doc})
+	}
+}
+
+// ReturnType: attaches an explicit LuaLS type annotation to the Nth return
+// value (0-indexed, excluding the trailing error return if present),
+// overriding the type the stub generator would otherwise infer via
+// reflection. Use this when a return type's Go type carries no useful Lua
+// type on its own — e.g. a *lua.LTable or lua.LValue used as an escape hatch
+// for returning an arbitrary Lua value.
+//
+// Example:
+//
+//	m.Fn("keys", collectionsKeys, "returns the keys of a table as a new table",
+//	    luareg.ReturnDoc(0, "keys", "a table of the input table's keys"),
+//	    luareg.ReturnType(0, "any[]"),
+//	)
+func ReturnType(index int, luaType string) FnOpt {
+	return func(m *FnMeta) {
+		m.ReturnTypes = append(m.ReturnTypes, ReturnTypeEntry{Index: index, LuaType: luaType})
 	}
 }
 

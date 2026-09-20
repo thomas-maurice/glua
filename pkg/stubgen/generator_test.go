@@ -89,6 +89,8 @@ func pointFn(p testPoint) testPoint           { return p }
 func sliceFn(parts []string) string           { return strings.Join(parts, ",") }
 func mapFn(m map[string]string) string        { return "" }
 func multiRetFn(a, b string) (string, string) { return a, b }
+func ltableReturnFn() *lua.LTable             { return nil }
+func lstateReturnFn() *lua.LState             { return nil }
 
 // TestNewGenerator: ensures NewGenerator returns a valid, non-nil generator.
 func TestNewGenerator(t *testing.T) {
@@ -1070,6 +1072,101 @@ func TestGenerateModule_ReturnDocSparse(t *testing.T) {
 
 	assert.Contains(t, out, "---@return string\n")
 	assert.Contains(t, out, "---@return number n an integer\n")
+}
+
+// TestGenerateModule_LTableReturnFallback: a *lua.LTable return with no
+// ReturnType override maps to "table", not a bogus "lua.LTable" class
+// reference. Regression test for the bug where goTypeToLua dereferenced
+// *lua.LTable, found an unregistered struct, and emitted structLuaName on it.
+func TestGenerateModule_LTableReturnFallback(t *testing.T) {
+	m := luareg.NewModule("coll", "collections module")
+	m.Fn(
+		"as_table", ltableReturnFn, "returns a table",
+		luareg.ReturnDoc(0, "t", "the table"),
+	)
+
+	gen := NewGenerator()
+	out, err := gen.GenerateModule(m)
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "---@return table t the table\n")
+	assert.NotContains(t, out, "lua.LTable")
+	assert.NotContains(t, out, "---@class lua.LTable")
+}
+
+// TestGenerateModule_ReturnTypeOverride: ReturnType overrides the reflected
+// type for a return value, mirroring ArgType's precedence for parameters.
+// Without this, every *lua.LTable-returning collections function would stub
+// as the fallback "table" even where a more specific LuaLS type (e.g.
+// "any[]") is more useful to callers.
+func TestGenerateModule_ReturnTypeOverride(t *testing.T) {
+	m := luareg.NewModule("coll", "collections module")
+	m.Fn(
+		"keys", ltableReturnFn, "returns a table's keys",
+		luareg.ReturnDoc(0, "keys", "the table's keys"),
+		luareg.ReturnType(0, "any[]"),
+	)
+
+	gen := NewGenerator()
+	out, err := gen.GenerateModule(m)
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "---@return any[] keys the table's keys\n")
+	assert.NotContains(t, out, "---@return table")
+}
+
+// TestGenerateModule_ReturnTypeWithDoc: ReturnType and ReturnDoc compose on
+// the same return index — both the overridden type and the name/doc from
+// ReturnDoc must appear together in the annotation.
+func TestGenerateModule_ReturnTypeWithDoc(t *testing.T) {
+	m := luareg.NewModule("coll", "collections module")
+	m.Fn(
+		"values", func() *lua.LTable { return nil }, "returns a table's values",
+		luareg.ReturnType(0, "any[]"),
+		luareg.ReturnDoc(0, "values", "the table's values in iteration order"),
+	)
+
+	gen := NewGenerator()
+	out, err := gen.GenerateModule(m)
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "---@return any[] values the table's values in iteration order\n")
+}
+
+// TestGenerateModule_LStateReturnNeverLeaks: defensive test for a function
+// that (incorrectly) returns *lua.LState. The runtime wrapper cannot convert
+// it to a lua.LValue either, but the stub generator must not compound that by
+// emitting an "LState" reference into the signature.
+func TestGenerateModule_LStateReturnNeverLeaks(t *testing.T) {
+	m := luareg.NewModule("escape", "escape hatch module")
+	m.Fn("get_state", lstateReturnFn, "returns the Lua state (should never be stubbed)")
+
+	gen := NewGenerator()
+	out, err := gen.GenerateModule(m)
+	require.NoError(t, err)
+
+	assert.NotContains(t, out, "LState")
+	assert.NotContains(t, out, "---@return")
+	assert.Contains(t, out, "function escape.get_state() end")
+}
+
+// TestGoTypeToLua_LuaTable: *lua.LTable maps directly to "table" via the
+// explicit type-identity check, not by falling through to the generic
+// struct-pointer branch (which would emit "lua.LTable").
+func TestGoTypeToLua_LuaTable(t *testing.T) {
+	classLookup := make(map[reflect.Type]luareg.AnyClass)
+	got := goTypeToLua(reflect.TypeOf((*lua.LTable)(nil)), classLookup)
+	assert.Equal(t, "table", got)
+}
+
+// TestGoTypeToLua_LuaValue: lua.LValue (the interface) maps to "any" via the
+// explicit type-identity check. This already worked incidentally through the
+// generic reflect.Interface case, but is asserted explicitly here since it is
+// now also special-cased in goTypeToLua.
+func TestGoTypeToLua_LuaValue(t *testing.T) {
+	classLookup := make(map[reflect.Type]luareg.AnyClass)
+	got := goTypeToLua(reflect.TypeOf((*lua.LValue)(nil)).Elem(), classLookup)
+	assert.Equal(t, "any", got)
 }
 
 // TestGenerateModule_PureErrorReturn: a function whose only return is `error`

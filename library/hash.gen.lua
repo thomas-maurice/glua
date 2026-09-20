@@ -23,7 +23,7 @@ function hash.sha256(s) end
 ---@return string hex the lowercase hex-encoded SHA512 digest
 function hash.sha512(s) end
 
---- computes the hex-encoded HMAC-SHA256 of a message with a key
+--- computes the hex-encoded HMAC-SHA256 of a message with a key (deprecated: use hmac.sha256; and never compare its result with == against attacker-supplied input, see the hmac module)
 ---@param message string the message to authenticate
 ---@param key string the shared secret key
 ---@return string hex the lowercase hex-encoded HMAC-SHA256 tag
