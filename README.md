@@ -1730,7 +1730,7 @@ against:
   algorithm set comes ONLY from `opts.algorithms`, never from the token's own
   header — the header's `alg` is checked for membership in that list and is
   never used to pick how `key` is interpreted. `opts.algorithms` may not mix
-  key-type families (HMAC vs. RSA-ish vs. EC): a caller passing
+  key-type families (HMAC vs. RSA-ish vs. EC vs. EdDSA): a caller passing
   `{"HS256", "RS256"}` gets a raised error before the token is even touched,
   because a single `key` argument cannot safely be interpreted as both a raw
   HMAC secret and an RSA public key — which is exactly how an attacker forges
@@ -1782,11 +1782,18 @@ local signed = jwt.sign({ sub = "svc-a", exp = time.now() + 300 }, secret,
 ```
 
 - Supported algorithms: `HS256/384/512`, `RS256/384/512`, `PS256/384/512`,
-  `ES256/384/512`. `EdDSA` is deferred to a later version.
-- `key` for `HS*` is the raw shared secret; for `RS*`/`PS*`/`ES*` it is a PEM
-  public key (or certificate, for `verify`) or PEM private key (for `sign`).
-  `sign` raises with a clear error if `key` doesn't match the requested
-  algorithm's key type, rather than producing a broken token.
+  `ES256/384/512`, `EdDSA` (Ed25519 only — see below). Algorithm families are
+  `HMAC`, `RSA`-ish (`RS*`/`PS*`), `EC` (`ES*`) and `EdDSA`; `opts.algorithms`
+  may never mix families in one call.
+- `key` for `HS*` is the raw shared secret; for `RS*`/`PS*`/`ES*`/`EdDSA` it
+  is a PEM public key (or certificate, for `verify`) or PEM private key (for
+  `sign`) — never a raw Ed25519 seed or expanded key. `sign` raises with a
+  clear error if `key` doesn't match the requested algorithm's key type,
+  rather than producing a broken token.
+- `EdDSA` means Ed25519 only. JOSE reuses the same `"EdDSA"` alg name for
+  Ed448, but Go's standard library implements no Ed448 support at all, so an
+  Ed448 key fails to parse with a clear error rather than being silently
+  misread as Ed25519.
 - Numeric claims (`exp`/`iat`/`nbf`) cross the Lua boundary as float64, well
   inside the range where that's exact.
 

@@ -50,16 +50,32 @@
 //     {"HS256", "RS256"} gets a raised error before the token is even
 //     touched, because a single `key` argument cannot safely be interpreted
 //     two ways. A caller needing both must call verify twice, once per key.
-//     This package draws the family line at three buckets -- HMAC, RSA-ish
+//     This package draws the family line at four buckets -- HMAC, RSA-ish
 //     (RS*/PS*, which share the same *rsa.PublicKey/*rsa.PrivateKey key
-//     type), and EC (ES*) -- rather than only forbidding the literal
-//     HMAC-vs-RSA pairing the classic attack uses: mixing RS256 and ES256
-//     would be exactly as ambiguous (which PEM key type is `key`?), even
-//     though it isn't the textbook CVE.
+//     type), EC (ES*), and EdDSA (Ed25519) -- rather than only forbidding
+//     the literal HMAC-vs-RSA pairing the classic attack uses: mixing RS256
+//     and ES256 would be exactly as ambiguous (which PEM key type is
+//     `key`?), even though it isn't the textbook CVE. EdDSA gets its own
+//     family rather than folding into EC: Ed25519 keys are neither RSA nor
+//     ECDSA keys, and {"EdDSA", "ES256"} is exactly as ambiguous as any
+//     other cross-family pairing.
 //
 // alg: none is refused unconditionally: it can never appear in
 // opts.algorithms (rejected at option-validation time, before parsing), so
 // WithValidMethods can never admit a token that declares it.
+//
+// # Accepted key encodings
+//
+// RS*/PS*/ES*/EdDSA all take `key` as PEM (a PEM public key or certificate
+// for verify, a PEM private key for sign) -- never raw key bytes. This
+// matters most for EdDSA: an Ed25519 private key can also be represented as
+// a raw 32-byte seed or 64-byte expanded key, neither of which is PEM. This
+// package does not accept either raw form, deliberately: a raw byte string
+// is indistinguishable at the Lua boundary from an HS* secret (both are
+// just an arbitrary-length Lua string), so accepting it would reopen a
+// smaller version of the exact key/algorithm ambiguity the family
+// partitioning exists to prevent. PEM-only keeps one uniform answer to
+// "what shape is `key`" for every non-HMAC algorithm.
 //
 // # Claim validation
 //
@@ -109,6 +125,7 @@ const (
 	familyHMAC
 	familyRSA // RS* and PS*: both use *rsa.PublicKey / *rsa.PrivateKey
 	familyEC
+	familyEdDSA // EdDSA (Ed25519 only -- see algFamilies comment on Ed448)
 )
 
 // maxLeewaySeconds: the ceiling accepted for VerifyOptions.LeewaySeconds.
@@ -124,14 +141,23 @@ const (
 const maxLeewaySeconds = 300
 
 // algFamilies: the complete, closed set of algorithms this package accepts.
-// "none" and anything not listed here (including EdDSA, deferred to a later
-// version) are unsupported. This map is the single source of truth both
-// for what verify/sign will accept and for family-mixing detection.
+// "none" and anything not listed here are unsupported. This map is the
+// single source of truth both for what verify/sign will accept and for
+// family-mixing detection.
+//
+// EdDSA has exactly one member, unlike the other families: JOSE defines no
+// EdDSA256/384/512 variants. In JOSE, the string "EdDSA" is also the alg
+// name for Ed448, not just Ed25519 -- the algorithm name alone does not
+// disambiguate the curve. This package only ever produces/accepts Ed25519
+// keys: Go's crypto/x509 and crypto/ed25519 do not implement Ed448 at all,
+// so an Ed448 key fails to parse (see parseVerifyKey/parseSignKey) rather
+// than being silently misinterpreted as Ed25519.
 var algFamilies = map[string]algFamily{
 	"HS256": familyHMAC, "HS384": familyHMAC, "HS512": familyHMAC,
 	"RS256": familyRSA, "RS384": familyRSA, "RS512": familyRSA,
 	"PS256": familyRSA, "PS384": familyRSA, "PS512": familyRSA,
 	"ES256": familyEC, "ES384": familyEC, "ES512": familyEC,
+	"EdDSA": familyEdDSA,
 }
 
 // Decoded: the result of decode_unverified. Both fields are populated
@@ -219,9 +245,12 @@ func validateLeeway(seconds float64) (time.Duration, error) {
 
 // parseVerifyKey: interprets key according to family, NEVER according to
 // anything read from the token. HMAC families use the raw secret bytes;
-// RSA/EC families parse key as a PEM public key OR certificate (jwt/v5's
-// ParseRSAPublicKeyFromPEM/ParseECPublicKeyFromPEM both accept either
-// form).
+// RSA/EC/EdDSA families parse key as a PEM public key (jwt/v5's
+// ParseRSAPublicKeyFromPEM/ParseECPublicKeyFromPEM accept a certificate
+// too; ParseEdPublicKeyFromPEM only accepts a PKIX public key -- see the
+// package doc's "accepted key encodings" note). A key encoding other than
+// PEM (raw seed/expanded bytes for EdDSA) is deliberately rejected: see
+// parseSignKey.
 func parseVerifyKey(family algFamily, key string) (interface{}, error) {
 	switch family {
 	case familyHMAC:
@@ -230,16 +259,35 @@ func parseVerifyKey(family algFamily, key string) (interface{}, error) {
 		return jwt.ParseRSAPublicKeyFromPEM([]byte(key))
 	case familyEC:
 		return jwt.ParseECPublicKeyFromPEM([]byte(key))
+	case familyEdDSA:
+		return jwt.ParseEdPublicKeyFromPEM([]byte(key))
 	default:
 		return nil, errors.New("unreachable: unvalidated algorithm family")
 	}
 }
 
-// parseSignKey: the signing-side mirror of parseVerifyKey. RSA/EC families
-// parse key as a PEM PRIVATE key; a key of the wrong type (e.g. an EC PEM
-// key for an RSA algorithm) fails here with jwt/v5's own
-// ErrNotRSAPrivateKey/ErrNotECPrivateKey, which is the "reject a mismatched
-// key with a clear error" requirement.
+// parseSignKey: the signing-side mirror of parseVerifyKey. RSA/EC/EdDSA
+// families parse key as a PEM PRIVATE key; a key of the wrong type (e.g. an
+// EC PEM key for an RSA algorithm, or an RSA key for EdDSA) fails here with
+// jwt/v5's own ErrNotRSAPrivateKey/ErrNotECPrivateKey/ErrNotEdPrivateKey,
+// which is the "reject a mismatched key with a clear error" requirement.
+//
+// EdDSA private keys are accepted as PEM (PKCS#8) only, matching RS*/ES* --
+// not as a raw 32-byte seed or 64-byte expanded key. A raw byte string is
+// indistinguishable from an HMAC secret at the Lua boundary (both arrive as
+// a plain Lua string of arbitrary length); accepting one alongside PEM
+// would let a caller pass the wrong kind of secret for the wrong algorithm
+// and have it silently "work" as something other than intended. PEM keeps
+// the "what shape must `key` be" answer uniform across every non-HMAC
+// family: jwt.ParseEdPrivateKeyFromPEM (jwt/v5's own helper, mirroring
+// ParseRSAPrivateKeyFromPEM/ParseECPrivateKeyFromPEM) rejects anything else.
+//
+// An Ed448 key is not a supported input: Go's crypto/x509 has no Ed448 OID
+// case in ParsePKCS8PrivateKey/ParsePKIXPublicKey, so it fails to parse at
+// all (surfaced here, at parse time, as "x509: PKCS#8 wrapping contained
+// private key with unknown algorithm: 1.3.101.113" or the PKIX equivalent)
+// rather than being silently accepted and misinterpreted as Ed25519 -- see
+// TestParseKey_Ed448Rejected_AtParseTime.
 func parseSignKey(family algFamily, key string) (interface{}, error) {
 	switch family {
 	case familyHMAC:
@@ -248,6 +296,8 @@ func parseSignKey(family algFamily, key string) (interface{}, error) {
 		return jwt.ParseRSAPrivateKeyFromPEM([]byte(key))
 	case familyEC:
 		return jwt.ParseECPrivateKeyFromPEM([]byte(key))
+	case familyEdDSA:
+		return jwt.ParseEdPrivateKeyFromPEM([]byte(key))
 	default:
 		return nil, errors.New("unreachable: unvalidated algorithm family")
 	}
@@ -393,7 +443,7 @@ func build() *luareg.Module {
 		"verifies a JWT's signature and claims; raises on ANY failure: bad signature, alg not in opts.algorithms, alg:none, expired, not yet valid, issuer/audience/subject mismatch, or an unparseable key",
 		luareg.Args("token", "key", "opts"),
 		luareg.ArgDoc("token", "the compact JWT string"),
-		luareg.ArgDoc("key", "HS*: the raw shared secret; RS*/PS*/ES*: a PEM public key or certificate"),
+		luareg.ArgDoc("key", "HS*: the raw shared secret; RS*/PS*/ES*/EdDSA: a PEM public key or certificate (never a raw Ed25519 seed/expanded key)"),
 		luareg.ArgDoc("opts", "required options: algorithms (non-empty, single family, never \"none\"), issuer, audience, subject, leeway_seconds (0..300, seconds), allow_missing_exp"),
 		luareg.ReturnDoc(0, "claims", "the token's verified claims"))
 
@@ -401,7 +451,7 @@ func build() *luareg.Module {
 		"signs claims into a compact JWT; raises on an unknown/forbidden algorithm, a key that does not match the algorithm, or claims that cannot be JSON-encoded",
 		luareg.Args("claims", "key", "opts"),
 		luareg.ArgDoc("claims", "the claims to encode"),
-		luareg.ArgDoc("key", "HS*: the raw shared secret; RS*/PS*/ES*: a PEM private key"),
+		luareg.ArgDoc("key", "HS*: the raw shared secret; RS*/PS*/ES*/EdDSA: a PEM private key (never a raw Ed25519 seed/expanded key)"),
 		luareg.ArgDoc("opts", "required options: algorithm (never \"none\"), kid, typ"),
 		luareg.ReturnDoc(0, "token", "the compact JWT string"))
 
