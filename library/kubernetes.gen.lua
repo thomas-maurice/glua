@@ -12,100 +12,87 @@
 ---@field version string
 
 ---@class admissionregistrationv1.MatchCondition
----@field expression string Expression represents the expression which will be evaluated by CEL. Must evaluate to bool. CEL expressions have access to the contents of the AdmissionRequest and Authorizer, organized into CEL variables: 'object' - The object from the incoming request. The value is null for DELETE requests. 'oldObject' - The existing object. The value is null for CREATE requests. 'request' - Attributes of the admission request(/pkg/apis/admission/types.go#AdmissionRequest). 'authorizer' - A CEL Authorizer. May be used to perform authorization checks for the principal (user or service account) of the request. See https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz 'authorizer.requestResource' - A CEL ResourceCheck constructed from the 'authorizer' and configured with the request resource. Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/ Required.
----@field name string Name is an identifier for this match condition, used for strategic merging of MatchConditions, as well as providing an identifier for logging purposes. A good name should be descriptive of the associated expression. Name must be a qualified name consisting of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyName', or 'my.name', or '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]') with an optional DNS subdomain prefix and '/' (e.g. 'example.com/MyName') Required.
+---@field expression string expression represents the expression which will be evaluated by CEL. Must evaluate to bool. CEL expressions have access to the contents of the AdmissionRequest and Authorizer, organized into CEL variables: 'object' - The object from the incoming request. The value is null for DELETE requests. 'oldObject' - The existing object. The value is null for CREATE requests. 'request' - Attributes of the admission request(/pkg/apis/admission/types.go#AdmissionRequest). 'authorizer' - A CEL Authorizer. May be used to perform authorization checks for the principal (user or service account) of the request. See https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz 'authorizer.requestResource' - A CEL ResourceCheck constructed from the 'authorizer' and configured with the request resource. Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/ Required.
+---@field name string name is an identifier for this match condition, used for strategic merging of MatchConditions, as well as providing an identifier for logging purposes. A good name should be descriptive of the associated expression. Name must be a qualified name consisting of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyName', or 'my.name', or '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]') with an optional DNS subdomain prefix and '/' (e.g. 'example.com/MyName') Required.
 
 ---@class admissionregistrationv1.MutatingWebhook
----@field admissionReviewVersions string[] AdmissionReviewVersions is an ordered list of preferred `AdmissionReview` versions the Webhook expects. API server will try to use first version in the list which it supports. If none of the versions specified in this list supported by API server, validation will fail for this object. If a persisted webhook configuration specifies allowed versions and does not include any versions known to the API Server, calls to the webhook will fail and be subject to the failure policy. +listType=atomic
----@field clientConfig admissionregistrationv1.WebhookClientConfig ClientConfig defines how to communicate with the hook. Required
----@field failurePolicy string FailurePolicy defines how unrecognized errors from the admission endpoint are handled - allowed values are Ignore or Fail. Defaults to Fail. +optional
----@field matchConditions admissionregistrationv1.MatchCondition[] MatchConditions is a list of conditions that must be met for a request to be sent to this webhook. Match conditions filter requests that have already been matched by the rules, namespaceSelector, and objectSelector. An empty list of matchConditions matches all requests. There are a maximum of 64 match conditions allowed. The exact matching logic is (in order): 1. If ANY matchCondition evaluates to FALSE, the webhook is skipped. 2. If ALL matchConditions evaluate to TRUE, the webhook is called. 3. If any matchCondition evaluates to an error (but none are FALSE): - If failurePolicy=Fail, reject the request - If failurePolicy=Ignore, the error is ignored and the webhook is skipped +patchMergeKey=name +patchStrategy=merge +listType=map +listMapKey=name +optional
+---@field admissionReviewVersions string[] admissionReviewVersions is an ordered list of preferred `AdmissionReview` versions the Webhook expects. API server will try to use first version in the list which it supports. If none of the versions specified in this list supported by API server, validation will fail for this object. If a persisted webhook configuration specifies allowed versions and does not include any versions known to the API Server, calls to the webhook will fail and be subject to the failure policy. +listType=atomic
+---@field clientConfig admissionregistrationv1.WebhookClientConfig clientConfig defines how to communicate with the hook. Required
+---@field failurePolicy string failurePolicy defines how unrecognized errors from the admission endpoint are handled - allowed values are Ignore or Fail. Defaults to Fail. +optional
+---@field matchConditions admissionregistrationv1.MatchCondition[] matchConditions is a list of conditions that must be met for a request to be sent to this webhook. Match conditions filter requests that have already been matched by the rules, namespaceSelector, and objectSelector. An empty list of matchConditions matches all requests. There are a maximum of 64 match conditions allowed. The exact matching logic is (in order): 1. If ANY matchCondition evaluates to FALSE, the webhook is skipped. 2. If ALL matchConditions evaluate to TRUE, the webhook is called. 3. If any matchCondition evaluates to an error (but none are FALSE): - If failurePolicy=Fail, reject the request - If failurePolicy=Ignore, the error is ignored and the webhook is skipped +patchMergeKey=name +patchStrategy=merge +listType=map +listMapKey=name +optional
 ---@field matchPolicy string matchPolicy defines how the "rules" list is used to match incoming requests. Allowed values are "Exact" or "Equivalent". - Exact: match a request only if it exactly matches a specified rule. For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1, but "rules" only included `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`, a request to apps/v1beta1 or extensions/v1beta1 would not be sent to the webhook. - Equivalent: match a request if modifies a resource listed in rules, even via another API group or version. For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1, and "rules" only included `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`, a request to apps/v1beta1 or extensions/v1beta1 would be converted to apps/v1 and sent to the webhook. Defaults to "Equivalent" +optional
----@field name string The name of the admission webhook. Name should be fully qualified, e.g., imagepolicy.kubernetes.io, where "imagepolicy" is the name of the webhook, and kubernetes.io is the name of the organization. Required.
----@field namespaceSelector v1.LabelSelector NamespaceSelector decides whether to run the webhook on an object based on whether the namespace for that object matches the selector. If the object itself is a namespace, the matching is performed on object.metadata.labels. If the object is another cluster scoped resource, it never skips the webhook. For example, to run the webhook on any objects whose namespace is not associated with "runlevel" of "0" or "1"; you will set the selector as follows: "namespaceSelector": { "matchExpressions": [ { "key": "runlevel", "operator": "NotIn", "values": [ "0", "1" ] } ] } If instead you want to only run the webhook on any objects whose namespace is associated with the "environment" of "prod" or "staging"; you will set the selector as follows: "namespaceSelector": { "matchExpressions": [ { "key": "environment", "operator": "In", "values": [ "prod", "staging" ] } ] } See https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ for more examples of label selectors. Default to the empty LabelSelector, which matches everything. +optional
----@field objectSelector v1.LabelSelector ObjectSelector decides whether to run the webhook based on if the object has matching labels. objectSelector is evaluated against both the oldObject and newObject that would be sent to the webhook, and is considered to match if either object matches the selector. A null object (oldObject in the case of create, or newObject in the case of delete) or an object that cannot have labels (like a DeploymentRollback or a PodProxyOptions object) is not considered to match. Use the object selector only if the webhook is opt-in, because end users may skip the admission webhook by setting the labels. Default to the empty LabelSelector, which matches everything. +optional
+---@field name string name is the name of the admission webhook. Name should be fully qualified, e.g., imagepolicy.kubernetes.io, where "imagepolicy" is the name of the webhook, and kubernetes.io is the name of the organization. Required.
+---@field namespaceSelector v1.LabelSelector namespaceSelector decides whether to run the webhook on an object based on whether the namespace for that object matches the selector. If the object itself is a namespace, the matching is performed on object.metadata.labels. If the object is another cluster scoped resource, it never skips the webhook. For example, to run the webhook on any objects whose namespace is not associated with "runlevel" of "0" or "1"; you will set the selector as follows: "namespaceSelector": { "matchExpressions": [ { "key": "runlevel", "operator": "NotIn", "values": [ "0", "1" ] } ] } If instead you want to only run the webhook on any objects whose namespace is associated with the "environment" of "prod" or "staging"; you will set the selector as follows: "namespaceSelector": { "matchExpressions": [ { "key": "environment", "operator": "In", "values": [ "prod", "staging" ] } ] } See https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ for more examples of label selectors. Default to the empty LabelSelector, which matches everything. +optional
+---@field objectSelector v1.LabelSelector objectSelector decides whether to run the webhook based on if the object has matching labels. objectSelector is evaluated against both the oldObject and newObject that would be sent to the webhook, and is considered to match if either object matches the selector. A null object (oldObject in the case of create, or newObject in the case of delete) or an object that cannot have labels (like a DeploymentRollback or a PodProxyOptions object) is not considered to match. Use the object selector only if the webhook is opt-in, because end users may skip the admission webhook by setting the labels. Default to the empty LabelSelector, which matches everything. +optional
 ---@field reinvocationPolicy string reinvocationPolicy indicates whether this webhook should be called multiple times as part of a single admission evaluation. Allowed values are "Never" and "IfNeeded". Never: the webhook will not be called more than once in a single admission evaluation. IfNeeded: the webhook will be called at least one additional time as part of the admission evaluation if the object being admitted is modified by other admission plugins after the initial webhook call. Webhooks that specify this option *must* be idempotent, able to process objects they previously admitted. Note: * the number of additional invocations is not guaranteed to be exactly one. * if additional invocations result in further modifications to the object, webhooks are not guaranteed to be invoked again. * webhooks that use this option may be reordered to minimize the number of additional invocations. * to validate an object after all mutations are guaranteed complete, use a validating admission webhook instead. Defaults to "Never". +optional
----@field rules admissionregistrationv1.RuleWithOperations[] Rules describes what operations on what resources/subresources the webhook cares about. The webhook cares about an operation if it matches _any_ Rule. However, in order to prevent ValidatingAdmissionWebhooks and MutatingAdmissionWebhooks from putting the cluster in a state which cannot be recovered from without completely disabling the plugin, ValidatingAdmissionWebhooks and MutatingAdmissionWebhooks are never called on admission requests for ValidatingWebhookConfiguration and MutatingWebhookConfiguration objects. +listType=atomic
----@field sideEffects string SideEffects states whether this webhook has side effects. Acceptable values are: None, NoneOnDryRun (webhooks created via v1beta1 may also specify Some or Unknown). Webhooks with side effects MUST implement a reconciliation system, since a request may be rejected by a future step in the admission chain and the side effects therefore need to be undone. Requests with the dryRun attribute will be auto-rejected if they match a webhook with sideEffects == Unknown or Some.
----@field timeoutSeconds number TimeoutSeconds specifies the timeout for this webhook. After the timeout passes, the webhook call will be ignored or the API call will fail based on the failure policy. The timeout value must be between 1 and 30 seconds. Default to 10 seconds. +optional
+---@field rules admissionregistrationv1.RuleWithOperations[] rules describes what operations on what resources/subresources the webhook cares about. The webhook cares about an operation if it matches _any_ Rule. However, in order to prevent ValidatingAdmissionWebhooks and MutatingAdmissionWebhooks from putting the cluster in a state which cannot be recovered from without completely disabling the plugin, ValidatingAdmissionWebhooks and MutatingAdmissionWebhooks are never called on admission requests for ValidatingWebhookConfiguration and MutatingWebhookConfiguration objects. +listType=atomic
+---@field sideEffects string sideEffects states whether this webhook has side effects. Acceptable values are: None, NoneOnDryRun (webhooks created via v1beta1 may also specify Some or Unknown). Webhooks with side effects MUST implement a reconciliation system, since a request may be rejected by a future step in the admission chain and the side effects therefore need to be undone. Requests with the dryRun attribute will be auto-rejected if they match a webhook with sideEffects == Unknown or Some.
+---@field timeoutSeconds number timeoutSeconds specifies the timeout for this webhook. After the timeout passes, the webhook call will be ignored or the API call will fail based on the failure policy. The timeout value must be between 1 and 30 seconds. Default to 10 seconds. +optional
 
 ---@class admissionregistrationv1.MutatingWebhookConfiguration
----@field TypeMeta v1.TypeMeta
----@field metadata v1.ObjectMeta Standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata. +optional
----@field webhooks admissionregistrationv1.MutatingWebhook[] Webhooks is a list of webhooks and the affected resources and operations. +optional +patchMergeKey=name +patchStrategy=merge +listType=map +listMapKey=name
+---@field metadata v1.ObjectMeta metadata is the standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata. +optional
+---@field webhooks admissionregistrationv1.MutatingWebhook[] webhooks is a list of webhooks and the affected resources and operations. +optional +patchMergeKey=name +patchStrategy=merge +listType=map +listMapKey=name
 
 ---@class admissionregistrationv1.MutatingWebhookConfigurationList
----@field TypeMeta v1.TypeMeta
 ---@field items admissionregistrationv1.MutatingWebhookConfiguration[] List of MutatingWebhookConfiguration.
----@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +optional
-
----@class admissionregistrationv1.Rule
----@field apiGroups string[] APIGroups is the API groups the resources belong to. '*' is all groups. If '*' is present, the length of the slice must be one. Required. +listType=atomic
----@field apiVersions string[] APIVersions is the API versions the resources belong to. '*' is all versions. If '*' is present, the length of the slice must be one. Required. +listType=atomic
----@field resources string[] Resources is a list of resources this rule applies to. For example: 'pods' means pods. 'pods/log' means the log subresource of pods. '*' means all resources, but not subresources. 'pods/*' means all subresources of pods. '*/scale' means all scale subresources. '*/*' means all resources and their subresources. If wildcard is present, the validation rule will ensure resources do not overlap with each other. Depending on the enclosing object, subresources might not be allowed. Required. +listType=atomic
----@field scope string scope specifies the scope of this rule. Valid values are "Cluster", "Namespaced", and "*" "Cluster" means that only cluster-scoped resources will match this rule. Namespace API objects are cluster-scoped. "Namespaced" means that only namespaced resources will match this rule. "*" means that there are no scope restrictions. Subresources match the scope of their parent resource. Default is "*". +optional
+---@field metadata v1.ListMeta metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +optional
 
 ---@class admissionregistrationv1.RuleWithOperations
----@field Rule admissionregistrationv1.Rule Rule is embedded, it describes other criteria of the rule, like APIGroups, APIVersions, Resources, etc.
----@field operations string[] Operations is the operations the admission hook cares about - CREATE, UPDATE, DELETE, CONNECT or * for all of those operations and any future admission operations that are added. If '*' is present, the length of the slice must be one. Required. +listType=atomic
+---@field operations string[] operations is the operations the admission hook cares about - CREATE, UPDATE, DELETE, CONNECT or * for all of those operations and any future admission operations that are added. If '*' is present, the length of the slice must be one. Required. +listType=atomic
 
 ---@class admissionregistrationv1.ServiceReference
----@field name string `name` is the name of the service. Required
----@field namespace string `namespace` is the namespace of the service. Required
----@field path string `path` is an optional URL path which will be sent in any request to this service. +optional
----@field port number If specified, the port on the service that hosting webhook. Default to 443 for backward compatibility. `port` should be a valid port number (1-65535, inclusive). +optional
+---@field name string name is the name of the service. Required
+---@field namespace string namespace is the namespace of the service. Required
+---@field path string path is an optional URL path which will be sent in any request to this service. +optional
+---@field port number port is the port on the service that hosts the webhook. Default to 443 for backward compatibility. `port` should be a valid port number (1-65535, inclusive). +optional
 
 ---@class admissionregistrationv1.ValidatingWebhook
----@field admissionReviewVersions string[] AdmissionReviewVersions is an ordered list of preferred `AdmissionReview` versions the Webhook expects. API server will try to use first version in the list which it supports. If none of the versions specified in this list supported by API server, validation will fail for this object. If a persisted webhook configuration specifies allowed versions and does not include any versions known to the API Server, calls to the webhook will fail and be subject to the failure policy. +listType=atomic
----@field clientConfig admissionregistrationv1.WebhookClientConfig ClientConfig defines how to communicate with the hook. Required
----@field failurePolicy string FailurePolicy defines how unrecognized errors from the admission endpoint are handled - allowed values are Ignore or Fail. Defaults to Fail. +optional
----@field matchConditions admissionregistrationv1.MatchCondition[] MatchConditions is a list of conditions that must be met for a request to be sent to this webhook. Match conditions filter requests that have already been matched by the rules, namespaceSelector, and objectSelector. An empty list of matchConditions matches all requests. There are a maximum of 64 match conditions allowed. The exact matching logic is (in order): 1. If ANY matchCondition evaluates to FALSE, the webhook is skipped. 2. If ALL matchConditions evaluate to TRUE, the webhook is called. 3. If any matchCondition evaluates to an error (but none are FALSE): - If failurePolicy=Fail, reject the request - If failurePolicy=Ignore, the error is ignored and the webhook is skipped +patchMergeKey=name +patchStrategy=merge +listType=map +listMapKey=name +optional
+---@field admissionReviewVersions string[] admissionReviewVersions is an ordered list of preferred `AdmissionReview` versions the Webhook expects. API server will try to use first version in the list which it supports. If none of the versions specified in this list supported by API server, validation will fail for this object. If a persisted webhook configuration specifies allowed versions and does not include any versions known to the API Server, calls to the webhook will fail and be subject to the failure policy. +listType=atomic
+---@field clientConfig admissionregistrationv1.WebhookClientConfig clientConfig defines how to communicate with the hook. Required
+---@field failurePolicy string failurePolicy defines how unrecognized errors from the admission endpoint are handled - allowed values are Ignore or Fail. Defaults to Fail. +optional
+---@field matchConditions admissionregistrationv1.MatchCondition[] matchConditions is a list of conditions that must be met for a request to be sent to this webhook. Match conditions filter requests that have already been matched by the rules, namespaceSelector, and objectSelector. An empty list of matchConditions matches all requests. There are a maximum of 64 match conditions allowed. The exact matching logic is (in order): 1. If ANY matchCondition evaluates to FALSE, the webhook is skipped. 2. If ALL matchConditions evaluate to TRUE, the webhook is called. 3. If any matchCondition evaluates to an error (but none are FALSE): - If failurePolicy=Fail, reject the request - If failurePolicy=Ignore, the error is ignored and the webhook is skipped +patchMergeKey=name +patchStrategy=merge +listType=map +listMapKey=name +optional
 ---@field matchPolicy string matchPolicy defines how the "rules" list is used to match incoming requests. Allowed values are "Exact" or "Equivalent". - Exact: match a request only if it exactly matches a specified rule. For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1, but "rules" only included `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`, a request to apps/v1beta1 or extensions/v1beta1 would not be sent to the webhook. - Equivalent: match a request if modifies a resource listed in rules, even via another API group or version. For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1, and "rules" only included `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`, a request to apps/v1beta1 or extensions/v1beta1 would be converted to apps/v1 and sent to the webhook. Defaults to "Equivalent" +optional
----@field name string The name of the admission webhook. Name should be fully qualified, e.g., imagepolicy.kubernetes.io, where "imagepolicy" is the name of the webhook, and kubernetes.io is the name of the organization. Required.
----@field namespaceSelector v1.LabelSelector NamespaceSelector decides whether to run the webhook on an object based on whether the namespace for that object matches the selector. If the object itself is a namespace, the matching is performed on object.metadata.labels. If the object is another cluster scoped resource, it never skips the webhook. For example, to run the webhook on any objects whose namespace is not associated with "runlevel" of "0" or "1"; you will set the selector as follows: "namespaceSelector": { "matchExpressions": [ { "key": "runlevel", "operator": "NotIn", "values": [ "0", "1" ] } ] } If instead you want to only run the webhook on any objects whose namespace is associated with the "environment" of "prod" or "staging"; you will set the selector as follows: "namespaceSelector": { "matchExpressions": [ { "key": "environment", "operator": "In", "values": [ "prod", "staging" ] } ] } See https://kubernetes.io/docs/concepts/overview/working-with-objects/labels for more examples of label selectors. Default to the empty LabelSelector, which matches everything. +optional
----@field objectSelector v1.LabelSelector ObjectSelector decides whether to run the webhook based on if the object has matching labels. objectSelector is evaluated against both the oldObject and newObject that would be sent to the webhook, and is considered to match if either object matches the selector. A null object (oldObject in the case of create, or newObject in the case of delete) or an object that cannot have labels (like a DeploymentRollback or a PodProxyOptions object) is not considered to match. Use the object selector only if the webhook is opt-in, because end users may skip the admission webhook by setting the labels. Default to the empty LabelSelector, which matches everything. +optional
----@field rules admissionregistrationv1.RuleWithOperations[] Rules describes what operations on what resources/subresources the webhook cares about. The webhook cares about an operation if it matches _any_ Rule. However, in order to prevent ValidatingAdmissionWebhooks and MutatingAdmissionWebhooks from putting the cluster in a state which cannot be recovered from without completely disabling the plugin, ValidatingAdmissionWebhooks and MutatingAdmissionWebhooks are never called on admission requests for ValidatingWebhookConfiguration and MutatingWebhookConfiguration objects. +listType=atomic
----@field sideEffects string SideEffects states whether this webhook has side effects. Acceptable values are: None, NoneOnDryRun (webhooks created via v1beta1 may also specify Some or Unknown). Webhooks with side effects MUST implement a reconciliation system, since a request may be rejected by a future step in the admission chain and the side effects therefore need to be undone. Requests with the dryRun attribute will be auto-rejected if they match a webhook with sideEffects == Unknown or Some.
----@field timeoutSeconds number TimeoutSeconds specifies the timeout for this webhook. After the timeout passes, the webhook call will be ignored or the API call will fail based on the failure policy. The timeout value must be between 1 and 30 seconds. Default to 10 seconds. +optional
+---@field name string name is the name of the admission webhook. Name should be fully qualified, e.g., imagepolicy.kubernetes.io, where "imagepolicy" is the name of the webhook, and kubernetes.io is the name of the organization. Required.
+---@field namespaceSelector v1.LabelSelector namespaceSelector decides whether to run the webhook on an object based on whether the namespace for that object matches the selector. If the object itself is a namespace, the matching is performed on object.metadata.labels. If the object is another cluster scoped resource, it never skips the webhook. For example, to run the webhook on any objects whose namespace is not associated with "runlevel" of "0" or "1"; you will set the selector as follows: "namespaceSelector": { "matchExpressions": [ { "key": "runlevel", "operator": "NotIn", "values": [ "0", "1" ] } ] } If instead you want to only run the webhook on any objects whose namespace is associated with the "environment" of "prod" or "staging"; you will set the selector as follows: "namespaceSelector": { "matchExpressions": [ { "key": "environment", "operator": "In", "values": [ "prod", "staging" ] } ] } See https://kubernetes.io/docs/concepts/overview/working-with-objects/labels for more examples of label selectors. Default to the empty LabelSelector, which matches everything. +optional
+---@field objectSelector v1.LabelSelector objectSelector decides whether to run the webhook based on if the object has matching labels. objectSelector is evaluated against both the oldObject and newObject that would be sent to the webhook, and is considered to match if either object matches the selector. A null object (oldObject in the case of create, or newObject in the case of delete) or an object that cannot have labels (like a DeploymentRollback or a PodProxyOptions object) is not considered to match. Use the object selector only if the webhook is opt-in, because end users may skip the admission webhook by setting the labels. Default to the empty LabelSelector, which matches everything. +optional
+---@field rules admissionregistrationv1.RuleWithOperations[] rules describes what operations on what resources/subresources the webhook cares about. The webhook cares about an operation if it matches _any_ Rule. However, in order to prevent ValidatingAdmissionWebhooks and MutatingAdmissionWebhooks from putting the cluster in a state which cannot be recovered from without completely disabling the plugin, ValidatingAdmissionWebhooks and MutatingAdmissionWebhooks are never called on admission requests for ValidatingWebhookConfiguration and MutatingWebhookConfiguration objects. +listType=atomic
+---@field sideEffects string sideEffects states whether this webhook has side effects. Acceptable values are: None, NoneOnDryRun (webhooks created via v1beta1 may also specify Some or Unknown). Webhooks with side effects MUST implement a reconciliation system, since a request may be rejected by a future step in the admission chain and the side effects therefore need to be undone. Requests with the dryRun attribute will be auto-rejected if they match a webhook with sideEffects == Unknown or Some.
+---@field timeoutSeconds number timeoutSeconds specifies the timeout for this webhook. After the timeout passes, the webhook call will be ignored or the API call will fail based on the failure policy. The timeout value must be between 1 and 30 seconds. Default to 10 seconds. +optional
 
 ---@class admissionregistrationv1.ValidatingWebhookConfiguration
----@field TypeMeta v1.TypeMeta
----@field metadata v1.ObjectMeta Standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata. +optional
----@field webhooks admissionregistrationv1.ValidatingWebhook[] Webhooks is a list of webhooks and the affected resources and operations. +optional +patchMergeKey=name +patchStrategy=merge +listType=map +listMapKey=name
+---@field metadata v1.ObjectMeta metadata is the standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata. +optional
+---@field webhooks admissionregistrationv1.ValidatingWebhook[] webhooks is a list of webhooks and the affected resources and operations. +optional +patchMergeKey=name +patchStrategy=merge +listType=map +listMapKey=name
 
 ---@class admissionregistrationv1.ValidatingWebhookConfigurationList
----@field TypeMeta v1.TypeMeta
 ---@field items admissionregistrationv1.ValidatingWebhookConfiguration[] List of ValidatingWebhookConfiguration.
----@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +optional
+---@field metadata v1.ListMeta metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +optional
 
 ---@class admissionregistrationv1.WebhookClientConfig
----@field caBundle number[] `caBundle` is a PEM encoded CA bundle which will be used to validate the webhook's server certificate. If unspecified, system trust roots on the apiserver are used. +optional
----@field service admissionregistrationv1.ServiceReference `service` is a reference to the service for this webhook. Either `service` or `url` must be specified. If the webhook is running within the cluster, then you should use `service`. +optional
----@field url string `url` gives the location of the webhook, in standard URL form (`scheme://host:port/path`). Exactly one of `url` or `service` must be specified. The `host` should not refer to a service running in the cluster; use the `service` field instead. The host might be resolved via external DNS in some apiservers (e.g., `kube-apiserver` cannot resolve in-cluster DNS as that would be a layering violation). `host` may also be an IP address. Please note that using `localhost` or `127.0.0.1` as a `host` is risky unless you take great care to run this webhook on all hosts which run an apiserver which might need to make calls to this webhook. Such installs are likely to be non-portable, i.e., not easy to turn up in a new cluster. The scheme must be "https"; the URL must begin with "https://". A path is optional, and if present may be any string permissible in a URL. You may use the path to pass an arbitrary string to the webhook, for example, a cluster identifier. Attempting to use a user or basic auth e.g. "user:password@" is not allowed. Fragments ("#...") and query parameters ("?...") are not allowed, either. +optional
+---@field caBundle number[] caBundle is a PEM encoded CA bundle which will be used to validate the webhook's server certificate. If unspecified, system trust roots on the apiserver are used. +optional
+---@field service admissionregistrationv1.ServiceReference service is a reference to the service for this webhook. Either `service` or `url` must be specified. If the webhook is running within the cluster, then you should use `service`. +optional
+---@field url string url gives the location of the webhook, in standard URL form (`scheme://host:port/path`). Exactly one of `url` or `service` must be specified. The `host` should not refer to a service running in the cluster; use the `service` field instead. The host might be resolved via external DNS in some apiservers (e.g., `kube-apiserver` cannot resolve in-cluster DNS as that would be a layering violation). `host` may also be an IP address. Please note that using `localhost` or `127.0.0.1` as a `host` is risky unless you take great care to run this webhook on all hosts which run an apiserver which might need to make calls to this webhook. Such installs are likely to be non-portable, i.e., not easy to turn up in a new cluster. The scheme must be "https"; the URL must begin with "https://". A path is optional, and if present may be any string permissible in a URL. You may use the path to pass an arbitrary string to the webhook, for example, a cluster identifier. Attempting to use a user or basic auth e.g. "user:password@" is not allowed. Fragments ("#...") and query parameters ("?...") are not allowed, either. +optional
 
 ---@class appsv1.DaemonSet
----@field TypeMeta v1.TypeMeta
 ---@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
----@field spec appsv1.DaemonSetSpec The desired behavior of this daemon set. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
+---@field spec appsv1.DaemonSetSpec The desired behavior of this daemon set. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +required
 ---@field status appsv1.DaemonSetStatus The current status of this daemon set. This data may be out of date by some window of time. Populated by the system. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
 
 ---@class appsv1.DaemonSetCondition
 ---@field lastTransitionTime v1.Time Last time the condition transitioned from one status to another. +optional
 ---@field message string A human readable message indicating details about the transition. +optional
 ---@field reason string The reason for the condition's last transition. +optional
----@field status string Status of the condition, one of True, False, Unknown.
----@field type string Type of DaemonSet condition.
+---@field status string Status of the condition, one of True, False, Unknown. +optional
+---@field type string Type of DaemonSet condition. +optional
 
 ---@class appsv1.DaemonSetList
----@field TypeMeta v1.TypeMeta
 ---@field items appsv1.DaemonSet[] A list of daemon sets.
 ---@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 
 ---@class appsv1.DaemonSetSpec
 ---@field minReadySeconds number The minimum number of seconds for which a newly created DaemonSet pod should be ready without any of its container crashing, for it to be considered available. Defaults to 0 (pod will be considered available as soon as it is ready). +optional
 ---@field revisionHistoryLimit number The number of old history to retain to allow rollback. This is a pointer to distinguish between explicit zero and not specified. Defaults to 10. +optional
----@field selector v1.LabelSelector A label query over pods that are managed by the daemon set. Must match in order to be controlled. It must match the pod template's labels. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
----@field template corev1.PodTemplateSpec An object that describes the pod that will be created. The DaemonSet will create exactly one copy of this pod on every node that matches the template's node selector (or on every node if no node selector is specified). The only allowed template.spec.restartPolicy value is "Always". More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#pod-template
+---@field selector v1.LabelSelector A label query over pods that are managed by the daemon set. Must match in order to be controlled. It must match the pod template's labels. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors +required
+---@field template corev1.PodTemplateSpec An object that describes the pod that will be created. The DaemonSet will create exactly one copy of this pod on every node that matches the template's node selector (or on every node if no node selector is specified). The only allowed template.spec.restartPolicy value is "Always". More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#pod-template +required
 ---@field updateStrategy appsv1.DaemonSetUpdateStrategy An update strategy to replace existing DaemonSet pods with new pods. +optional
 
 ---@class appsv1.DaemonSetStatus
@@ -125,33 +112,31 @@
 ---@field type string Type of daemon set update. Can be "RollingUpdate" or "OnDelete". Default is RollingUpdate. +optional
 
 ---@class appsv1.Deployment
----@field TypeMeta v1.TypeMeta
 ---@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
----@field spec appsv1.DeploymentSpec Specification of the desired behavior of the Deployment. +optional
+---@field spec appsv1.DeploymentSpec Specification of the desired behavior of the Deployment. +required
 ---@field status appsv1.DeploymentStatus Most recently observed status of the Deployment. +optional
 
 ---@class appsv1.DeploymentCondition
----@field lastTransitionTime v1.Time Last time the condition transitioned from one status to another.
----@field lastUpdateTime v1.Time The last time this condition was updated.
----@field message string A human readable message indicating details about the transition.
----@field reason string The reason for the condition's last transition.
----@field status string Status of the condition, one of True, False, Unknown.
----@field type string Type of deployment condition.
+---@field lastTransitionTime v1.Time Last time the condition transitioned from one status to another. +optional
+---@field lastUpdateTime v1.Time The last time this condition was updated. +optional
+---@field message string A human readable message indicating details about the transition. +optional
+---@field reason string The reason for the condition's last transition. +optional
+---@field status string Status of the condition, one of True, False, Unknown. +optional
+---@field type string Type of deployment condition. +optional
 
 ---@class appsv1.DeploymentList
----@field TypeMeta v1.TypeMeta
 ---@field items appsv1.Deployment[] Items is the list of Deployments.
 ---@field metadata v1.ListMeta Standard list metadata. +optional
 
 ---@class appsv1.DeploymentSpec
 ---@field minReadySeconds number Minimum number of seconds for which a newly created pod should be ready without any of its container crashing, for it to be considered available. Defaults to 0 (pod will be considered available as soon as it is ready) +optional
 ---@field paused boolean Indicates that the deployment is paused. +optional
----@field progressDeadlineSeconds number The maximum time in seconds for a deployment to make progress before it is considered to be failed. The deployment controller will continue to process failed deployments and a condition with a ProgressDeadlineExceeded reason will be surfaced in the deployment status. Note that progress will not be estimated during the time a deployment is paused. Defaults to 600s.
+---@field progressDeadlineSeconds number The maximum time in seconds for a deployment to make progress before it is considered to be failed. The deployment controller will continue to process failed deployments and a condition with a ProgressDeadlineExceeded reason will be surfaced in the deployment status. Note that progress will not be estimated during the time a deployment is paused. Defaults to 600s. +optional
 ---@field replicas number Number of desired pods. This is a pointer to distinguish between explicit zero and not specified. Defaults to 1. +optional
 ---@field revisionHistoryLimit number The number of old ReplicaSets to retain to allow rollback. This is a pointer to distinguish between explicit zero and not specified. Defaults to 10. +optional
----@field selector v1.LabelSelector Label selector for pods. Existing ReplicaSets whose pods are selected by this will be the ones affected by this deployment. It must match the pod template's labels.
+---@field selector v1.LabelSelector Label selector for pods. Existing ReplicaSets whose pods are selected by this will be the ones affected by this deployment. It must match the pod template's labels. +required
 ---@field strategy appsv1.DeploymentStrategy The deployment strategy to use to replace existing pods with new ones. +optional +patchStrategy=retainKeys
----@field template corev1.PodTemplateSpec Template describes the pods that will be created. The only allowed template.spec.restartPolicy value is "Always".
+---@field template corev1.PodTemplateSpec Template describes the pods that will be created. The only allowed template.spec.restartPolicy value is "Always". +required
 
 ---@class appsv1.DeploymentStatus
 ---@field availableReplicas number Total number of available non-terminating pods (ready for at least minReadySeconds) targeted by this deployment. +optional
@@ -160,7 +145,7 @@
 ---@field observedGeneration number The generation observed by the deployment controller. +optional
 ---@field readyReplicas number Total number of non-terminating pods targeted by this Deployment with a Ready Condition. +optional
 ---@field replicas number Total number of non-terminating pods targeted by this deployment (their labels match the selector). +optional
----@field terminatingReplicas number Total number of terminating pods targeted by this deployment. Terminating pods have a non-null .metadata.deletionTimestamp and have not yet reached the Failed or Succeeded .status.phase. This is an alpha field. Enable DeploymentReplicaSetTerminatingReplicas to be able to use this field. +optional
+---@field terminatingReplicas number Total number of terminating pods targeted by this deployment. Terminating pods have a non-null .metadata.deletionTimestamp and have not yet reached the Failed or Succeeded .status.phase. This is a beta field and requires enabling DeploymentReplicaSetTerminatingReplicas feature (enabled by default). +optional
 ---@field unavailableReplicas number Total number of unavailable pods targeted by this deployment. This is the total number of pods that are still required for the deployment to have 100% available capacity. They may either be pods that are running but not yet available or pods that still have not been created. +optional
 ---@field updatedReplicas number Total number of non-terminating pods targeted by this deployment that have the desired template spec. +optional
 
@@ -169,27 +154,25 @@
 ---@field type string Type of deployment. Can be "Recreate" or "RollingUpdate". Default is RollingUpdate. +optional
 
 ---@class appsv1.ReplicaSet
----@field TypeMeta v1.TypeMeta
 ---@field metadata v1.ObjectMeta If the Labels of a ReplicaSet are empty, they are defaulted to be the same as the Pod(s) that the ReplicaSet manages. Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
----@field spec appsv1.ReplicaSetSpec Spec defines the specification of the desired behavior of the ReplicaSet. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
+---@field spec appsv1.ReplicaSetSpec Spec defines the specification of the desired behavior of the ReplicaSet. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +required
 ---@field status appsv1.ReplicaSetStatus Status is the most recently observed status of the ReplicaSet. This data may be out of date by some window of time. Populated by the system. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
 
 ---@class appsv1.ReplicaSetCondition
 ---@field lastTransitionTime v1.Time The last time the condition transitioned from one status to another. +optional
 ---@field message string A human readable message indicating details about the transition. +optional
 ---@field reason string The reason for the condition's last transition. +optional
----@field status string Status of the condition, one of True, False, Unknown.
----@field type string Type of replica set condition.
+---@field status string Status of the condition, one of True, False, Unknown. +optional
+---@field type string Type of replica set condition. +optional
 
 ---@class appsv1.ReplicaSetList
----@field TypeMeta v1.TypeMeta
 ---@field items appsv1.ReplicaSet[] List of ReplicaSets. More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset
 ---@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +optional
 
 ---@class appsv1.ReplicaSetSpec
 ---@field minReadySeconds number Minimum number of seconds for which a newly created pod should be ready without any of its container crashing, for it to be considered available. Defaults to 0 (pod will be considered available as soon as it is ready) +optional
 ---@field replicas number Replicas is the number of desired pods. This is a pointer to distinguish between explicit zero and unspecified. Defaults to 1. More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset +optional
----@field selector v1.LabelSelector Selector is a label query over pods that should match the replica count. Label keys and values that must match in order to be controlled by this replica set. It must match the pod template's labels. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
+---@field selector v1.LabelSelector Selector is a label query over pods that should match the replica count. Label keys and values that must match in order to be controlled by this replica set. It must match the pod template's labels. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors +required
 ---@field template corev1.PodTemplateSpec Template is the object that describes the pod that will be created if insufficient replicas are detected. More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/#pod-template +optional
 
 ---@class appsv1.ReplicaSetStatus
@@ -199,7 +182,7 @@
 ---@field observedGeneration number ObservedGeneration reflects the generation of the most recently observed ReplicaSet. +optional
 ---@field readyReplicas number The number of non-terminating pods targeted by this ReplicaSet with a Ready Condition. +optional
 ---@field replicas number Replicas is the most recently observed number of non-terminating pods. More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset
----@field terminatingReplicas number The number of terminating pods for this replica set. Terminating pods have a non-null .metadata.deletionTimestamp and have not yet reached the Failed or Succeeded .status.phase. This is an alpha field. Enable DeploymentReplicaSetTerminatingReplicas to be able to use this field. +optional
+---@field terminatingReplicas number The number of terminating pods for this replica set. Terminating pods have a non-null .metadata.deletionTimestamp and have not yet reached the Failed or Succeeded .status.phase. This is a beta field and requires enabling DeploymentReplicaSetTerminatingReplicas feature (enabled by default). +optional
 
 ---@class appsv1.RollingUpdateDaemonSet
 ---@field maxSurge intstr.IntOrString The maximum number of nodes with an existing available DaemonSet pod that can have an updated DaemonSet pod during during an update. Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%). This can not be 0 if MaxUnavailable is 0. Absolute number is calculated from percentage by rounding up to a minimum of 1. Default value is 0. Example: when this is set to 30%, at most 30% of the total number of nodes that should be running the daemon pod (i.e. status.desiredNumberScheduled) can have their a new pod created before the old pod is marked as deleted. The update starts by launching new pods on 30% of nodes. Once an updated pod is available (Ready for at least minReadySeconds) the old DaemonSet pod on that node is marked deleted. If the old pod becomes unavailable for any reason (Ready transitions to false, is evicted, or is drained) an updated pod is immediately created on that node without considering surge limits. Allowing surge implies the possibility that the resources consumed by the daemonset on any given node can double if the readiness check fails, and so resource intensive daemonsets should take into account that they may cause evictions during disruption. +optional
@@ -210,24 +193,22 @@
 ---@field maxUnavailable intstr.IntOrString The maximum number of pods that can be unavailable during the update. Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%). Absolute number is calculated from percentage by rounding down. This can not be 0 if MaxSurge is 0. Defaults to 25%. Example: when this is set to 30%, the old ReplicaSet can be scaled down to 70% of desired pods immediately when the rolling update starts. Once new pods are ready, old ReplicaSet can be scaled down further, followed by scaling up the new ReplicaSet, ensuring that the total number of pods available at all times during the update is at least 70% of desired pods. +optional
 
 ---@class appsv1.RollingUpdateStatefulSetStrategy
----@field maxUnavailable intstr.IntOrString The maximum number of pods that can be unavailable during the update. Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%). Absolute number is calculated from percentage by rounding up. This can not be 0. Defaults to 1. This field is alpha-level and is only honored by servers that enable the MaxUnavailableStatefulSet feature. The field applies to all pods in the range 0 to Replicas-1. That means if there is any unavailable pod in the range 0 to Replicas-1, it will be counted towards MaxUnavailable. +optional
+---@field maxUnavailable intstr.IntOrString The maximum number of pods that can be unavailable during the update. Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%). Absolute number is calculated from percentage by rounding up. This can not be 0. Defaults to 1. This field is beta-level and is enabled by default. The field applies to all pods in the range 0 to Replicas-1. That means if there is any unavailable pod in the range 0 to Replicas-1, it will be counted towards MaxUnavailable. This setting might not be effective for the OrderedReady podManagementPolicy. That policy ensures pods are created and become ready one at a time. +featureGate=MaxUnavailableStatefulSet +optional
 ---@field partition number Partition indicates the ordinal at which the StatefulSet should be partitioned for updates. During a rolling update, all pods from ordinal Replicas-1 to Partition are updated. All pods from ordinal Partition-1 to 0 remain untouched. This is helpful in being able to do a canary based deployment. The default value is 0. +optional
 
 ---@class appsv1.StatefulSet
----@field TypeMeta v1.TypeMeta
 ---@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
----@field spec appsv1.StatefulSetSpec Spec defines the desired identities of pods in this set. +optional
+---@field spec appsv1.StatefulSetSpec Spec defines the desired identities of pods in this set. +required
 ---@field status appsv1.StatefulSetStatus Status is the current status of Pods in this StatefulSet. This data may be out of date by some window of time. +optional
 
 ---@class appsv1.StatefulSetCondition
 ---@field lastTransitionTime v1.Time Last time the condition transitioned from one status to another. +optional
 ---@field message string A human readable message indicating details about the transition. +optional
 ---@field reason string The reason for the condition's last transition. +optional
----@field status string Status of the condition, one of True, False, Unknown.
----@field type string Type of statefulset condition.
+---@field status string Status of the condition, one of True, False, Unknown. +optional
+---@field type string Type of statefulset condition. +optional
 
 ---@class appsv1.StatefulSetList
----@field TypeMeta v1.TypeMeta
 ---@field items appsv1.StatefulSet[] Items is the list of stateful sets.
 ---@field metadata v1.ListMeta Standard list's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 
@@ -235,21 +216,21 @@
 ---@field start number start is the number representing the first replica's index. It may be used to number replicas from an alternate index (eg: 1-indexed) over the default 0-indexed names, or to orchestrate progressive movement of replicas from one StatefulSet to another. If set, replica indices will be in the range: [.spec.ordinals.start, .spec.ordinals.start + .spec.replicas). If unset, defaults to 0. Replica indices will be in the range: [0, .spec.replicas). +optional
 
 ---@class appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy
----@field whenDeleted string WhenDeleted specifies what happens to PVCs created from StatefulSet VolumeClaimTemplates when the StatefulSet is deleted. The default policy of `Retain` causes PVCs to not be affected by StatefulSet deletion. The `Delete` policy causes those PVCs to be deleted.
----@field whenScaled string WhenScaled specifies what happens to PVCs created from StatefulSet VolumeClaimTemplates when the StatefulSet is scaled down. The default policy of `Retain` causes PVCs to not be affected by a scaledown. The `Delete` policy causes the associated PVCs for any excess pods above the replica count to be deleted.
+---@field whenDeleted string WhenDeleted specifies what happens to PVCs created from StatefulSet VolumeClaimTemplates when the StatefulSet is deleted. The default policy of `Retain` causes PVCs to not be affected by StatefulSet deletion. The `Delete` policy causes those PVCs to be deleted. +optional
+---@field whenScaled string WhenScaled specifies what happens to PVCs created from StatefulSet VolumeClaimTemplates when the StatefulSet is scaled down. The default policy of `Retain` causes PVCs to not be affected by a scaledown. The `Delete` policy causes the associated PVCs for any excess pods above the replica count to be deleted. +optional
 
 ---@class appsv1.StatefulSetSpec
 ---@field minReadySeconds number Minimum number of seconds for which a newly created pod should be ready without any of its container crashing for it to be considered available. Defaults to 0 (pod will be considered available as soon as it is ready) +optional
 ---@field ordinals appsv1.StatefulSetOrdinals ordinals controls the numbering of replica indices in a StatefulSet. The default ordinals behavior assigns a "0" index to the first replica and increments the index by one for each additional replica requested. +optional
 ---@field persistentVolumeClaimRetentionPolicy appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy persistentVolumeClaimRetentionPolicy describes the lifecycle of persistent volume claims created from volumeClaimTemplates. By default, all persistent volume claims are created as needed and retained until manually deleted. This policy allows the lifecycle to be altered, for example by deleting persistent volume claims when their stateful set is deleted, or when their pod is scaled down. +optional
----@field podManagementPolicy string podManagementPolicy controls how pods are created during initial scale up, when replacing pods on nodes, or when scaling down. The default policy is `OrderedReady`, where pods are created in increasing order (pod-0, then pod-1, etc) and the controller will wait until each pod is ready before continuing. When scaling down, the pods are removed in the opposite order. The alternative policy is `Parallel` which will create pods in parallel to match the desired scale without waiting, and on scale down will delete all pods at once. +optional
+---@field podManagementPolicy string podManagementPolicy controls how pods are created during initial scale up, when replacing pods on nodes, or when scaling down. The default policy is `OrderedReady`, where pods are created in increasing order (pod-0, then pod-1, etc) and the controller will wait until each pod is ready before continuing. When scaling down, the pods are removed in the opposite order. The alternative policy is `Parallel` which will create pods in parallel to match the desired scale without waiting, and on scale down will delete all pods at once. +optional +k8s:alpha(since: "1.37")=+k8s:immutable +k8s:alpha(since: "1.37")=+k8s:optional
 ---@field replicas number replicas is the desired number of replicas of the given Template. These are replicas in the sense that they are instantiations of the same Template, but individual replicas also have a consistent identity. If unspecified, defaults to 1. TODO: Consider a rename of this field. +optional
----@field revisionHistoryLimit number revisionHistoryLimit is the maximum number of revisions that will be maintained in the StatefulSet's revision history. The revision history consists of all revisions not represented by a currently applied StatefulSetSpec version. The default value is 10.
----@field selector v1.LabelSelector selector is a label query over pods that should match the replica count. It must match the pod template's labels. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
----@field serviceName string serviceName is the name of the service that governs this StatefulSet. This service must exist before the StatefulSet, and is responsible for the network identity of the set. Pods get DNS/hostnames that follow the pattern: pod-specific-string.serviceName.default.svc.cluster.local where "pod-specific-string" is managed by the StatefulSet controller. +optional
----@field template corev1.PodTemplateSpec template is the object that describes the pod that will be created if insufficient replicas are detected. Each pod stamped out by the StatefulSet will fulfill this Template, but have a unique identity from the rest of the StatefulSet. Each pod will be named with the format <statefulsetname>-<podindex>. For example, a pod in a StatefulSet named "web" with index number "3" would be named "web-3". The only allowed template.spec.restartPolicy value is "Always".
----@field updateStrategy appsv1.StatefulSetUpdateStrategy updateStrategy indicates the StatefulSetUpdateStrategy that will be employed to update Pods in the StatefulSet when a revision is made to Template.
----@field volumeClaimTemplates corev1.PersistentVolumeClaim[] volumeClaimTemplates is a list of claims that pods are allowed to reference. The StatefulSet controller is responsible for mapping network identities to claims in a way that maintains the identity of a pod. Every claim in this list must have at least one matching (by name) volumeMount in one container in the template. A claim in this list takes precedence over any volumes in the template, with the same name. TODO: Define the behavior if a claim already exists with the same name. +optional +listType=atomic
+---@field revisionHistoryLimit number revisionHistoryLimit is the maximum number of revisions that will be maintained in the StatefulSet's revision history. The revision history consists of all revisions not represented by a currently applied StatefulSetSpec version. The default value is 10. +optional
+---@field selector v1.LabelSelector selector is a label query over pods that should match the replica count. It must match the pod template's labels. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors +required +k8s:alpha(since: "1.37")=+k8s:required +k8s:alpha(since: "1.37")=+k8s:immutable
+---@field serviceName string serviceName is the name of the service that governs this StatefulSet. This service must exist before the StatefulSet, and is responsible for the network identity of the set. Pods get DNS/hostnames that follow the pattern: pod-specific-string.serviceName.default.svc.cluster.local where "pod-specific-string" is managed by the StatefulSet controller. +optional +k8s:alpha(since: "1.37")=+k8s:immutable +k8s:alpha(since: "1.37")=+k8s:optional
+---@field template corev1.PodTemplateSpec template is the object that describes the pod that will be created if insufficient replicas are detected. Each pod stamped out by the StatefulSet will fulfill this Template, but have a unique identity from the rest of the StatefulSet. Each pod will be named with the format <statefulsetname>-<podindex>. For example, a pod in a StatefulSet named "web" with index number "3" would be named "web-3". The only allowed template.spec.restartPolicy value is "Always". +required
+---@field updateStrategy appsv1.StatefulSetUpdateStrategy updateStrategy indicates the StatefulSetUpdateStrategy that will be employed to update Pods in the StatefulSet when a revision is made to Template. +optional
+---@field volumeClaimTemplates corev1.PersistentVolumeClaim[] volumeClaimTemplates is a list of claims that pods are allowed to reference. The StatefulSet controller is responsible for mapping network identities to claims in a way that maintains the identity of a pod. Every claim in this list must have at least one matching (by name) volumeMount in one container in the template. A claim in this list takes precedence over any volumes in the template, with the same name. TODO: Define the behavior if a claim already exists with the same name. +optional +k8s:alpha(since: "1.37")=+k8s:immutable +k8s:alpha(since: "1.37")=+k8s:optional +k8s:alpha(since: "1.37")=+k8s:eachVal=+k8s:opaqueType +listType=atomic
 
 ---@class appsv1.StatefulSetStatus
 ---@field availableReplicas number Total number of available pods (ready for at least minReadySeconds) targeted by this statefulset. +optional
@@ -279,8 +260,8 @@
 
 ---@class autoscalingv2.CrossVersionObjectReference
 ---@field apiVersion string apiVersion is the API version of the referent +optional
----@field kind string kind is the kind of the referent; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
----@field name string name is the name of the referent; More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+---@field kind string kind is the kind of the referent; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +k8s:alpha(since: "1.37")=+k8s:required
+---@field name string name is the name of the referent; More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names +k8s:alpha(since: "1.37")=+k8s:required
 
 ---@class autoscalingv2.ExternalMetricSource
 ---@field metric autoscalingv2.MetricIdentifier metric identifies the target metric by name and selector
@@ -299,12 +280,11 @@
 ---@field policies autoscalingv2.HPAScalingPolicy[] policies is a list of potential scaling polices which can be used during scaling. If not set, use the default values: - For scale up: allow doubling the number of pods, or an absolute change of 4 pods in a 15s window. - For scale down: allow all pods to be removed in a 15s window. +listType=atomic +optional
 ---@field selectPolicy string selectPolicy is used to specify which policy should be used. If not set, the default value Max is used. +optional
 ---@field stabilizationWindowSeconds number stabilizationWindowSeconds is the number of seconds for which past recommendations should be considered while scaling up or scaling down. StabilizationWindowSeconds must be greater than or equal to zero and less than or equal to 3600 (one hour). If not set, use the default values: - For scale up: 0 (i.e. no stabilization is done). - For scale down: 300 (i.e. the stabilization window is 300 seconds long). +optional
----@field tolerance resource.Quantity tolerance is the tolerance on the ratio between the current and desired metric value under which no updates are made to the desired number of replicas (e.g. 0.01 for 1%). Must be greater than or equal to zero. If not set, the default cluster-wide tolerance is applied (by default 10%). For example, if autoscaling is configured with a memory consumption target of 100Mi, and scale-down and scale-up tolerances of 5% and 1% respectively, scaling will be triggered when the actual consumption falls below 95Mi or exceeds 101Mi. This is an alpha field and requires enabling the HPAConfigurableTolerance feature gate. +featureGate=HPAConfigurableTolerance +optional
+---@field tolerance resource.Quantity tolerance is the tolerance on the ratio between the current and desired metric value under which no updates are made to the desired number of replicas (e.g. 0.01 for 1%). Must be greater than or equal to zero. If not set, the default cluster-wide tolerance is applied (by default 10%). For example, if autoscaling is configured with a memory consumption target of 100Mi, and scale-down and scale-up tolerances of 5% and 1% respectively, scaling will be triggered when the actual consumption falls below 95Mi or exceeds 101Mi. +featureGate=HPAConfigurableTolerance +optional
 
 ---@class autoscalingv2.HorizontalPodAutoscaler
----@field TypeMeta v1.TypeMeta
 ---@field metadata v1.ObjectMeta metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
----@field spec autoscalingv2.HorizontalPodAutoscalerSpec spec is the specification for the behaviour of the autoscaler. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status. +optional
+---@field spec autoscalingv2.HorizontalPodAutoscalerSpec spec is the specification for the behaviour of the autoscaler. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status. +required
 ---@field status autoscalingv2.HorizontalPodAutoscalerStatus status is the current information about the autoscaler. +optional
 
 ---@class autoscalingv2.HorizontalPodAutoscalerBehavior
@@ -314,25 +294,25 @@
 ---@class autoscalingv2.HorizontalPodAutoscalerCondition
 ---@field lastTransitionTime v1.Time lastTransitionTime is the last time the condition transitioned from one status to another +optional
 ---@field message string message is a human-readable explanation containing details about the transition +optional
+---@field observedGeneration number observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance. +optional
 ---@field reason string reason is the reason for the condition's last transition. +optional
 ---@field status string status is the status of the condition (True, False, Unknown)
 ---@field type string type describes the current condition
 
 ---@class autoscalingv2.HorizontalPodAutoscalerList
----@field TypeMeta v1.TypeMeta
 ---@field items autoscalingv2.HorizontalPodAutoscaler[] items is the list of horizontal pod autoscaler objects.
 ---@field metadata v1.ListMeta metadata is the standard list metadata. +optional
 
 ---@class autoscalingv2.HorizontalPodAutoscalerSpec
 ---@field behavior autoscalingv2.HorizontalPodAutoscalerBehavior behavior configures the scaling behavior of the target in both Up and Down directions (scaleUp and scaleDown fields respectively). If not set, the default HPAScalingRules for scale up and scale down are used. +optional
----@field maxReplicas number maxReplicas is the upper limit for the number of replicas to which the autoscaler can scale up. It cannot be less that minReplicas.
----@field metrics autoscalingv2.MetricSpec[] metrics contains the specifications for which to use to calculate the desired replica count (the maximum replica count across all metrics will be used). The desired replica count is calculated multiplying the ratio between the target value and the current value by the current number of pods. Ergo, metrics used must decrease as the pod count is increased, and vice-versa. See the individual metric source types for more information about how each type of metric must respond. If not set, the default metric will be set to 80% average CPU utilization. +listType=atomic +optional
----@field minReplicas number minReplicas is the lower limit for the number of replicas to which the autoscaler can scale down. It defaults to 1 pod. minReplicas is allowed to be 0 if the alpha feature gate HPAScaleToZero is enabled and at least one Object or External metric is configured. Scaling is active as long as at least one metric value is available. +optional
+---@field maxReplicas number maxReplicas is the upper limit for the number of replicas to which the autoscaler can scale up. It cannot be less that minReplicas. +required +k8s:beta(since: "1.37")=+k8s:required +k8s:beta(since: "1.37")=+k8s:minimum=1
+---@field metrics autoscalingv2.MetricSpec[] metrics contains the specifications for which to use to calculate the desired replica count (the maximum replica count across all metrics will be used). The desired replica count is calculated multiplying the ratio between the target value and the current value by the current number of pods. Ergo, metrics used must decrease as the pod count is increased, and vice-versa. See the individual metric source types for more information about how each type of metric must respond. If not set, the default metric will be set to 80% average CPU utilization. +listType=atomic +optional +k8s:alpha(since: "1.37")=+k8s:optional
+---@field minReplicas number minReplicas is the lower limit for the number of replicas to which the autoscaler can scale down. It defaults to 1 pod. minReplicas is allowed to be 0 if the alpha feature gate HPAScaleToZero is enabled and at least one Object or External metric is configured. Scaling is active as long as at least one metric value is available. +optional +k8s:beta(since: "1.37")=+k8s:optional +k8s:beta(since: "1.37")=+k8s:ifEnabled(HPAScaleToZero)=+k8s:minimum=0 +k8s:beta(since: "1.37")=+k8s:ifDisabled(HPAScaleToZero)=+k8s:minimum=1
 ---@field scaleTargetRef autoscalingv2.CrossVersionObjectReference scaleTargetRef points to the target resource to scale, and is used to the pods for which metrics should be collected, as well as to actually change the replica count.
 
 ---@class autoscalingv2.HorizontalPodAutoscalerStatus
 ---@field conditions autoscalingv2.HorizontalPodAutoscalerCondition[] conditions is the set of conditions required for this autoscaler to scale its target, and indicates whether or not those conditions are met. +patchMergeKey=type +patchStrategy=merge +listType=map +listMapKey=type +optional
----@field currentMetrics autoscalingv2.MetricStatus[] currentMetrics is the last read state of the metrics used by this autoscaler. +listType=atomic +optional
+---@field currentMetrics autoscalingv2.MetricStatus[] currentMetrics is the last read state of the metrics used by this autoscaler. +listType=atomic +optional +k8s:alpha(since: "1.37")=+k8s:optional
 ---@field currentReplicas number currentReplicas is current number of replicas of pods managed by this autoscaler, as last seen by the autoscaler. +optional
 ---@field desiredReplicas number desiredReplicas is the desired number of replicas of pods managed by this autoscaler, as last calculated by the autoscaler.
 ---@field lastScaleTime v1.Time lastScaleTime is the last time the HorizontalPodAutoscaler scaled the number of pods, used by the autoscaler to control how often the number of pods is changed. +optional
@@ -345,15 +325,15 @@
 ---@class autoscalingv2.MetricSpec
 ---@field containerResource autoscalingv2.ContainerResourceMetricSource containerResource refers to a resource metric (such as those specified in requests and limits) known to Kubernetes describing a single container in each pod of the current scale target (e.g. CPU or memory). Such metrics are built in to Kubernetes, and have special scaling options on top of those available to normal per-pod metrics using the "pods" source. +optional
 ---@field external autoscalingv2.ExternalMetricSource external refers to a global metric that is not associated with any Kubernetes object. It allows autoscaling based on information coming from components running outside of cluster (for example length of queue in cloud messaging service, or QPS from loadbalancer running outside of cluster). +optional
----@field object autoscalingv2.ObjectMetricSource object refers to a metric describing a single kubernetes object (for example, hits-per-second on an Ingress object). +optional
+---@field object autoscalingv2.ObjectMetricSource object refers to a metric describing a single kubernetes object (for example, hits-per-second on an Ingress object). +optional +k8s:alpha(since: "1.37")=+k8s:optional +k8s:alpha(since: "1.37")=+k8s:opaqueType
 ---@field pods autoscalingv2.PodsMetricSource pods refers to a metric describing each pod in the current scale target (for example, transactions-processed-per-second). The values will be averaged together before being compared to the target value. +optional
 ---@field resource autoscalingv2.ResourceMetricSource resource refers to a resource metric (such as those specified in requests and limits) known to Kubernetes describing each pod in the current scale target (e.g. CPU or memory). Such metrics are built in to Kubernetes, and have special scaling options on top of those available to normal per-pod metrics using the "pods" source. +optional
 ---@field type string type is the type of metric source. It should be one of "ContainerResource", "External", "Object", "Pods" or "Resource", each mapping to a matching field in the object.
 
 ---@class autoscalingv2.MetricStatus
----@field containerResource autoscalingv2.ContainerResourceMetricStatus container resource refers to a resource metric (such as those specified in requests and limits) known to Kubernetes describing a single container in each pod in the current scale target (e.g. CPU or memory). Such metrics are built in to Kubernetes, and have special scaling options on top of those available to normal per-pod metrics using the "pods" source. +optional
+---@field containerResource autoscalingv2.ContainerResourceMetricStatus containerResource refers to a resource metric (such as those specified in requests and limits) known to Kubernetes describing a single container in each pod in the current scale target (e.g. CPU or memory). Such metrics are built in to Kubernetes, and have special scaling options on top of those available to normal per-pod metrics using the "pods" source. +optional
 ---@field external autoscalingv2.ExternalMetricStatus external refers to a global metric that is not associated with any Kubernetes object. It allows autoscaling based on information coming from components running outside of cluster (for example length of queue in cloud messaging service, or QPS from loadbalancer running outside of cluster). +optional
----@field object autoscalingv2.ObjectMetricStatus object refers to a metric describing a single kubernetes object (for example, hits-per-second on an Ingress object). +optional
+---@field object autoscalingv2.ObjectMetricStatus object refers to a metric describing a single kubernetes object (for example, hits-per-second on an Ingress object). +optional +k8s:alpha(since: "1.37")=+k8s:optional +k8s:alpha(since: "1.37")=+k8s:opaqueType
 ---@field pods autoscalingv2.PodsMetricStatus pods refers to a metric describing each pod in the current scale target (for example, transactions-processed-per-second). The values will be averaged together before being compared to the target value. +optional
 ---@field resource autoscalingv2.ResourceMetricStatus resource refers to a resource metric (such as those specified in requests and limits) known to Kubernetes describing each pod in the current scale target (e.g. CPU or memory). Such metrics are built in to Kubernetes, and have special scaling options on top of those available to normal per-pod metrics using the "pods" source. +optional
 ---@field type string type is the type of metric source. It will be one of "ContainerResource", "External", "Object", "Pods" or "Resource", each corresponds to a matching field in the object.
@@ -365,7 +345,7 @@
 ---@field value resource.Quantity value is the target value of the metric (as a quantity). +optional
 
 ---@class autoscalingv2.MetricValueStatus
----@field averageUtilization number currentAverageUtilization is the current value of the average of the resource metric across all relevant pods, represented as a percentage of the requested value of the resource for the pods. +optional
+---@field averageUtilization number averageUtilization is the current value of the average of the resource metric across all relevant pods, represented as a percentage of the requested value of the resource for the pods. +optional
 ---@field averageValue resource.Quantity averageValue is the current value of the average of the metric across all relevant pods (as a quantity) +optional
 ---@field value resource.Quantity value is the current value of the metric (as a quantity). +optional
 
@@ -376,7 +356,7 @@
 
 ---@class autoscalingv2.ObjectMetricStatus
 ---@field current autoscalingv2.MetricValueStatus current contains the current value for the given metric
----@field describedObject autoscalingv2.CrossVersionObjectReference DescribedObject specifies the descriptions of a object,such as kind,name apiVersion
+---@field describedObject autoscalingv2.CrossVersionObjectReference describedObject specifies the descriptions of a object,such as kind,name apiVersion
 ---@field metric autoscalingv2.MetricIdentifier metric identifies the target metric by name and selector
 
 ---@class autoscalingv2.PodsMetricSource
@@ -396,13 +376,11 @@
 ---@field name string name is the name of the resource in question.
 
 ---@class batchv1.CronJob
----@field TypeMeta v1.TypeMeta
 ---@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
----@field spec batchv1.CronJobSpec Specification of the desired behavior of a cron job, including the schedule. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
+---@field spec batchv1.CronJobSpec Specification of the desired behavior of a cron job, including the schedule. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +required
 ---@field status batchv1.CronJobStatus Current status of a cron job. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
 
 ---@class batchv1.CronJobList
----@field TypeMeta v1.TypeMeta
 ---@field items batchv1.CronJob[] items is the list of CronJobs.
 ---@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 
@@ -410,7 +388,7 @@
 ---@field concurrencyPolicy string Specifies how to treat concurrent executions of a Job. Valid values are: - "Allow" (default): allows CronJobs to run concurrently; - "Forbid": forbids concurrent runs, skipping next run if previous run hasn't finished yet; - "Replace": cancels currently running job and replaces it with a new one +optional
 ---@field failedJobsHistoryLimit number The number of failed finished jobs to retain. Value must be non-negative integer. Defaults to 1. +optional
 ---@field jobTemplate batchv1.JobTemplateSpec Specifies the job that will be created when executing a CronJob.
----@field schedule string The schedule in Cron format, see https://en.wikipedia.org/wiki/Cron.
+---@field schedule string The schedule in Cron format, see https://en.wikipedia.org/wiki/Cron. +required +k8s:beta(since: "1.37")=+k8s:required
 ---@field startingDeadlineSeconds number Optional deadline in seconds for starting the job if it misses scheduled time for any reason. Missed jobs executions will be counted as failed ones. +optional
 ---@field successfulJobsHistoryLimit number The number of successful finished jobs to retain. Value must be non-negative integer. Defaults to 3. +optional
 ---@field suspend boolean This flag tells the controller to suspend subsequent executions, it does not apply to already started executions. Defaults to false. +optional
@@ -422,7 +400,6 @@
 ---@field lastSuccessfulTime v1.Time Information when was the last time the job successfully completed. +optional
 
 ---@class batchv1.Job
----@field TypeMeta v1.TypeMeta
 ---@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 ---@field spec batchv1.JobSpec Specification of the desired behavior of a job. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
 ---@field status batchv1.JobStatus Current status of a job. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
@@ -436,9 +413,14 @@
 ---@field type string Type of job condition, Complete or Failed.
 
 ---@class batchv1.JobList
----@field TypeMeta v1.TypeMeta
 ---@field items batchv1.Job[] items is the list of Jobs.
 ---@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
+
+---@class batchv1.JobSchedulingConfiguration
+---@field disruptionMode schedulingv1alpha3.WorkloadPodGroupDisruptionMode DisruptionMode defines the mode in which the Job's pods can be disrupted. One of Single, All. This field is immutable after creation: it may not be added or removed, and the selected mode may not be changed. +optional +k8s:optional +k8s:immutable
+---@field resourceClaims schedulingv1alpha3.WorkloadPodGroupResourceClaim[] ResourceClaims defines which ResourceClaims may be shared among Pods in the Job. Pods consume the devices allocated to a PodGroup's claim by defining a claim in its own Spec.ResourceClaims that matches the PodGroup's claim exactly. The claim must have the same name and refer to the same ResourceClaim or ResourceClaimTemplate. At most 4 claims may be set, matching the limit on the resulting PodGroup. This list is immutable after creation: entries may neither be added, removed, nor modified. +optional +patchMergeKey=name +patchStrategy=merge +listType=map +listMapKey=name +k8s:optional +k8s:listType=map +k8s:listMapKey=name +k8s:maxItems=4 +k8s:immutable
+---@field schedulingConstraints schedulingv1alpha3.WorkloadPodGroupSchedulingConstraints SchedulingConstraints defines scheduling constraints (e.g. topology) for the Job's pods. This field is immutable after creation. +optional +k8s:optional +k8s:immutable
+---@field schedulingPolicy schedulingv1alpha3.WorkloadPodGroupSchedulingPolicy SchedulingPolicy defines the scheduling policy for this Job. Exactly one of Basic or Gang must be set. This field is immutable after creation: the policy may not be added or removed. The policy variant (basic/gang) is frozen by hand-written validation; only schedulingPolicy.gang.minCount may be changed. +optional +k8s:optional +k8s:update=NoSet +k8s:update=NoUnset
 
 ---@class batchv1.JobSpec
 ---@field activeDeadlineSeconds number Specifies the duration in seconds relative to the startTime that the job may be continuously active before the system tries to terminate it; value must be positive integer. If a Job is suspended (at creation or through an update), this timer will effectively be stopped and reset when the Job is resumed again. +optional
@@ -446,12 +428,13 @@
 ---@field backoffLimitPerIndex number Specifies the limit for the number of retries within an index before marking this index as failed. When enabled the number of failures per index is kept in the pod's batch.kubernetes.io/job-index-failure-count annotation. It can only be set when Job's completionMode=Indexed, and the Pod's restart policy is Never. The field is immutable. +optional
 ---@field completionMode string completionMode specifies how Pod completions are tracked. It can be `NonIndexed` (default) or `Indexed`. `NonIndexed` means that the Job is considered complete when there have been .spec.completions successfully completed Pods. Each Pod completion is homologous to each other. `Indexed` means that the Pods of a Job get an associated completion index from 0 to (.spec.completions - 1), available in the annotation batch.kubernetes.io/job-completion-index. The Job is considered complete when there is one successfully completed Pod for each index. When value is `Indexed`, .spec.completions must be specified and `.spec.parallelism` must be less than or equal to 10^5. In addition, The Pod name takes the form `$(job-name)-$(index)-$(random-string)`, the Pod hostname takes the form `$(job-name)-$(index)`. More completion modes can be added in the future. If the Job controller observes a mode that it doesn't recognize, which is possible during upgrades due to version skew, the controller skips updates for the Job. +optional
 ---@field completions number Specifies the desired number of successfully finished pods the job should be run with. Setting to null means that the success of any pod signals the success of all pods, and allows parallelism to have any positive value. Setting to 1 means that parallelism is limited to 1 and the success of that pod signals the success of the job. More info: https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/ +optional
----@field managedBy string ManagedBy field indicates the controller that manages a Job. The k8s Job controller reconciles jobs which don't have this field at all or the field value is the reserved string `kubernetes.io/job-controller`, but skips reconciling Jobs with a custom value for this field. The value must be a valid domain-prefixed path (e.g. acme.io/foo) - all characters before the first "/" must be a valid subdomain as defined by RFC 1123. All characters trailing the first "/" must be valid HTTP Path characters as defined by RFC 3986. The value cannot exceed 63 characters. This field is immutable. This field is beta-level. The job controller accepts setting the field when the feature gate JobManagedBy is enabled (enabled by default). +optional
+---@field managedBy string ManagedBy field indicates the controller that manages a Job. The k8s Job controller reconciles jobs which don't have this field at all or the field value is the reserved string `kubernetes.io/job-controller`, but skips reconciling Jobs with a custom value for this field. The value must be a valid domain-prefixed path (e.g. acme.io/foo) - all characters before the first "/" must be a valid subdomain as defined by RFC 1123. All characters trailing the first "/" must be valid HTTP Path characters as defined by RFC 3986. The value cannot exceed 63 characters. This field is immutable. +optional
 ---@field manualSelector boolean manualSelector controls generation of pod labels and pod selectors. Leave `manualSelector` unset unless you are certain what you are doing. When false or unset, the system pick labels unique to this job and appends those labels to the pod template. When true, the user is responsible for picking unique labels and specifying the selector. Failure to pick a unique label may cause this and other jobs to not function correctly. However, You may see `manualSelector=true` in jobs that were created with the old `extensions/v1beta1` API. More info: https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/#specifying-your-own-pod-selector +optional
----@field maxFailedIndexes number Specifies the maximal number of failed indexes before marking the Job as failed, when backoffLimitPerIndex is set. Once the number of failed indexes exceeds this number the entire Job is marked as Failed and its execution is terminated. When left as null the job continues execution of all of its indexes and is marked with the `Complete` Job condition. It can only be specified when backoffLimitPerIndex is set. It can be null or up to completions. It is required and must be less than or equal to 10^4 when is completions greater than 10^5. +optional
+---@field maxFailedIndexes number Specifies the maximal number of failed indexes before marking the Job as failed, when backoffLimitPerIndex is set. Once the number of failed indexes exceeds this number the entire Job is marked as Failed and its execution is terminated. When left as null the job continues execution of all of its indexes and is marked with the `Complete` Job condition. It can only be specified when backoffLimitPerIndex is set. It can be null or up to completions. It is required and must be less than or equal to 10^4 when is completions greater than 10^5. +optional +k8s:optional +k8s:alpha(since: "1.37")=+k8s:dependentRequired("backoffLimitPerIndex")
 ---@field parallelism number Specifies the maximum desired number of pods the job should run at any given time. The actual number of pods running in steady state will be less than this number when ((.spec.completions - .status.successful) < .spec.parallelism), i.e. when the work left to do is less than max parallelism. More info: https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/ +optional
 ---@field podFailurePolicy batchv1.PodFailurePolicy Specifies the policy of handling failed pods. In particular, it allows to specify the set of actions and conditions which need to be satisfied to take the associated action. If empty, the default behaviour applies - the counter of failed pods, represented by the jobs's .status.failed field, is incremented and it is checked against the backoffLimit. This field cannot be used in combination with restartPolicy=OnFailure. +optional
 ---@field podReplacementPolicy string podReplacementPolicy specifies when to create replacement Pods. Possible values are: - TerminatingOrFailed means that we recreate pods when they are terminating (has a metadata.deletionTimestamp) or failed. - Failed means to wait until a previously created Pod is fully terminated (has phase Failed or Succeeded) before creating a replacement Pod. When using podFailurePolicy, Failed is the the only allowed value. TerminatingOrFailed and Failed are allowed values when podFailurePolicy is not in use. +optional
+---@field scheduling batchv1.JobSchedulingConfiguration scheduling defines the Workload-aware Scheduling configuration for this Job. When set, it specifies the scheduling policy (basic or gang), topology constraints, disruption mode, and shared resource claims. When omitted, the Job defaults to the basic scheduling policy, which behaves as standard pod-by-pod scheduling. This field is alpha-level and requires the WorkloadWithJob feature gate. This field is immutable, including whether it is set at all, only policy.gang.minCount may be changed after creation. +featureGate=WorkloadWithJob +optional +k8s:ifDisabled(WorkloadWithJob)=+k8s:forbidden +k8s:optional +k8s:update=NoSet +k8s:update=NoUnset
 ---@field selector v1.LabelSelector A label query over pods that should match the pod count. Normally, the system sets this field for you. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors +optional
 ---@field successPolicy batchv1.SuccessPolicy successPolicy specifies the policy when the Job can be declared as succeeded. If empty, the default behavior applies - the Job is declared as succeeded only when the number of succeeded pods equals to the completions. When the field is specified, it must be immutable and works only for the Indexed Jobs. Once the Job meets the SuccessPolicy, the lingering pods are terminated. +optional
 ---@field suspend boolean suspend specifies whether the Job controller should create Pods or not. If a Job is created with suspend set to true, no Pods are created by the Job controller. If a Job is suspended after creation (i.e. the flag goes from false to true), the Job controller will delete all active Pods associated with this Job. Users must design their workload to gracefully handle this. Suspending a Job will reset the StartTime field of the Job, effectively resetting the ActiveDeadlineSeconds timer too. Defaults to false. +optional
@@ -468,11 +451,11 @@
 ---@field ready number The number of active pods which have a Ready condition and are not terminating (without a deletionTimestamp).
 ---@field startTime v1.Time Represents time when the job controller started processing a job. When a Job is created in the suspended state, this field is not set until the first time it is resumed. This field is reset every time a Job is resumed from suspension. It is represented in RFC3339 form and is in UTC. Once set, the field can only be removed when the job is suspended. The field cannot be modified while the job is unsuspended or finished. +optional
 ---@field succeeded number The number of pods which reached phase Succeeded. The value increases monotonically for a given spec. However, it may decrease in reaction to scale down of elastic indexed jobs. +optional
----@field terminating number The number of pods which are terminating (in phase Pending or Running and have a deletionTimestamp). This field is beta-level. The job controller populates the field when the feature gate JobPodReplacementPolicy is enabled (enabled by default). +optional
+---@field terminating number The number of pods which are terminating (in phase Pending or Running and have a deletionTimestamp). +optional
 ---@field uncountedTerminatedPods batchv1.UncountedTerminatedPods uncountedTerminatedPods holds the UIDs of Pods that have terminated but the job controller hasn't yet accounted for in the status counters. The job controller creates pods with a finalizer. When a pod terminates (succeeded or failed), the controller does three steps to account for it in the job status: 1. Add the pod UID to the arrays in this field. 2. Remove the pod finalizer. 3. Remove the pod UID from the arrays while increasing the corresponding counter. Old jobs might not be tracked using this field, in which case the field remains null. The structure is empty for finished jobs. +optional
 
 ---@class batchv1.JobTemplateSpec
----@field metadata v1.ObjectMeta Standard object's metadata of the jobs created from this template. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
+---@field metadata v1.ObjectMeta Standard object's metadata of the jobs created from this template. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional +k8s:opaqueType
 ---@field spec batchv1.JobSpec Specification of the desired behavior of the job. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
 
 ---@class batchv1.PodFailurePolicy
@@ -484,7 +467,7 @@
 ---@field values number[] Specifies the set of values. Each returned container exit code (might be multiple in case of multiple containers) is checked against this set of values with respect to the operator. The list of values must be ordered and must not contain duplicates. Value '0' cannot be used for the In operator. At least one element is required. At most 255 elements are allowed. +listType=set
 
 ---@class batchv1.PodFailurePolicyOnPodConditionsPattern
----@field status string Specifies the required Pod condition status. To match a pod condition it is required that the specified status equals the pod condition status. Defaults to True.
+---@field status string Specifies the required Pod condition status. To match a pod condition it is required that the specified status equals the pod condition status. Defaults to True. +optional
 ---@field type string Specifies the required Pod condition type. To match a pod condition it is required that specified type equals the pod condition type.
 
 ---@class batchv1.PodFailurePolicyRule
@@ -504,12 +487,10 @@
 ---@field succeeded string[] succeeded holds UIDs of succeeded Pods. +listType=set +optional
 
 ---@class coordinationv1.Lease
----@field TypeMeta v1.TypeMeta
----@field metadata v1.ObjectMeta More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
+---@field metadata v1.ObjectMeta metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 ---@field spec coordinationv1.LeaseSpec spec contains the specification of the Lease. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
 
 ---@class coordinationv1.LeaseList
----@field TypeMeta v1.TypeMeta
 ---@field items coordinationv1.Lease[] items is a list of schema objects.
 ---@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 
@@ -518,15 +499,9 @@
 ---@field holderIdentity string holderIdentity contains the identity of the holder of a current lease. If Coordinated Leader Election is used, the holder identity must be equal to the elected LeaseCandidate.metadata.name field. +optional
 ---@field leaseDurationSeconds number leaseDurationSeconds is a duration that candidates for a lease need to wait to force acquire it. This is measured against the time of last observed renewTime. +optional
 ---@field leaseTransitions number leaseTransitions is the number of transitions of a lease between holders. +optional
----@field preferredHolder string PreferredHolder signals to a lease holder that the lease has a more optimal holder and should be given up. This field can only be set if Strategy is also set. +featureGate=CoordinatedLeaderElection +optional
+---@field preferredHolder string preferredHolder signals to a lease holder that the lease has a more optimal holder and should be given up. This field can only be set if Strategy is also set. +featureGate=CoordinatedLeaderElection +optional
 ---@field renewTime v1.MicroTime renewTime is a time when the current holder of a lease has last updated the lease. +optional
----@field strategy string Strategy indicates the strategy for picking the leader for coordinated leader election. If the field is not specified, there is no active coordination for this lease. (Alpha) Using this field requires the CoordinatedLeaderElection feature gate to be enabled. +featureGate=CoordinatedLeaderElection +optional
-
----@class corev1.AWSElasticBlockStoreVolumeSource
----@field fsType string fsType is the filesystem type of the volume that you want to mount. Tip: Ensure that the filesystem type is supported by the host operating system. Examples: "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified. More info: https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore TODO: how do we prevent errors in the filesystem from compromising the machine +optional
----@field partition number partition is the partition in the volume that you want to mount. If omitted, the default is to mount by volume name. Examples: For volume /dev/sda1, you specify the partition as "1". Similarly, the volume partition for /dev/sda is "0" (or you can leave the property empty). +optional
----@field readOnly boolean readOnly value true will force the readOnly setting in VolumeMounts. More info: https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore +optional
----@field volumeID string volumeID is unique ID of the persistent disk resource in AWS (Amazon EBS volume). More info: https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore
+---@field strategy string strategy indicates the strategy for picking the leader for coordinated leader election. If the field is not specified, there is no active coordination for this lease. (Alpha) Using this field requires the CoordinatedLeaderElection feature gate to be enabled. +featureGate=CoordinatedLeaderElection +optional
 
 ---@class corev1.Affinity
 ---@field nodeAffinity corev1.NodeAffinity Describes node affinity scheduling rules for the pod. +optional
@@ -541,104 +516,27 @@
 ---@field devicePath string DevicePath represents the device path where the volume should be available
 ---@field name string Name of the attached volume
 
----@class corev1.AzureDiskVolumeSource
----@field cachingMode string cachingMode is the Host Caching mode: None, Read Only, Read Write. +optional +default=ref(AzureDataDiskCachingReadWrite)
----@field diskName string diskName is the Name of the data disk in the blob storage
----@field diskURI string diskURI is the URI of data disk in the blob storage
----@field fsType string fsType is Filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified. +optional +default="ext4"
----@field kind string kind expected values are Shared: multiple blob disks per storage account Dedicated: single blob disk per storage account Managed: azure managed data disk (only in managed availability set). defaults to shared +default=ref(AzureSharedBlobDisk)
----@field readOnly boolean readOnly Defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. +optional +default=false
-
----@class corev1.AzureFilePersistentVolumeSource
----@field readOnly boolean readOnly defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. +optional
----@field secretName string secretName is the name of secret that contains Azure Storage Account Name and Key
----@field secretNamespace string secretNamespace is the namespace of the secret that contains Azure Storage Account Name and Key default is the same as the Pod +optional
----@field shareName string shareName is the azure Share Name
-
----@class corev1.AzureFileVolumeSource
----@field readOnly boolean readOnly defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. +optional
----@field secretName string secretName is the name of secret that contains Azure Storage Account Name and Key
----@field shareName string shareName is the azure share Name
-
----@class corev1.CSIPersistentVolumeSource
----@field controllerExpandSecretRef corev1.SecretReference controllerExpandSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI ControllerExpandVolume call. This field is optional, and may be empty if no secret is required. If the secret object contains more than one secret, all secrets are passed. +optional
----@field controllerPublishSecretRef corev1.SecretReference controllerPublishSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI ControllerPublishVolume and ControllerUnpublishVolume calls. This field is optional, and may be empty if no secret is required. If the secret object contains more than one secret, all secrets are passed. +optional
----@field driver string driver is the name of the driver to use for this volume. Required.
----@field fsType string fsType to mount. Must be a filesystem type supported by the host operating system. Ex. "ext4", "xfs", "ntfs". +optional
----@field nodeExpandSecretRef corev1.SecretReference nodeExpandSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI NodeExpandVolume call. This field is optional, may be omitted if no secret is required. If the secret object contains more than one secret, all secrets are passed. +optional
----@field nodePublishSecretRef corev1.SecretReference nodePublishSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI NodePublishVolume and NodeUnpublishVolume calls. This field is optional, and may be empty if no secret is required. If the secret object contains more than one secret, all secrets are passed. +optional
----@field nodeStageSecretRef corev1.SecretReference nodeStageSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI NodeStageVolume and NodeStageVolume and NodeUnstageVolume calls. This field is optional, and may be empty if no secret is required. If the secret object contains more than one secret, all secrets are passed. +optional
----@field readOnly boolean readOnly value to pass to ControllerPublishVolumeRequest. Defaults to false (read/write). +optional
----@field volumeAttributes table<string, string> volumeAttributes of the volume to publish. +optional
----@field volumeHandle string volumeHandle is the unique volume name returned by the CSI volume plugin’s CreateVolume to refer to the volume on all subsequent calls. Required.
-
----@class corev1.CSIVolumeSource
----@field driver string driver is the name of the CSI driver that handles this volume. Consult with your admin for the correct name as registered in the cluster.
----@field fsType string fsType to mount. Ex. "ext4", "xfs", "ntfs". If not provided, the empty value is passed to the associated CSI driver which will determine the default filesystem to apply. +optional
----@field nodePublishSecretRef corev1.LocalObjectReference nodePublishSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI NodePublishVolume and NodeUnpublishVolume calls. This field is optional, and may be empty if no secret is required. If the secret object contains more than one secret, all secret references are passed. +optional
----@field readOnly boolean readOnly specifies a read-only configuration for the volume. Defaults to false (read/write). +optional
----@field volumeAttributes table<string, string> volumeAttributes stores driver-specific properties that are passed to the CSI driver. Consult your driver's documentation for supported values. +optional
-
 ---@class corev1.Capabilities
 ---@field add string[] Added capabilities +optional +listType=atomic
 ---@field drop string[] Removed capabilities +optional +listType=atomic
 
----@class corev1.CephFSPersistentVolumeSource
----@field monitors string[] monitors is Required: Monitors is a collection of Ceph monitors More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it +listType=atomic
----@field path string path is Optional: Used as the mounted root, rather than the full Ceph tree, default is / +optional
----@field readOnly boolean readOnly is Optional: Defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it +optional
----@field secretFile string secretFile is Optional: SecretFile is the path to key ring for User, default is /etc/ceph/user.secret More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it +optional
----@field secretRef corev1.SecretReference secretRef is Optional: SecretRef is reference to the authentication secret for User, default is empty. More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it +optional
----@field user string user is Optional: User is the rados user name, default is admin More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it +optional
-
----@class corev1.CephFSVolumeSource
----@field monitors string[] monitors is Required: Monitors is a collection of Ceph monitors More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it +listType=atomic
----@field path string path is Optional: Used as the mounted root, rather than the full Ceph tree, default is / +optional
----@field readOnly boolean readOnly is Optional: Defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it +optional
----@field secretFile string secretFile is Optional: SecretFile is the path to key ring for User, default is /etc/ceph/user.secret More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it +optional
----@field secretRef corev1.LocalObjectReference secretRef is Optional: SecretRef is reference to the authentication secret for User, default is empty. More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it +optional
----@field user string user is optional: User is the rados user name, default is admin More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it +optional
-
----@class corev1.CinderPersistentVolumeSource
----@field fsType string fsType Filesystem type to mount. Must be a filesystem type supported by the host operating system. Examples: "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified. More info: https://examples.k8s.io/mysql-cinder-pd/README.md +optional
----@field readOnly boolean readOnly is Optional: Defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. More info: https://examples.k8s.io/mysql-cinder-pd/README.md +optional
----@field secretRef corev1.SecretReference secretRef is Optional: points to a secret object containing parameters used to connect to OpenStack. +optional
----@field volumeID string volumeID used to identify the volume in cinder. More info: https://examples.k8s.io/mysql-cinder-pd/README.md
-
----@class corev1.CinderVolumeSource
----@field fsType string fsType is the filesystem type to mount. Must be a filesystem type supported by the host operating system. Examples: "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified. More info: https://examples.k8s.io/mysql-cinder-pd/README.md +optional
----@field readOnly boolean readOnly defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. More info: https://examples.k8s.io/mysql-cinder-pd/README.md +optional
----@field secretRef corev1.LocalObjectReference secretRef is optional: points to a secret object containing parameters used to connect to OpenStack. +optional
----@field volumeID string volumeID used to identify the volume in cinder. More info: https://examples.k8s.io/mysql-cinder-pd/README.md
-
 ---@class corev1.ClientIPConfig
 ---@field timeoutSeconds number timeoutSeconds specifies the seconds of ClientIP type session sticky time. The value must be >0 && <=86400(for 1 day) if ServiceAffinity == "ClientIP". Default value is 10800(for 3 hours). +optional
 
----@class corev1.ClusterTrustBundleProjection
----@field labelSelector v1.LabelSelector Select all ClusterTrustBundles that match this label selector. Only has effect if signerName is set. Mutually-exclusive with name. If unset, interpreted as "match nothing". If set but empty, interpreted as "match everything". +optional
----@field name string Select a single ClusterTrustBundle by object name. Mutually-exclusive with signerName and labelSelector. +optional
----@field optional boolean If true, don't block pod startup if the referenced ClusterTrustBundle(s) aren't available. If using name, then the named ClusterTrustBundle is allowed not to exist. If using signerName, then the combination of signerName and labelSelector is allowed to match zero ClusterTrustBundles. +optional
----@field path string Relative path from the volume root to write the bundle.
----@field signerName string Select all ClusterTrustBundles that match this signer name. Mutually-exclusive with name. The contents of all selected ClusterTrustBundles will be unified and deduplicated. +optional
-
 ---@class corev1.ConfigMap
----@field TypeMeta v1.TypeMeta
----@field binaryData table<string, number[]> BinaryData contains the binary data. Each key must consist of alphanumeric characters, '-', '_' or '.'. BinaryData can contain byte sequences that are not in the UTF-8 range. The keys stored in BinaryData must not overlap with the ones in the Data field, this is enforced during validation process. Using this field will require 1.10+ apiserver and kubelet. +optional
+---@field binaryData table<string, number[]> BinaryData contains the binary data. Each key must consist of alphanumeric characters, '-', '_' or '.'. BinaryData can contain byte sequences that are not in the UTF-8 range. The keys stored in BinaryData must not overlap with the ones in the Data field, this is enforced during validation process. Using this field will require 1.10+ apiserver and kubelet. Note: BinaryData keys are not currently propagated to container env vars via ConfigMapKeyRef or ConfigMapRef env sources; only Data keys are used. +optional
 ---@field data table<string, string> Data contains the configuration data. Each key must consist of alphanumeric characters, '-', '_' or '.'. Values with non-UTF-8 byte sequences must use the BinaryData field. The keys stored in Data must not overlap with the keys in the BinaryData field, this is enforced during validation process. +optional
 ---@field immutable boolean Immutable, if set to true, ensures that data stored in the ConfigMap cannot be updated (only object metadata can be modified). If not set to true, the field can be modified at any time. Defaulted to nil. +optional
 ---@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 
 ---@class corev1.ConfigMapEnvSource
----@field LocalObjectReference corev1.LocalObjectReference The ConfigMap to select from.
 ---@field optional boolean Specify whether the ConfigMap must be defined +optional
 
 ---@class corev1.ConfigMapKeySelector
----@field LocalObjectReference corev1.LocalObjectReference The ConfigMap to select from.
----@field key string The key to select.
+---@field key string The key to select from the ConfigMap's Data field. Keys in the BinaryData field are not currently propagated to container env vars.
 ---@field optional boolean Specify whether the ConfigMap or its key must be defined +optional
 
 ---@class corev1.ConfigMapList
----@field TypeMeta v1.TypeMeta
 ---@field items corev1.ConfigMap[] Items is the list of ConfigMaps.
 ---@field metadata v1.ListMeta More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 
@@ -648,17 +546,6 @@
 ---@field namespace string Namespace is the metadata.namespace of the referenced ConfigMap. This field is required in all cases.
 ---@field resourceVersion string ResourceVersion is the metadata.ResourceVersion of the referenced ConfigMap. This field is forbidden in Node.Spec, and required in Node.Status. +optional
 ---@field uid string UID is the metadata.UID of the referenced ConfigMap. This field is forbidden in Node.Spec, and required in Node.Status. +optional
-
----@class corev1.ConfigMapProjection
----@field LocalObjectReference corev1.LocalObjectReference
----@field items corev1.KeyToPath[] items if unspecified, each key-value pair in the Data field of the referenced ConfigMap will be projected into the volume as a file whose name is the key and content is the value. If specified, the listed keys will be projected into the specified paths, and unlisted keys will not be present. If a key is specified which is not present in the ConfigMap, the volume setup will error unless it is marked optional. Paths must be relative and may not contain the '..' path or start with '..'. +optional +listType=atomic
----@field optional boolean optional specify whether the ConfigMap or its keys must be defined +optional
-
----@class corev1.ConfigMapVolumeSource
----@field LocalObjectReference corev1.LocalObjectReference
----@field defaultMode number defaultMode is optional: mode bits used to set permissions on created files by default. Must be an octal value between 0000 and 0777 or a decimal value between 0 and 511. YAML accepts both octal and decimal values, JSON requires decimal values for mode bits. Defaults to 0644. Directories within the path are not affected by this setting. This might be in conflict with other options that affect the file mode, like fsGroup, and the result can be other mode bits set. +optional
----@field items corev1.KeyToPath[] items if unspecified, each key-value pair in the Data field of the referenced ConfigMap will be projected into the volume as a file whose name is the key and content is the value. If specified, the listed keys will be projected into the specified paths, and unlisted keys will not be present. If a key is specified which is not present in the ConfigMap, the volume setup will error unless it is marked optional. Paths must be relative and may not contain the '..' path or start with '..'. +optional +listType=atomic
----@field optional boolean optional specify whether the ConfigMap or its keys must be defined +optional
 
 ---@class corev1.Container
 ---@field args string[] Arguments to the entrypoint. The container image's CMD is used if this is not provided. Variable references $(VAR_NAME) are expanded using the container's environment. If a variable cannot be resolved, the reference in the input string will be unchanged. Double $$ are reduced to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e. "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)". Escaped references will never be expanded, regardless of whether the variable exists or not. Cannot be updated. More info: https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell +optional +listType=atomic
@@ -672,9 +559,9 @@
 ---@field name string Name of the container specified as a DNS_LABEL. Each container in a pod must have a unique name (DNS_LABEL). Cannot be updated.
 ---@field ports corev1.ContainerPort[] List of ports to expose from the container. Not specifying a port here DOES NOT prevent that port from being exposed. Any port which is listening on the default "0.0.0.0" address inside a container will be accessible from the network. Modifying this array with strategic merge patch may corrupt the data. For more information See https://github.com/kubernetes/kubernetes/issues/108255. Cannot be updated. +optional +patchMergeKey=containerPort +patchStrategy=merge +listType=map +listMapKey=containerPort +listMapKey=protocol
 ---@field readinessProbe corev1.Probe Periodic probe of container service readiness. Container will be removed from service endpoints if the probe fails. Cannot be updated. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes +optional
----@field resizePolicy corev1.ContainerResizePolicy[] Resources resize policy for the container. +featureGate=InPlacePodVerticalScaling +optional +listType=atomic
+---@field resizePolicy corev1.ContainerResizePolicy[] Resources resize policy for the container. This field cannot be set on ephemeral containers. +featureGate=InPlacePodVerticalScaling +optional +listType=atomic
 ---@field resources corev1.ResourceRequirements Compute Resources required by this container. Cannot be updated. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/ +optional
----@field restartPolicy string RestartPolicy defines the restart behavior of individual containers in a pod. This overrides the pod-level restart policy. When this field is not specified, the restart behavior is defined by the Pod's restart policy and the container type. Additionally, setting the RestartPolicy as "Always" for the init container will have the following effect: this init container will be continually restarted on exit until all regular containers have terminated. Once all regular containers have completed, all init containers with restartPolicy "Always" will be shut down. This lifecycle differs from normal init containers and is often referred to as a "sidecar" container. Although this init container still starts in the init container sequence, it does not wait for the container to complete before proceeding to the next init container. Instead, the next init container starts immediately after this init container is started, or after any startupProbe has successfully completed. +featureGate=SidecarContainers +optional
+---@field restartPolicy string RestartPolicy defines the restart behavior of individual containers in a pod. This overrides the pod-level restart policy. When this field is not specified, the restart behavior is defined by the Pod's restart policy and the container type. Additionally, setting the RestartPolicy as "Always" for the init container will have the following effect: this init container will be continually restarted on exit until all regular containers have terminated. Once all regular containers have completed, all init containers with restartPolicy "Always" will be shut down. This lifecycle differs from normal init containers and is often referred to as a "sidecar" container. Although this init container still starts in the init container sequence, it does not wait for the container to complete before proceeding to the next init container. Instead, the next init container starts immediately after this init container is started, or after any startupProbe has successfully completed. +optional
 ---@field restartPolicyRules corev1.ContainerRestartRule[] Represents a list of rules to be checked to determine if the container should be restarted on exit. The rules are evaluated in order. Once a rule matches a container exit condition, the remaining rules are ignored. If no rule matches the container exit condition, the Container-level restart policy determines the whether the container is restarted or not. Constraints on the rules: - At most 20 rules are allowed. - Rules can have the same action. - Identical rules are not forbidden in validations. When rules are specified, container MUST set RestartPolicy explicitly even it if matches the Pod's RestartPolicy. +featureGate=ContainerRestartRules +optional +listType=atomic
 ---@field securityContext corev1.SecurityContext SecurityContext defines the security options the container should be run with. If set, the fields of SecurityContext override the equivalent fields of PodSecurityContext. More info: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/ +optional
 ---@field startupProbe corev1.Probe StartupProbe indicates that the Pod has successfully initialized. If specified, no other probes are executed until this completes successfully. If this probe fails, the Pod will be restarted, just as if the livenessProbe failed. This can be used to provide different probe parameters at the beginning of a Pod's lifecycle, when it might take a long time to load data or warm a cache, than during steady-state operation. This cannot be updated. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes +optional
@@ -737,7 +624,7 @@
 ---@field reason string (brief) reason the container is not yet running. +optional
 
 ---@class corev1.ContainerStatus
----@field allocatedResources table<string, resource.Quantity> AllocatedResources represents the compute resources allocated for this container by the node. Kubelet sets this value to Container.Resources.Requests upon successful pod admission and after successfully admitting desired pod resize. +featureGate=InPlacePodVerticalScalingAllocatedStatus +optional
+---@field allocatedResources table<string, resource.Quantity> AllocatedResources represents the compute resources allocated for this container by the node. Kubelet sets this value to Container.Resources.Requests upon successful pod admission and after successfully admitting desired pod resize. +optional
 ---@field allocatedResourcesStatus corev1.ResourceStatus[] AllocatedResourcesStatus represents the status of various resources allocated for this Pod. +featureGate=ResourceHealthStatus +optional +patchMergeKey=name +patchStrategy=merge +listType=map +listMapKey=name
 ---@field containerID string ContainerID is the ID of the container in the format '<type>://<container_id>'. Where type is a container runtime identifier, returned from Version call of CRI API (for example "containerd"). +optional
 ---@field image string Image is the name of container image that the container is running. The container image may not match the image used in the PodSpec, as it may have been resolved by the runtime. More info: https://kubernetes.io/docs/concepts/containers/images.
@@ -751,30 +638,13 @@
 ---@field state corev1.ContainerState State holds details about the container's current condition. +optional
 ---@field stopSignal string StopSignal reports the effective stop signal for this container +featureGate=ContainerStopSignals +optional
 ---@field user corev1.ContainerUser User represents user identity information initially attached to the first process of the container +featureGate=SupplementalGroupsPolicy +optional
----@field volumeMounts corev1.VolumeMountStatus[] Status of volume mounts. +optional +patchMergeKey=mountPath +patchStrategy=merge +listType=map +listMapKey=mountPath +featureGate=RecursiveReadOnlyMounts
+---@field volumeMounts corev1.VolumeMountStatus[] Status of volume mounts. +optional +patchMergeKey=mountPath +patchStrategy=merge +listType=map +listMapKey=mountPath
 
 ---@class corev1.ContainerUser
 ---@field linux corev1.LinuxContainerUser Linux holds user identity information initially attached to the first process of the containers in Linux. Note that the actual running identity can be changed if the process has enough privilege to do so. +optional
 
 ---@class corev1.DaemonEndpoint
 ---@field Port number Port number of the given endpoint.
-
----@class corev1.DownwardAPIProjection
----@field items corev1.DownwardAPIVolumeFile[] Items is a list of DownwardAPIVolume file +optional +listType=atomic
-
----@class corev1.DownwardAPIVolumeFile
----@field fieldRef corev1.ObjectFieldSelector Required: Selects a field of the pod: only annotations, labels, name, namespace and uid are supported. +optional
----@field mode number Optional: mode bits used to set permissions on this file, must be an octal value between 0000 and 0777 or a decimal value between 0 and 511. YAML accepts both octal and decimal values, JSON requires decimal values for mode bits. If not specified, the volume defaultMode will be used. This might be in conflict with other options that affect the file mode, like fsGroup, and the result can be other mode bits set. +optional
----@field path string Required: Path is the relative path name of the file to be created. Must not be absolute or contain the '..' path. Must be utf-8 encoded. The first item of the relative path must not start with '..'
----@field resourceFieldRef corev1.ResourceFieldSelector Selects a resource of the container: only resources limits and requests (limits.cpu, limits.memory, requests.cpu and requests.memory) are currently supported. +optional
-
----@class corev1.DownwardAPIVolumeSource
----@field defaultMode number Optional: mode bits to use on created files by default. Must be a Optional: mode bits used to set permissions on created files by default. Must be an octal value between 0000 and 0777 or a decimal value between 0 and 511. YAML accepts both octal and decimal values, JSON requires decimal values for mode bits. Defaults to 0644. Directories within the path are not affected by this setting. This might be in conflict with other options that affect the file mode, like fsGroup, and the result can be other mode bits set. +optional
----@field items corev1.DownwardAPIVolumeFile[] Items is a list of downward API volume file +optional +listType=atomic
-
----@class corev1.EmptyDirVolumeSource
----@field medium string medium represents what type of storage medium should back this directory. The default is "" which means to use the node's default medium. Must be an empty string (default) or Memory. More info: https://kubernetes.io/docs/concepts/storage/volumes#emptydir +optional
----@field sizeLimit resource.Quantity sizeLimit is the total amount of local storage required for this EmptyDir volume. The size limit is also applicable for memory medium. The maximum usage on memory medium EmptyDir would be the minimum value between the SizeLimit specified here and the sum of memory limits of all containers in a pod. The default is nil which means that the limit is undefined. More info: https://kubernetes.io/docs/concepts/storage/volumes#emptydir +optional
 
 ---@class corev1.EnvFromSource
 ---@field configMapRef corev1.ConfigMapEnvSource The ConfigMap to select from +optional
@@ -794,52 +664,18 @@
 ---@field secretKeyRef corev1.SecretKeySelector Selects a key of a secret in the pod's namespace +optional
 
 ---@class corev1.EphemeralContainer
----@field EphemeralContainerCommon corev1.EphemeralContainerCommon Ephemeral containers have all of the fields of Container, plus additional fields specific to ephemeral containers. Fields in common with Container are in the following inlined struct so than an EphemeralContainer may easily be converted to a Container.
 ---@field targetContainerName string If set, the name of the container from PodSpec that this ephemeral container targets. The ephemeral container will be run in the namespaces (IPC, PID, etc) of this container. If not set then the ephemeral container uses the namespaces configured in the Pod spec. The container runtime must implement support for this feature. If the runtime does not support namespace targeting then the result of setting this field is undefined. +optional
-
----@class corev1.EphemeralContainerCommon
----@field args string[] Arguments to the entrypoint. The image's CMD is used if this is not provided. Variable references $(VAR_NAME) are expanded using the container's environment. If a variable cannot be resolved, the reference in the input string will be unchanged. Double $$ are reduced to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e. "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)". Escaped references will never be expanded, regardless of whether the variable exists or not. Cannot be updated. More info: https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell +optional +listType=atomic
----@field command string[] Entrypoint array. Not executed within a shell. The image's ENTRYPOINT is used if this is not provided. Variable references $(VAR_NAME) are expanded using the container's environment. If a variable cannot be resolved, the reference in the input string will be unchanged. Double $$ are reduced to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e. "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)". Escaped references will never be expanded, regardless of whether the variable exists or not. Cannot be updated. More info: https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell +optional +listType=atomic
----@field env corev1.EnvVar[] List of environment variables to set in the container. Cannot be updated. +optional +patchMergeKey=name +patchStrategy=merge +listType=map +listMapKey=name
----@field envFrom corev1.EnvFromSource[] List of sources to populate environment variables in the container. The keys defined within a source may consist of any printable ASCII characters except '='. When a key exists in multiple sources, the value associated with the last source will take precedence. Values defined by an Env with a duplicate key will take precedence. Cannot be updated. +optional +listType=atomic
----@field image string Container image name. More info: https://kubernetes.io/docs/concepts/containers/images
----@field imagePullPolicy string Image pull policy. One of Always, Never, IfNotPresent. Defaults to Always if :latest tag is specified, or IfNotPresent otherwise. Cannot be updated. More info: https://kubernetes.io/docs/concepts/containers/images#updating-images +optional
----@field lifecycle corev1.Lifecycle Lifecycle is not allowed for ephemeral containers. +optional
----@field livenessProbe corev1.Probe Probes are not allowed for ephemeral containers. +optional
----@field name string Name of the ephemeral container specified as a DNS_LABEL. This name must be unique among all containers, init containers and ephemeral containers.
----@field ports corev1.ContainerPort[] Ports are not allowed for ephemeral containers. +optional +patchMergeKey=containerPort +patchStrategy=merge +listType=map +listMapKey=containerPort +listMapKey=protocol
----@field readinessProbe corev1.Probe Probes are not allowed for ephemeral containers. +optional
----@field resizePolicy corev1.ContainerResizePolicy[] Resources resize policy for the container. +featureGate=InPlacePodVerticalScaling +optional +listType=atomic
----@field resources corev1.ResourceRequirements Resources are not allowed for ephemeral containers. Ephemeral containers use spare resources already allocated to the pod. +optional
----@field restartPolicy string Restart policy for the container to manage the restart behavior of each container within a pod. You cannot set this field on ephemeral containers. +featureGate=SidecarContainers +optional
----@field restartPolicyRules corev1.ContainerRestartRule[] Represents a list of rules to be checked to determine if the container should be restarted on exit. You cannot set this field on ephemeral containers. +featureGate=ContainerRestartRules +optional +listType=atomic
----@field securityContext corev1.SecurityContext Optional: SecurityContext defines the security options the ephemeral container should be run with. If set, the fields of SecurityContext override the equivalent fields of PodSecurityContext. +optional
----@field startupProbe corev1.Probe Probes are not allowed for ephemeral containers. +optional
----@field stdin boolean Whether this container should allocate a buffer for stdin in the container runtime. If this is not set, reads from stdin in the container will always result in EOF. Default is false. +optional
----@field stdinOnce boolean Whether the container runtime should close the stdin channel after it has been opened by a single attach. When stdin is true the stdin stream will remain open across multiple attach sessions. If stdinOnce is set to true, stdin is opened on container start, is empty until the first client attaches to stdin, and then remains open and accepts data until the client disconnects, at which time stdin is closed and remains closed until the container is restarted. If this flag is false, a container processes that reads from stdin will never receive an EOF. Default is false +optional
----@field terminationMessagePath string Optional: Path at which the file to which the container's termination message will be written is mounted into the container's filesystem. Message written is intended to be brief final status, such as an assertion failure message. Will be truncated by the node if greater than 4096 bytes. The total message length across all containers will be limited to 12kb. Defaults to /dev/termination-log. Cannot be updated. +optional
----@field terminationMessagePolicy string Indicate how the termination message should be populated. File will use the contents of terminationMessagePath to populate the container status message on both success and failure. FallbackToLogsOnError will use the last chunk of container log output if the termination message file is empty and the container exited with an error. The log output is limited to 2048 bytes or 80 lines, whichever is smaller. Defaults to File. Cannot be updated. +optional
----@field tty boolean Whether this container should allocate a TTY for itself, also requires 'stdin' to be true. Default is false. +optional
----@field volumeDevices corev1.VolumeDevice[] volumeDevices is the list of block devices to be used by the container. +patchMergeKey=devicePath +patchStrategy=merge +listType=map +listMapKey=devicePath +optional
----@field volumeMounts corev1.VolumeMount[] Pod volumes to mount into the container's filesystem. Subpath mounts are not allowed for ephemeral containers. Cannot be updated. +optional +patchMergeKey=mountPath +patchStrategy=merge +listType=map +listMapKey=mountPath
----@field workingDir string Container's working directory. If not specified, the container runtime's default will be used, which might be configured in the container image. Cannot be updated. +optional
-
----@class corev1.EphemeralVolumeSource
----@field volumeClaimTemplate corev1.PersistentVolumeClaimTemplate Will be used to create a stand-alone PVC to provision the volume. The pod in which this EphemeralVolumeSource is embedded will be the owner of the PVC, i.e. the PVC will be deleted together with the pod. The name of the PVC will be `<pod name>-<volume name>` where `<volume name>` is the name from the `PodSpec.Volumes` array entry. Pod validation will reject the pod if the concatenated name is not valid for a PVC (for example, too long). An existing PVC with that name that is not owned by the pod will *not* be used for the pod to avoid using an unrelated volume by mistake. Starting the pod is then blocked until the unrelated PVC is removed. If such a pre-created PVC is meant to be used by the pod, the PVC has to updated with an owner reference to the pod once the pod exists. Normally this should not be necessary, but it may be useful when manually reconstructing a broken cluster. This field is read-only and no changes will be made by Kubernetes to the PVC after it has been created. Required, must not be nil.
 
 ---@class corev1.EventSource
 ---@field component string Component from which the event is generated. +optional
 ---@field host string Node name on which the event is generated. +optional
 
+---@class corev1.EvictionResponder
+---@field name string name allows you to identify the responder responding to the Eviction. It must be a valid domain-prefixed key (such as "acme.io/foo"). Domain names *.k8s.io and *.kubernetes.io are reserved. This field must be unique for each responder. This field is required. +required +k8s:required +k8s:format=k8s-prefixed-label-key +k8s:customValidation
+---@field priority number priority for this responder. Higher priorities are selected first by the evictionrequest-controller. If there are responders with the same priority, the responder whose domain name comes first in the alphabetical higher domain order, will be picked. This means that the top domain labels are compared alphabetically first, followed by the lower domain labels. The key is compared last. The responder that is the managing controller of the pod should set the value of this field to 10000 to allow both for preemption or fallback registration by other responders. The minimum value is 0 and the maximum value is 100000. The interval 0-999 is reserved for responders with *.k8s.io suffix. This field is required. +required +k8s:required +k8s:minimum=0 +k8s:maximum=100000 +k8s:customValidation
+
 ---@class corev1.ExecAction
 ---@field command string[] Command is the command line to execute inside the container, the working directory for the command is root ('/') in the container's filesystem. The command is simply exec'd, it is not run inside a shell, so traditional shell instructions ('|', etc) won't work. To use a shell, you need to explicitly call out to that shell. Exit status of 0 is treated as live/healthy and non-zero is unhealthy. +optional +listType=atomic
-
----@class corev1.FCVolumeSource
----@field fsType string fsType is the filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified. TODO: how do we prevent errors in the filesystem from compromising the machine +optional
----@field lun number lun is Optional: FC target lun number +optional
----@field readOnly boolean readOnly is Optional: Defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. +optional
----@field targetWWNs string[] targetWWNs is Optional: FC target worldwide names (WWNs) +optional +listType=atomic
----@field wwids string[] wwids Optional: FC volume world wide identifiers (wwids) Either wwids or combination of targetWWNs and lun must be set, but not both simultaneously. +optional +listType=atomic
 
 ---@class corev1.FileKeySelector
 ---@field key string The key within the env file. An invalid key will prevent the pod from starting. The keys defined within a source may consist of any printable ASCII characters except '='. During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters. +required
@@ -847,55 +683,12 @@
 ---@field path string The path within the volume from which to select the file. Must be relative and may not contain the '..' path or start with '..'. +required
 ---@field volumeName string The name of the volume mount containing the env file. +required
 
----@class corev1.FlexPersistentVolumeSource
----@field driver string driver is the name of the driver to use for this volume.
----@field fsType string fsType is the Filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. "ext4", "xfs", "ntfs". The default filesystem depends on FlexVolume script. +optional
----@field options table<string, string> options is Optional: this field holds extra command options if any. +optional
----@field readOnly boolean readOnly is Optional: defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. +optional
----@field secretRef corev1.SecretReference secretRef is Optional: SecretRef is reference to the secret object containing sensitive information to pass to the plugin scripts. This may be empty if no secret object is specified. If the secret object contains more than one secret, all secrets are passed to the plugin scripts. +optional
-
----@class corev1.FlexVolumeSource
----@field driver string driver is the name of the driver to use for this volume.
----@field fsType string fsType is the filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. "ext4", "xfs", "ntfs". The default filesystem depends on FlexVolume script. +optional
----@field options table<string, string> options is Optional: this field holds extra command options if any. +optional
----@field readOnly boolean readOnly is Optional: defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. +optional
----@field secretRef corev1.LocalObjectReference secretRef is Optional: secretRef is reference to the secret object containing sensitive information to pass to the plugin scripts. This may be empty if no secret object is specified. If the secret object contains more than one secret, all secrets are passed to the plugin scripts. +optional
-
----@class corev1.FlockerVolumeSource
----@field datasetName string datasetName is Name of the dataset stored as metadata -> name on the dataset for Flocker should be considered as deprecated +optional
----@field datasetUUID string datasetUUID is the UUID of the dataset. This is unique identifier of a Flocker dataset +optional
-
----@class corev1.GCEPersistentDiskVolumeSource
----@field fsType string fsType is filesystem type of the volume that you want to mount. Tip: Ensure that the filesystem type is supported by the host operating system. Examples: "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified. More info: https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk TODO: how do we prevent errors in the filesystem from compromising the machine +optional
----@field partition number partition is the partition in the volume that you want to mount. If omitted, the default is to mount by volume name. Examples: For volume /dev/sda1, you specify the partition as "1". Similarly, the volume partition for /dev/sda is "0" (or you can leave the property empty). More info: https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk +optional
----@field pdName string pdName is unique name of the PD resource in GCE. Used to identify the disk in GCE. More info: https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk
----@field readOnly boolean readOnly here will force the ReadOnly setting in VolumeMounts. Defaults to false. More info: https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk +optional
-
----@class corev1.GRPCAction
----@field port number Port number of the gRPC service. Number must be in the range 1 to 65535.
----@field service string Service is the name of the service to place in the gRPC HealthCheckRequest (see https://github.com/grpc/grpc/blob/master/doc/health-checking.md). If this is not specified, the default behavior is defined by gRPC. +optional +default=""
-
----@class corev1.GitRepoVolumeSource
----@field directory string directory is the target directory name. Must not contain or start with '..'. If '.' is supplied, the volume directory will be the git repository. Otherwise, if specified, the volume will contain the git repository in the subdirectory with the given name. +optional
----@field repository string repository is the URL
----@field revision string revision is the commit hash for the specified revision. +optional
-
----@class corev1.GlusterfsPersistentVolumeSource
----@field endpoints string endpoints is the endpoint name that details Glusterfs topology. More info: https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod
----@field endpointsNamespace string endpointsNamespace is the namespace that contains Glusterfs endpoint. If this field is empty, the EndpointNamespace defaults to the same namespace as the bound PVC. More info: https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod +optional
----@field path string path is the Glusterfs volume path. More info: https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod
----@field readOnly boolean readOnly here will force the Glusterfs volume to be mounted with read-only permissions. Defaults to false. More info: https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod +optional
-
----@class corev1.GlusterfsVolumeSource
----@field endpoints string endpoints is the endpoint name that details Glusterfs topology.
----@field path string path is the Glusterfs volume path. More info: https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod
----@field readOnly boolean readOnly here will force the Glusterfs volume to be mounted with read-only permissions. Defaults to false. More info: https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod +optional
-
 ---@class corev1.HTTPGetAction
 ---@field host string Host name to connect to, defaults to the pod IP. You probably want to set "Host" in httpHeaders instead. +optional
 ---@field httpHeaders corev1.HTTPHeader[] Custom headers to set in the request. HTTP allows repeated headers. +optional +listType=atomic
 ---@field path string Path to access on the HTTP server. +optional
 ---@field port intstr.IntOrString Name or number of the port to access on the container. Number must be in the range 1 to 65535. Name must be an IANA_SVC_NAME.
+---@field protocol string Protocol selects the wire protocol for the probe connection. Nil defaults to HTTP/1.1. +optional +featureGate=H2CContainerProbe
 ---@field scheme string Scheme to use for connecting to the host. Defaults to HTTP. +optional
 
 ---@class corev1.HTTPHeader
@@ -909,44 +702,8 @@
 ---@class corev1.HostIP
 ---@field ip string IP is the IP address assigned to the host +required
 
----@class corev1.HostPathVolumeSource
----@field path string path of the directory on the host. If the path is a symlink, it will follow the link to the real path. More info: https://kubernetes.io/docs/concepts/storage/volumes#hostpath
----@field type string type for HostPath Volume Defaults to "" More info: https://kubernetes.io/docs/concepts/storage/volumes#hostpath +optional
-
----@class corev1.ISCSIPersistentVolumeSource
----@field chapAuthDiscovery boolean chapAuthDiscovery defines whether support iSCSI Discovery CHAP authentication +optional
----@field chapAuthSession boolean chapAuthSession defines whether support iSCSI Session CHAP authentication +optional
----@field fsType string fsType is the filesystem type of the volume that you want to mount. Tip: Ensure that the filesystem type is supported by the host operating system. Examples: "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified. More info: https://kubernetes.io/docs/concepts/storage/volumes#iscsi TODO: how do we prevent errors in the filesystem from compromising the machine +optional
----@field initiatorName string initiatorName is the custom iSCSI Initiator Name. If initiatorName is specified with iscsiInterface simultaneously, new iSCSI interface <target portal>:<volume name> will be created for the connection. +optional
----@field iqn string iqn is Target iSCSI Qualified Name.
----@field iscsiInterface string iscsiInterface is the interface Name that uses an iSCSI transport. Defaults to 'default' (tcp). +optional +default="default"
----@field lun number lun is iSCSI Target Lun number.
----@field portals string[] portals is the iSCSI Target Portal List. The Portal is either an IP or ip_addr:port if the port is other than default (typically TCP ports 860 and 3260). +optional +listType=atomic
----@field readOnly boolean readOnly here will force the ReadOnly setting in VolumeMounts. Defaults to false. +optional
----@field secretRef corev1.SecretReference secretRef is the CHAP Secret for iSCSI target and initiator authentication +optional
----@field targetPortal string targetPortal is iSCSI Target Portal. The Portal is either an IP or ip_addr:port if the port is other than default (typically TCP ports 860 and 3260).
-
----@class corev1.ISCSIVolumeSource
----@field chapAuthDiscovery boolean chapAuthDiscovery defines whether support iSCSI Discovery CHAP authentication +optional
----@field chapAuthSession boolean chapAuthSession defines whether support iSCSI Session CHAP authentication +optional
----@field fsType string fsType is the filesystem type of the volume that you want to mount. Tip: Ensure that the filesystem type is supported by the host operating system. Examples: "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified. More info: https://kubernetes.io/docs/concepts/storage/volumes#iscsi TODO: how do we prevent errors in the filesystem from compromising the machine +optional
----@field initiatorName string initiatorName is the custom iSCSI Initiator Name. If initiatorName is specified with iscsiInterface simultaneously, new iSCSI interface <target portal>:<volume name> will be created for the connection. +optional
----@field iqn string iqn is the target iSCSI Qualified Name.
----@field iscsiInterface string iscsiInterface is the interface Name that uses an iSCSI transport. Defaults to 'default' (tcp). +optional +default="default"
----@field lun number lun represents iSCSI Target Lun number.
----@field portals string[] portals is the iSCSI Target Portal List. The portal is either an IP or ip_addr:port if the port is other than default (typically TCP ports 860 and 3260). +optional +listType=atomic
----@field readOnly boolean readOnly here will force the ReadOnly setting in VolumeMounts. Defaults to false. +optional
----@field secretRef corev1.LocalObjectReference secretRef is the CHAP Secret for iSCSI target and initiator authentication +optional
----@field targetPortal string targetPortal is iSCSI Target Portal. The Portal is either an IP or ip_addr:port if the port is other than default (typically TCP ports 860 and 3260).
-
----@class corev1.ImageVolumeSource
----@field pullPolicy string Policy for pulling OCI objects. Possible values are: Always: the kubelet always attempts to pull the reference. Container creation will fail If the pull fails. Never: the kubelet never pulls the reference and only uses a local image or artifact. Container creation will fail if the reference isn't present. IfNotPresent: the kubelet pulls if the reference isn't already present on disk. Container creation will fail if the reference isn't present and the pull fails. Defaults to Always if :latest tag is specified, or IfNotPresent otherwise. +optional
----@field reference string Required: Image or artifact reference to be used. Behaves in the same way as pod.spec.containers[*].image. Pull secrets will be assembled in the same way as for the container image by looking up node credentials, SA image pull secrets, and pod spec image pull secrets. More info: https://kubernetes.io/docs/concepts/containers/images This field is optional to allow higher level config management to default or override container images in workload controllers like Deployments and StatefulSets. +optional
-
----@class corev1.KeyToPath
----@field key string key is the key to project.
----@field mode number mode is Optional: mode bits used to set permissions on this file. Must be an octal value between 0000 and 0777 or a decimal value between 0 and 511. YAML accepts both octal and decimal values, JSON requires decimal values for mode bits. If not specified, the volume defaultMode will be used. This might be in conflict with other options that affect the file mode, like fsGroup, and the result can be other mode bits set. +optional
----@field path string path is the relative path of the file to map the key to. May not be an absolute path. May not contain the path element '..'. May not start with the string '..'.
+---@class corev1.ImageVolumeStatus
+---@field imageRef string ImageRef is the digest of the image used for this volume. It should have a value that's similar to the pod's status.containerStatuses[i].imageID. The ImageRef length should not exceed 256 characters. +kubebuilder:validation:MaxLength=256 +required
 
 ---@class corev1.Lifecycle
 ---@field postStart corev1.LifecycleHandler PostStart is called immediately after a container is created. If the handler fails, the container is terminated and restarted according to its restart policy. Other management of the container blocks until the hook completes. More info: https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#container-hooks +optional
@@ -956,7 +713,7 @@
 ---@class corev1.LifecycleHandler
 ---@field exec corev1.ExecAction Exec specifies a command to execute in the container. +optional
 ---@field httpGet corev1.HTTPGetAction HTTPGet specifies an HTTP GET request to perform. +optional
----@field sleep corev1.SleepAction Sleep represents a duration that the container should sleep. +featureGate=PodLifecycleSleepAction +optional
+---@field sleep corev1.SleepAction Sleep represents a duration that the container should sleep. +optional
 ---@field tcpSocket corev1.TCPSocketAction Deprecated. TCPSocket is NOT supported as a LifecycleHandler and kept for backward compatibility. There is no validation of this field and lifecycle hooks will fail at runtime when it is specified. +optional
 
 ---@class corev1.LinuxContainerUser
@@ -976,21 +733,11 @@
 ---@class corev1.LocalObjectReference
 ---@field name string Name of the referent. This field is effectively required, but due to backwards compatibility is allowed to be empty. Instances of this type with an empty value here are almost certainly wrong. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names +optional +default="" +kubebuilder:default="" TODO: Drop `kubebuilder:default` when controller-gen doesn't need it https://github.com/kubernetes-sigs/kubebuilder/issues/3896.
 
----@class corev1.LocalVolumeSource
----@field fsType string fsType is the filesystem type to mount. It applies only when the Path is a block device. Must be a filesystem type supported by the host operating system. Ex. "ext4", "xfs", "ntfs". The default value is to auto-select a filesystem if unspecified. +optional
----@field path string path of the full path to the volume on the node. It can be either a directory or block device (disk, partition, ...).
-
 ---@class corev1.ModifyVolumeStatus
 ---@field status string status is the status of the ControllerModifyVolume operation. It can be in any of following states: - Pending Pending indicates that the PersistentVolumeClaim cannot be modified due to unmet requirements, such as the specified VolumeAttributesClass not existing. - InProgress InProgress indicates that the volume is being modified. - Infeasible Infeasible indicates that the request has been rejected as invalid by the CSI driver. To resolve the error, a valid VolumeAttributesClass needs to be specified. Note: New statuses can be added in the future. Consumers should check for unknown statuses and fail appropriately.
 ---@field targetVolumeAttributesClassName string targetVolumeAttributesClassName is the name of the VolumeAttributesClass the PVC currently being reconciled
 
----@class corev1.NFSVolumeSource
----@field path string path that is exported by the NFS server. More info: https://kubernetes.io/docs/concepts/storage/volumes#nfs
----@field readOnly boolean readOnly here will force the NFS export to be mounted with read-only permissions. Defaults to false. More info: https://kubernetes.io/docs/concepts/storage/volumes#nfs +optional
----@field server string server is the hostname or IP address of the NFS server. More info: https://kubernetes.io/docs/concepts/storage/volumes#nfs
-
 ---@class corev1.Namespace
----@field TypeMeta v1.TypeMeta
 ---@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 ---@field spec corev1.NamespaceSpec Spec defines the behavior of the Namespace. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
 ---@field status corev1.NamespaceStatus Status describes the current status of a Namespace. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
@@ -1003,7 +750,6 @@
 ---@field type string Type of namespace controller condition.
 
 ---@class corev1.NamespaceList
----@field TypeMeta v1.TypeMeta
 ---@field items corev1.Namespace[] Items is the list of Namespace objects in the list. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
 ---@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +optional
 
@@ -1015,7 +761,6 @@
 ---@field phase string Phase is the current lifecycle phase of the namespace. More info: https://kubernetes.io/docs/tasks/administer-cluster/namespaces/ +optional
 
 ---@class corev1.Node
----@field TypeMeta v1.TypeMeta
 ---@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 ---@field spec corev1.NodeSpec Spec defines the behavior of a node. https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
 ---@field status corev1.NodeStatus Most recently observed status of the node. Populated by the system. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
@@ -1027,6 +772,21 @@
 ---@class corev1.NodeAffinity
 ---@field preferredDuringSchedulingIgnoredDuringExecution corev1.PreferredSchedulingTerm[] The scheduler will prefer to schedule pods to nodes that satisfy the affinity expressions specified by this field, but it may choose a node that violates one or more of the expressions. The node that is most preferred is the one with the greatest sum of weights, i.e. for each node that meets all of the scheduling requirements (resource request, requiredDuringScheduling affinity expressions, etc.), compute a sum by iterating through the elements of this field and adding "weight" to the sum if the node matches the corresponding matchExpressions; the node(s) with the highest sum are the most preferred. +optional +listType=atomic
 ---@field requiredDuringSchedulingIgnoredDuringExecution corev1.NodeSelector If the affinity requirements specified by this field are not met at scheduling time, the pod will not be scheduled onto the node. If the affinity requirements specified by this field cease to be met at some point during pod execution (e.g. due to an update), the system may or may not try to eventually evict the pod from its node. +optional
+
+---@class corev1.NodeAllocatableMappedResources
+---@field name string Name is the name of the resource (e.g., cpu, memory). +required +k8s:required
+---@field quantity resource.Quantity Quantity is the total node allocatable resource capacity allocated for the claim. This claim's allocated devices is shared by all the containers referencing the claim. Kubelet adds this value to both requests and limits at the pod-level cgroup, and to limits at the container-level cgroup for each container referencing the claim. +required +k8s:required
+
+---@class corev1.NodeAllocatableOverheadResources
+---@field name string Name is the name of the resource (e.g., cpu, memory). +required +k8s:required
+---@field perContainer resource.Quantity PerContainer is the variable overhead quantity applied for each container referencing the claim. The container references are recorded in `nodeAllocatableResourceClaimStatuses.containers`. The total overhead quantity allocated for the claim is computed as: Quantity = PerPod + (PerContainer * NumReferences) Kubelet accounts for this overhead in cgroups: - Pod-level cgroup (requests and limits): Kubelet adds PerPod + (PerContainer * NumReferences). - Container-level cgroup (limits only): Kubelet adds PerPod + PerContainer for each referencing container. This allows any single container to access the pod-level overhead, while the parent cgroup caps the total usage to account for PerPod exactly once. At least one of PerPod or PerContainer must be specified. Specifying neither is an invalid configuration. +optional +k8s:optional
+---@field perPod resource.Quantity PerPod is the flat overhead quantity allocated per pod. Adding to each container limit allows individual containers to utilize the overhead, while the parent pod-level cgroup limit caps the total usage at the pod boundary where the overhead is accounted for exactly once. At least one of PerPod or PerContainer must be specified. Specifying neither is an invalid configuration. +optional +k8s:optional
+
+---@class corev1.NodeAllocatableResourceClaimStatus
+---@field containers string[] Containers lists the names of all containers in this pod that reference the claim. +optional +listType=set +k8s:optional +k8s:listType=set
+---@field mapping corev1.NodeAllocatableMappedResources[] Mapping contains allocations through devices mapped in the device spec's `nodeAllocatableResources[...].mapping` field. This is used by kubelet for pod level and container-level cgroup enforcement. +optional +patchStrategy=merge +patchMergeKey=name +listType=map +listMapKey=name +k8s:optional +k8s:listType=map +k8s:listMapKey=name
+---@field overhead corev1.NodeAllocatableOverheadResources[] Overhead contains allocations through devices mapped in the device spec's `nodeAllocatableResources[...].overhead` field. This is used by kubelet for pod level and container-level cgroup enforcement. +optional +patchStrategy=merge +patchMergeKey=name +listType=map +listMapKey=name +k8s:optional +k8s:listType=map +k8s:listMapKey=name
+---@field resourceClaimName string ResourceClaimName is the resource claim referenced by the pod that resulted in this node allocatable resource allocation. +required +k8s:required
 
 ---@class corev1.NodeCondition
 ---@field lastHeartbeatTime v1.Time Last time we got an update on a given condition. +optional
@@ -1052,17 +812,19 @@
 ---@field supplementalGroupsPolicy boolean SupplementalGroupsPolicy is set to true if the runtime supports SupplementalGroupsPolicy and ContainerUser. +optional
 
 ---@class corev1.NodeList
----@field TypeMeta v1.TypeMeta
 ---@field items corev1.Node[] List of nodes
 ---@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +optional
+
+---@class corev1.NodePodPreemptionPolicy
+---@field disableResizePreemption string[] DisableResizePreemption lists the owners (e.g., autoscalers, operators, administrators) that have requested to disable scheduler and Kubelet preemption for in-place pod resize on this node. If this list is non-empty, resize-induced preemption is disabled on this node. This is an alpha field and requires enabling the InPlacePodVerticalScalingSchedulerPreemption feature gate. +listType=set +k8s:listType=set +optional +k8s:maxItems=20 +k8s:optional +k8s:eachVal=+k8s:format=k8s-label-key
 
 ---@class corev1.NodeRuntimeHandler
 ---@field features corev1.NodeRuntimeHandlerFeatures Supported features. +optional
 ---@field name string Runtime handler name. Empty for the default runtime handler. +optional
 
 ---@class corev1.NodeRuntimeHandlerFeatures
----@field recursiveReadOnlyMounts boolean RecursiveReadOnlyMounts is set to true if the runtime handler supports RecursiveReadOnlyMounts. +featureGate=RecursiveReadOnlyMounts +optional
----@field userNamespaces boolean UserNamespaces is set to true if the runtime handler supports UserNamespaces, including for volumes. +featureGate=UserNamespacesSupport +optional
+---@field recursiveReadOnlyMounts boolean RecursiveReadOnlyMounts is set to true if the runtime handler supports RecursiveReadOnlyMounts. +optional
+---@field userNamespaces boolean UserNamespaces is set to true if the runtime handler supports UserNamespaces, including for volumes. +optional
 
 ---@class corev1.NodeSelector
 ---@field nodeSelectorTerms corev1.NodeSelectorTerm[] Required. A list of node selector terms. The terms are ORed. +listType=atomic
@@ -1081,7 +843,8 @@
 ---@field externalID string Deprecated. Not all kubelets will set this field. Remove field after 1.13. see: https://issues.k8s.io/61966 +optional
 ---@field podCIDR string PodCIDR represents the pod IP range assigned to the node. +optional
 ---@field podCIDRs string[] podCIDRs represents the IP ranges assigned to the node for usage by Pods on that node. If this field is specified, the 0th entry must match the podCIDR field. It may contain at most 1 value for each of IPv4 and IPv6. +optional +patchStrategy=merge +listType=set
----@field providerID string ID of the node assigned by the cloud provider in the format: <ProviderName>://<ProviderSpecificNodeID> +optional
+---@field podPreemptionPolicy corev1.NodePodPreemptionPolicy PodPreemptionPolicy controls the node-level preemption behaviors for pods on this node. This is an alpha field and requires enabling the InPlacePodVerticalScalingSchedulerPreemption feature gate. +featureGate=InPlacePodVerticalScalingSchedulerPreemption +optional +k8s:optional +k8s:ifDisabled(InPlacePodVerticalScalingSchedulerPreemption)=+k8s:forbidden
+---@field providerID string ID of the node assigned by the cloud provider in the format: <ProviderName>://<ProviderSpecificNodeID> +optional +k8s:alpha(since: "1.36")=+k8s:optional +k8s:alpha(since: "1.36")=+k8s:update=NoModify +k8s:alpha(since: "1.36")=+k8s:update=NoUnset
 ---@field taints corev1.Taint[] If specified, the node's taints. +optional +listType=atomic
 ---@field unschedulable boolean Unschedulable controls node schedulability of new pods. By default, node is schedulable. More info: https://kubernetes.io/docs/concepts/nodes/node/#manual-node-administration +optional
 
@@ -1092,11 +855,12 @@
 ---@field conditions corev1.NodeCondition[] Conditions is an array of current observed node conditions. More info: https://kubernetes.io/docs/reference/node/node-status/#condition +optional +patchMergeKey=type +patchStrategy=merge +listType=map +listMapKey=type
 ---@field config corev1.NodeConfigStatus Status of the config assigned to the node via the dynamic Kubelet config feature. +optional
 ---@field daemonEndpoints corev1.NodeDaemonEndpoints Endpoints of daemons running on the Node. +optional
+---@field declaredFeatures string[] DeclaredFeatures represents the features related to feature gates that are declared by the node. +featureGate=NodeDeclaredFeatures +optional +listType=atomic
 ---@field features corev1.NodeFeatures Features describes the set of features implemented by the CRI implementation. +featureGate=SupplementalGroupsPolicy +optional
 ---@field images corev1.ContainerImage[] List of container images on this node +optional +listType=atomic
 ---@field nodeInfo corev1.NodeSystemInfo Set of ids/uuids to uniquely identify the node. More info: https://kubernetes.io/docs/reference/node/node-status/#info +optional
 ---@field phase string NodePhase is the recently observed lifecycle phase of the node. More info: https://kubernetes.io/docs/concepts/nodes/node/#phase The field is never populated, and now is deprecated. +optional
----@field runtimeHandlers corev1.NodeRuntimeHandler[] The available runtime handlers. +featureGate=RecursiveReadOnlyMounts +featureGate=UserNamespacesSupport +optional +listType=atomic
+---@field runtimeHandlers corev1.NodeRuntimeHandler[] The available runtime handlers. +optional +listType=atomic
 ---@field volumesAttached corev1.AttachedVolume[] List of volumes that are attached to the node. +optional +listType=atomic
 ---@field volumesInUse string[] List of attachable volumes in use (mounted) by the node. +optional +listType=atomic
 
@@ -1113,6 +877,7 @@
 ---@field machineID string MachineID reported by the node. For unique machine identification in the cluster this field is preferred. Learn more from man(5) machine-id: http://man7.org/linux/man-pages/man5/machine-id.5.html
 ---@field operatingSystem string The Operating System reported by the node
 ---@field osImage string OS Image reported by the node from /etc/os-release (e.g. Debian GNU/Linux 7 (wheezy)).
+---@field runningInUserNamespace boolean Whether the node is running in a user namespace. +featureGate=KubeletInUserNamespace +optional
 ---@field swap corev1.NodeSwapStatus Swap Info reported by the node.
 ---@field systemUUID string SystemUUID reported by the node. For unique machine identification MachineID is preferred. This field is specific to Red Hat hosts https://access.redhat.com/documentation/en-us/red_hat_subscription_management/1/html/rhsm/uuid
 
@@ -1130,13 +895,11 @@
 ---@field uid string UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids +optional
 
 ---@class corev1.PersistentVolume
----@field TypeMeta v1.TypeMeta
 ---@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 ---@field spec corev1.PersistentVolumeSpec spec defines a specification of a persistent volume owned by the cluster. Provisioned by an administrator. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistent-volumes +optional
 ---@field status corev1.PersistentVolumeStatus status represents the current information/status for the persistent volume. Populated by the system. Read-only. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistent-volumes +optional
 
 ---@class corev1.PersistentVolumeClaim
----@field TypeMeta v1.TypeMeta
 ---@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 ---@field spec corev1.PersistentVolumeClaimSpec spec defines the desired characteristics of a volume requested by a pod author. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims +optional
 ---@field status corev1.PersistentVolumeClaimStatus status represents the current information/status of a persistent volume claim. Read-only. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims +optional
@@ -1150,15 +913,14 @@
 ---@field type string Type is the type of the condition. More info: https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-claim-v1/#:~:text=set%20to%20%27ResizeStarted%27.-,PersistentVolumeClaimCondition,-contains%20details%20about
 
 ---@class corev1.PersistentVolumeClaimList
----@field TypeMeta v1.TypeMeta
 ---@field items corev1.PersistentVolumeClaim[] items is a list of persistent volume claims. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims
 ---@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +optional
 
 ---@class corev1.PersistentVolumeClaimSpec
 ---@field accessModes string[] accessModes contains the desired access modes the volume should have. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes-1 +optional +listType=atomic
----@field dataSource corev1.TypedLocalObjectReference dataSource field can be used to specify either: * An existing VolumeSnapshot object (snapshot.storage.k8s.io/VolumeSnapshot) * An existing PVC (PersistentVolumeClaim) If the provisioner or an external controller can support the specified data source, it will create a new volume based on the contents of the specified data source. When the AnyVolumeDataSource feature gate is enabled, dataSource contents will be copied to dataSourceRef, and dataSourceRef contents will be copied to dataSource when dataSourceRef.namespace is not specified. If the namespace is specified, then dataSourceRef will not be copied to dataSource. +optional
----@field dataSourceRef corev1.TypedObjectReference dataSourceRef specifies the object from which to populate the volume with data, if a non-empty volume is desired. This may be any object from a non-empty API group (non core object) or a PersistentVolumeClaim object. When this field is specified, volume binding will only succeed if the type of the specified object matches some installed volume populator or dynamic provisioner. This field will replace the functionality of the dataSource field and as such if both fields are non-empty, they must have the same value. For backwards compatibility, when namespace isn't specified in dataSourceRef, both fields (dataSource and dataSourceRef) will be set to the same value automatically if one of them is empty and the other is non-empty. When namespace is specified in dataSourceRef, dataSource isn't set to the same value and must be empty. There are three important differences between dataSource and dataSourceRef: * While dataSource only allows two specific types of objects, dataSourceRef allows any non-core object, as well as PersistentVolumeClaim objects. * While dataSource ignores disallowed values (dropping them), dataSourceRef preserves all values, and generates an error if a disallowed value is specified. * While dataSource only allows local objects, dataSourceRef allows objects in any namespaces. (Beta) Using this field requires the AnyVolumeDataSource feature gate to be enabled. (Alpha) Using the namespace field of dataSourceRef requires the CrossNamespaceVolumeDataSource feature gate to be enabled. +optional
----@field resources corev1.VolumeResourceRequirements resources represents the minimum resources the volume should have. If RecoverVolumeExpansionFailure feature is enabled users are allowed to specify resource requirements that are lower than previous value but must still be higher than capacity recorded in the status field of the claim. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#resources +optional
+---@field dataSource corev1.TypedLocalObjectReference dataSource field can be used to specify either: * An existing VolumeSnapshot object (snapshot.storage.k8s.io/VolumeSnapshot) * An existing PVC (PersistentVolumeClaim) If the provisioner or an external controller can support the specified data source, it will create a new volume based on the contents of the specified data source. dataSource contents will be copied to dataSourceRef, and dataSourceRef contents will be copied to dataSource when dataSourceRef.namespace is not specified. If the namespace is specified, then dataSourceRef will not be copied to dataSource. +optional
+---@field dataSourceRef corev1.TypedObjectReference dataSourceRef specifies the object from which to populate the volume with data, if a non-empty volume is desired. This may be any object from a non-empty API group (non core object) or a PersistentVolumeClaim object. When this field is specified, volume binding will only succeed if the type of the specified object matches some installed volume populator or dynamic provisioner. This field will replace the functionality of the dataSource field and as such if both fields are non-empty, they must have the same value. For backwards compatibility, when namespace isn't specified in dataSourceRef, both fields (dataSource and dataSourceRef) will be set to the same value automatically if one of them is empty and the other is non-empty. When namespace is specified in dataSourceRef, dataSource isn't set to the same value and must be empty. There are three important differences between dataSource and dataSourceRef: * While dataSource only allows two specific types of objects, dataSourceRef allows any non-core object, as well as PersistentVolumeClaim objects. * While dataSource ignores disallowed values (dropping them), dataSourceRef preserves all values, and generates an error if a disallowed value is specified. * While dataSource only allows local objects, dataSourceRef allows objects in any namespaces. (Alpha) Using the namespace field of dataSourceRef requires the CrossNamespaceVolumeDataSource feature gate to be enabled. +optional
+---@field resources corev1.VolumeResourceRequirements resources represents the minimum resources the volume should have. Users are allowed to specify resource requirements that are lower than previous value but must still be higher than capacity recorded in the status field of the claim. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#resources +optional
 ---@field selector v1.LabelSelector selector is a label query over volumes to consider for binding. +optional
 ---@field storageClassName string storageClassName is the name of the StorageClass required by the claim. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#class-1 +optional
 ---@field volumeAttributesClassName string volumeAttributesClassName may be used to set the VolumeAttributesClass used by this claim. If specified, the CSI driver will create or update the volume with the attributes defined in the corresponding VolumeAttributesClass. This has a different purpose than storageClassName, it can be changed after the claim is created. An empty string or nil value indicates that no VolumeAttributesClass will be applied to the claim. If the claim enters an Infeasible error state, this field can be reset to its previous value (including nil) to cancel the modification. If the resource referred to by volumeAttributesClass does not exist, this PersistentVolumeClaim will be set to a Pending state, as reflected by the modifyVolumeStatus field, until such as a resource exists. More info: https://kubernetes.io/docs/concepts/storage/volume-attributes-classes/ +featureGate=VolumeAttributesClass +optional
@@ -1167,58 +929,25 @@
 
 ---@class corev1.PersistentVolumeClaimStatus
 ---@field accessModes string[] accessModes contains the actual access modes the volume backing the PVC has. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes-1 +optional +listType=atomic
----@field allocatedResourceStatuses table<string, string> allocatedResourceStatuses stores status of resource being resized for the given PVC. Key names follow standard Kubernetes label syntax. Valid values are either: * Un-prefixed keys: - storage - the capacity of the volume. * Custom resources must use implementation-defined prefixed names such as "example.com/my-custom-resource" Apart from above values - keys that are unprefixed or have kubernetes.io prefix are considered reserved and hence may not be used. ClaimResourceStatus can be in any of following states: - ControllerResizeInProgress: State set when resize controller starts resizing the volume in control-plane. - ControllerResizeFailed: State set when resize has failed in resize controller with a terminal error. - NodeResizePending: State set when resize controller has finished resizing the volume but further resizing of volume is needed on the node. - NodeResizeInProgress: State set when kubelet starts resizing the volume. - NodeResizeFailed: State set when resizing has failed in kubelet with a terminal error. Transient errors don't set NodeResizeFailed. For example: if expanding a PVC for more capacity - this field can be one of the following states: - pvc.status.allocatedResourceStatus['storage'] = "ControllerResizeInProgress" - pvc.status.allocatedResourceStatus['storage'] = "ControllerResizeFailed" - pvc.status.allocatedResourceStatus['storage'] = "NodeResizePending" - pvc.status.allocatedResourceStatus['storage'] = "NodeResizeInProgress" - pvc.status.allocatedResourceStatus['storage'] = "NodeResizeFailed" When this field is not set, it means that no resize operation is in progress for the given PVC. A controller that receives PVC update with previously unknown resourceName or ClaimResourceStatus should ignore the update for the purpose it was designed. For example - a controller that only is responsible for resizing capacity of the volume, should ignore PVC updates that change other valid resources associated with PVC. This is an alpha field and requires enabling RecoverVolumeExpansionFailure feature. +featureGate=RecoverVolumeExpansionFailure +mapType=granular +optional
----@field allocatedResources table<string, resource.Quantity> allocatedResources tracks the resources allocated to a PVC including its capacity. Key names follow standard Kubernetes label syntax. Valid values are either: * Un-prefixed keys: - storage - the capacity of the volume. * Custom resources must use implementation-defined prefixed names such as "example.com/my-custom-resource" Apart from above values - keys that are unprefixed or have kubernetes.io prefix are considered reserved and hence may not be used. Capacity reported here may be larger than the actual capacity when a volume expansion operation is requested. For storage quota, the larger value from allocatedResources and PVC.spec.resources is used. If allocatedResources is not set, PVC.spec.resources alone is used for quota calculation. If a volume expansion capacity request is lowered, allocatedResources is only lowered if there are no expansion operations in progress and if the actual volume capacity is equal or lower than the requested capacity. A controller that receives PVC update with previously unknown resourceName should ignore the update for the purpose it was designed. For example - a controller that only is responsible for resizing capacity of the volume, should ignore PVC updates that change other valid resources associated with PVC. This is an alpha field and requires enabling RecoverVolumeExpansionFailure feature. +featureGate=RecoverVolumeExpansionFailure +optional
+---@field allocatedResourceStatuses table<string, string> allocatedResourceStatuses stores status of resource being resized for the given PVC. Key names follow standard Kubernetes label syntax. Valid values are either: * Un-prefixed keys: - storage - the capacity of the volume. * Custom resources must use implementation-defined prefixed names such as "example.com/my-custom-resource" Apart from above values - keys that are unprefixed or have kubernetes.io prefix are considered reserved and hence may not be used. ClaimResourceStatus can be in any of following states: - ControllerResizeInProgress: State set when resize controller starts resizing the volume in control-plane. - ControllerResizeFailed: State set when resize has failed in resize controller with a terminal error. - NodeResizePending: State set when resize controller has finished resizing the volume but further resizing of volume is needed on the node. - NodeResizeInProgress: State set when kubelet starts resizing the volume. - NodeResizeFailed: State set when resizing has failed in kubelet with a terminal error. Transient errors don't set NodeResizeFailed. For example: if expanding a PVC for more capacity - this field can be one of the following states: - pvc.status.allocatedResourceStatus['storage'] = "ControllerResizeInProgress" - pvc.status.allocatedResourceStatus['storage'] = "ControllerResizeFailed" - pvc.status.allocatedResourceStatus['storage'] = "NodeResizePending" - pvc.status.allocatedResourceStatus['storage'] = "NodeResizeInProgress" - pvc.status.allocatedResourceStatus['storage'] = "NodeResizeFailed" When this field is not set, it means that no resize operation is in progress for the given PVC. A controller that receives PVC update with previously unknown resourceName or ClaimResourceStatus should ignore the update for the purpose it was designed. For example - a controller that only is responsible for resizing capacity of the volume, should ignore PVC updates that change other valid resources associated with PVC. +mapType=granular +optional
+---@field allocatedResources table<string, resource.Quantity> allocatedResources tracks the resources allocated to a PVC including its capacity. Key names follow standard Kubernetes label syntax. Valid values are either: * Un-prefixed keys: - storage - the capacity of the volume. * Custom resources must use implementation-defined prefixed names such as "example.com/my-custom-resource" Apart from above values - keys that are unprefixed or have kubernetes.io prefix are considered reserved and hence may not be used. Capacity reported here may be larger than the actual capacity when a volume expansion operation is requested. For storage quota, the larger value from allocatedResources and PVC.spec.resources is used. If allocatedResources is not set, PVC.spec.resources alone is used for quota calculation. If a volume expansion capacity request is lowered, allocatedResources is only lowered if there are no expansion operations in progress and if the actual volume capacity is equal or lower than the requested capacity. A controller that receives PVC update with previously unknown resourceName should ignore the update for the purpose it was designed. For example - a controller that only is responsible for resizing capacity of the volume, should ignore PVC updates that change other valid resources associated with PVC. +optional
 ---@field capacity table<string, resource.Quantity> capacity represents the actual resources of the underlying volume. +optional
 ---@field conditions corev1.PersistentVolumeClaimCondition[] conditions is the current Condition of persistent volume claim. If underlying persistent volume is being resized then the Condition will be set to 'Resizing'. +optional +patchMergeKey=type +patchStrategy=merge +listType=map +listMapKey=type
 ---@field currentVolumeAttributesClassName string currentVolumeAttributesClassName is the current name of the VolumeAttributesClass the PVC is using. When unset, there is no VolumeAttributeClass applied to this PersistentVolumeClaim +featureGate=VolumeAttributesClass +optional
+---@field healthStatus corev1.VolumeHealthStatus healthStatus contains the latest controller-reported health information for the volume bound to this claim. +featureGate=CSIVolumeHealth +optional +k8s:optional
 ---@field modifyVolumeStatus corev1.ModifyVolumeStatus ModifyVolumeStatus represents the status object of ControllerModifyVolume operation. When this is unset, there is no ModifyVolume operation being attempted. +featureGate=VolumeAttributesClass +optional
 ---@field phase string phase represents the current phase of PersistentVolumeClaim. +optional
 
----@class corev1.PersistentVolumeClaimTemplate
----@field metadata v1.ObjectMeta May contain labels and annotations that will be copied into the PVC when creating it. No other fields are allowed and will be rejected during validation. +optional
----@field spec corev1.PersistentVolumeClaimSpec The specification for the PersistentVolumeClaim. The entire content is copied unchanged into the PVC that gets created from this template. The same fields as in a PersistentVolumeClaim are also valid here.
-
----@class corev1.PersistentVolumeClaimVolumeSource
----@field claimName string claimName is the name of a PersistentVolumeClaim in the same namespace as the pod using this volume. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims
----@field readOnly boolean readOnly Will force the ReadOnly setting in VolumeMounts. Default false. +optional
-
 ---@class corev1.PersistentVolumeList
----@field TypeMeta v1.TypeMeta
 ---@field items corev1.PersistentVolume[] items is a list of persistent volumes. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes
 ---@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +optional
 
----@class corev1.PersistentVolumeSource
----@field awsElasticBlockStore corev1.AWSElasticBlockStoreVolumeSource awsElasticBlockStore represents an AWS Disk resource that is attached to a kubelet's host machine and then exposed to the pod. Deprecated: AWSElasticBlockStore is deprecated. All operations for the in-tree awsElasticBlockStore type are redirected to the ebs.csi.aws.com CSI driver. More info: https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore +optional
----@field azureDisk corev1.AzureDiskVolumeSource azureDisk represents an Azure Data Disk mount on the host and bind mount to the pod. Deprecated: AzureDisk is deprecated. All operations for the in-tree azureDisk type are redirected to the disk.csi.azure.com CSI driver. +optional
----@field azureFile corev1.AzureFilePersistentVolumeSource azureFile represents an Azure File Service mount on the host and bind mount to the pod. Deprecated: AzureFile is deprecated. All operations for the in-tree azureFile type are redirected to the file.csi.azure.com CSI driver. +optional
----@field cephfs corev1.CephFSPersistentVolumeSource cephFS represents a Ceph FS mount on the host that shares a pod's lifetime. Deprecated: CephFS is deprecated and the in-tree cephfs type is no longer supported. +optional
----@field cinder corev1.CinderPersistentVolumeSource cinder represents a cinder volume attached and mounted on kubelets host machine. Deprecated: Cinder is deprecated. All operations for the in-tree cinder type are redirected to the cinder.csi.openstack.org CSI driver. More info: https://examples.k8s.io/mysql-cinder-pd/README.md +optional
----@field csi corev1.CSIPersistentVolumeSource csi represents storage that is handled by an external CSI driver. +optional
----@field fc corev1.FCVolumeSource fc represents a Fibre Channel resource that is attached to a kubelet's host machine and then exposed to the pod. +optional
----@field flexVolume corev1.FlexPersistentVolumeSource flexVolume represents a generic volume resource that is provisioned/attached using an exec based plugin. Deprecated: FlexVolume is deprecated. Consider using a CSIDriver instead. +optional
----@field flocker corev1.FlockerVolumeSource flocker represents a Flocker volume attached to a kubelet's host machine and exposed to the pod for its usage. This depends on the Flocker control service being running. Deprecated: Flocker is deprecated and the in-tree flocker type is no longer supported. +optional
----@field gcePersistentDisk corev1.GCEPersistentDiskVolumeSource gcePersistentDisk represents a GCE Disk resource that is attached to a kubelet's host machine and then exposed to the pod. Provisioned by an admin. Deprecated: GCEPersistentDisk is deprecated. All operations for the in-tree gcePersistentDisk type are redirected to the pd.csi.storage.gke.io CSI driver. More info: https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk +optional
----@field glusterfs corev1.GlusterfsPersistentVolumeSource glusterfs represents a Glusterfs volume that is attached to a host and exposed to the pod. Provisioned by an admin. Deprecated: Glusterfs is deprecated and the in-tree glusterfs type is no longer supported. More info: https://examples.k8s.io/volumes/glusterfs/README.md +optional
----@field hostPath corev1.HostPathVolumeSource hostPath represents a directory on the host. Provisioned by a developer or tester. This is useful for single-node development and testing only! On-host storage is not supported in any way and WILL NOT WORK in a multi-node cluster. More info: https://kubernetes.io/docs/concepts/storage/volumes#hostpath +optional
----@field iscsi corev1.ISCSIPersistentVolumeSource iscsi represents an ISCSI Disk resource that is attached to a kubelet's host machine and then exposed to the pod. Provisioned by an admin. +optional
----@field local corev1.LocalVolumeSource local represents directly-attached storage with node affinity +optional
----@field nfs corev1.NFSVolumeSource nfs represents an NFS mount on the host. Provisioned by an admin. More info: https://kubernetes.io/docs/concepts/storage/volumes#nfs +optional
----@field photonPersistentDisk corev1.PhotonPersistentDiskVolumeSource photonPersistentDisk represents a PhotonController persistent disk attached and mounted on kubelets host machine. Deprecated: PhotonPersistentDisk is deprecated and the in-tree photonPersistentDisk type is no longer supported.
----@field portworxVolume corev1.PortworxVolumeSource portworxVolume represents a portworx volume attached and mounted on kubelets host machine. Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type are redirected to the pxd.portworx.com CSI driver when the CSIMigrationPortworx feature-gate is on. +optional
----@field quobyte corev1.QuobyteVolumeSource quobyte represents a Quobyte mount on the host that shares a pod's lifetime. Deprecated: Quobyte is deprecated and the in-tree quobyte type is no longer supported. +optional
----@field rbd corev1.RBDPersistentVolumeSource rbd represents a Rados Block Device mount on the host that shares a pod's lifetime. Deprecated: RBD is deprecated and the in-tree rbd type is no longer supported. More info: https://examples.k8s.io/volumes/rbd/README.md +optional
----@field scaleIO corev1.ScaleIOPersistentVolumeSource scaleIO represents a ScaleIO persistent volume attached and mounted on Kubernetes nodes. Deprecated: ScaleIO is deprecated and the in-tree scaleIO type is no longer supported. +optional
----@field storageos corev1.StorageOSPersistentVolumeSource storageOS represents a StorageOS volume that is attached to the kubelet's host machine and mounted into the pod. Deprecated: StorageOS is deprecated and the in-tree storageos type is no longer supported. More info: https://examples.k8s.io/volumes/storageos/README.md +optional
----@field vsphereVolume corev1.VsphereVirtualDiskVolumeSource vsphereVolume represents a vSphere volume attached and mounted on kubelets host machine. Deprecated: VsphereVolume is deprecated. All operations for the in-tree vsphereVolume type are redirected to the csi.vsphere.vmware.com CSI driver. +optional
-
 ---@class corev1.PersistentVolumeSpec
----@field PersistentVolumeSource corev1.PersistentVolumeSource persistentVolumeSource is the actual volume backing the persistent volume.
 ---@field accessModes string[] accessModes contains all ways the volume can be mounted. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes +optional +listType=atomic
 ---@field capacity table<string, resource.Quantity> capacity is the description of the persistent volume's resources and capacity. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#capacity +optional
 ---@field claimRef corev1.ObjectReference claimRef is part of a bi-directional binding between PersistentVolume and PersistentVolumeClaim. Expected to be non-nil when bound. claim.VolumeName is the authoritative bind between PV and PVC. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#binding +optional +structType=granular
 ---@field mountOptions string[] mountOptions is the list of mount options, e.g. ["ro", "soft"]. Not validated - mount will simply fail if one is invalid. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes/#mount-options +optional +listType=atomic
----@field nodeAffinity corev1.VolumeNodeAffinity nodeAffinity defines constraints that limit what nodes this volume can be accessed from. This field influences the scheduling of pods that use this volume. +optional
+---@field nodeAffinity corev1.VolumeNodeAffinity nodeAffinity defines constraints that limit what nodes this volume can be accessed from. This field influences the scheduling of pods that use this volume. This field is mutable if MutablePVNodeAffinity feature gate is enabled. +optional
 ---@field persistentVolumeReclaimPolicy string persistentVolumeReclaimPolicy defines what happens to a persistent volume when released from its claim. Valid options are Retain (default for manually created PersistentVolumes), Delete (default for dynamically provisioned PersistentVolumes), and Recycle (deprecated). Recycle must be supported by the volume plugin underlying this PersistentVolume. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#reclaiming +optional
 ---@field storageClassName string storageClassName is the name of StorageClass to which this persistent volume belongs. Empty value means that this volume does not belong to any StorageClass. +optional
 ---@field volumeAttributesClassName string Name of VolumeAttributesClass to which this persistent volume belongs. Empty value is not allowed. When this field is not set, it indicates that this volume does not belong to any VolumeAttributesClass. This field is mutable and can be changed by the CSI driver after a volume has been updated successfully to a new class. For an unbound PersistentVolume, the volumeAttributesClassName will be matched with unbound PersistentVolumeClaims during the binding process. +featureGate=VolumeAttributesClass +optional
@@ -1230,12 +959,7 @@
 ---@field phase string phase indicates if a volume is available, bound to a claim, or released by a claim. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#phase +optional
 ---@field reason string reason is a brief CamelCase string that describes any failure and is meant for machine parsing and tidy display in the CLI. +optional
 
----@class corev1.PhotonPersistentDiskVolumeSource
----@field fsType string fsType is the filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified.
----@field pdID string pdID is the ID that identifies Photon Controller persistent disk
-
 ---@class corev1.Pod
----@field TypeMeta v1.TypeMeta
 ---@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 ---@field spec corev1.PodSpec Specification of the desired behavior of the pod. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
 ---@field status corev1.PodStatus Most recently observed status of the pod. This data may not be up to date. Populated by the system. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
@@ -1256,19 +980,11 @@
 ---@field preferredDuringSchedulingIgnoredDuringExecution corev1.WeightedPodAffinityTerm[] The scheduler will prefer to schedule pods to nodes that satisfy the anti-affinity expressions specified by this field, but it may choose a node that violates one or more of the expressions. The node that is most preferred is the one with the greatest sum of weights, i.e. for each node that meets all of the scheduling requirements (resource request, requiredDuringScheduling anti-affinity expressions, etc.), compute a sum by iterating through the elements of this field and subtracting "weight" from the sum if the node has pods which matches the corresponding podAffinityTerm; the node(s) with the highest sum are the most preferred. +optional +listType=atomic
 ---@field requiredDuringSchedulingIgnoredDuringExecution corev1.PodAffinityTerm[] If the anti-affinity requirements specified by this field are not met at scheduling time, the pod will not be scheduled onto the node. If the anti-affinity requirements specified by this field cease to be met at some point during pod execution (e.g. due to a pod label update), the system may or may not try to eventually evict the pod from its node. When there are multiple elements, the lists of nodes corresponding to each podAffinityTerm are intersected, i.e. all terms must be satisfied. +optional +listType=atomic
 
----@class corev1.PodCertificateProjection
----@field certificateChainPath string Write the certificate chain at this path in the projected volume. Most applications should use credentialBundlePath. When using keyPath and certificateChainPath, your application needs to check that the key and leaf certificate are consistent, because it is possible to read the files mid-rotation. +optional
----@field credentialBundlePath string Write the credential bundle at this path in the projected volume. The credential bundle is a single file that contains multiple PEM blocks. The first PEM block is a PRIVATE KEY block, containing a PKCS#8 private key. The remaining blocks are CERTIFICATE blocks, containing the issued certificate chain from the signer (leaf and any intermediates). Using credentialBundlePath lets your Pod's application code make a single atomic read that retrieves a consistent key and certificate chain. If you project them to separate files, your application code will need to additionally check that the leaf certificate was issued to the key. +optional
----@field keyPath string Write the key at this path in the projected volume. Most applications should use credentialBundlePath. When using keyPath and certificateChainPath, your application needs to check that the key and leaf certificate are consistent, because it is possible to read the files mid-rotation. +optional
----@field keyType string The type of keypair Kubelet will generate for the pod. Valid values are "RSA3072", "RSA4096", "ECDSAP256", "ECDSAP384", "ECDSAP521", and "ED25519". +required
----@field maxExpirationSeconds number maxExpirationSeconds is the maximum lifetime permitted for the certificate. Kubelet copies this value verbatim into the PodCertificateRequests it generates for this projection. If omitted, kube-apiserver will set it to 86400(24 hours). kube-apiserver will reject values shorter than 3600 (1 hour). The maximum allowable value is 7862400 (91 days). The signer implementation is then free to issue a certificate with any lifetime *shorter* than MaxExpirationSeconds, but no shorter than 3600 seconds (1 hour). This constraint is enforced by kube-apiserver. `kubernetes.io` signers will never issue certificates with a lifetime longer than 24 hours. +optional
----@field signerName string Kubelet's generated CSRs will be addressed to this signer. +required
-
 ---@class corev1.PodCondition
 ---@field lastProbeTime v1.Time Last time we probed the condition. +optional
 ---@field lastTransitionTime v1.Time Last time the condition transitioned from one status to another. +optional
 ---@field message string Human-readable message indicating details about last transition. +optional
----@field observedGeneration number If set, this represents the .metadata.generation that the pod condition was set based upon. This is an alpha field. Enable PodObservedGenerationTracking to be able to use this field. +featureGate=PodObservedGenerationTracking +optional
+---@field observedGeneration number If set, this represents the .metadata.generation that the pod condition was set based upon. +optional
 ---@field reason string Unique, one-word, CamelCase reason for the condition's last transition. +optional
 ---@field status string Status is the status of the condition. Can be True, False, Unknown. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-conditions
 ---@field type string Type is the type of the condition. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-conditions
@@ -1290,7 +1006,6 @@
 ---@field ip string IP is the IP address assigned to the pod +required
 
 ---@class corev1.PodList
----@field TypeMeta v1.TypeMeta
 ---@field items corev1.Pod[] List of pods. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md
 ---@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +optional
 
@@ -1303,14 +1018,17 @@
 ---@class corev1.PodResourceClaim
 ---@field name string Name uniquely identifies this resource claim inside the pod. This must be a DNS_LABEL.
 ---@field resourceClaimName string ResourceClaimName is the name of a ResourceClaim object in the same namespace as this pod. Exactly one of ResourceClaimName and ResourceClaimTemplateName must be set.
----@field resourceClaimTemplateName string ResourceClaimTemplateName is the name of a ResourceClaimTemplate object in the same namespace as this pod. The template will be used to create a new ResourceClaim, which will be bound to this pod. When this pod is deleted, the ResourceClaim will also be deleted. The pod name and resource name, along with a generated component, will be used to form a unique name for the ResourceClaim, which will be recorded in pod.status.resourceClaimStatuses. This field is immutable and no changes will be made to the corresponding ResourceClaim by the control plane after creating the ResourceClaim. Exactly one of ResourceClaimName and ResourceClaimTemplateName must be set.
+---@field resourceClaimTemplateName string ResourceClaimTemplateName is the name of a ResourceClaimTemplate object in the same namespace as this pod. The template will be used to create a new ResourceClaim, which will be bound to this pod. When this pod is deleted, the ResourceClaim will also be deleted. The pod name and resource name, along with a generated component, will be used to form a unique name for the ResourceClaim, which will be recorded in pod.status.resourceClaimStatuses. When the DRAWorkloadResourceClaims feature gate is enabled and the pod belongs to a PodGroup that defines a PodGroupResourceClaim with the same Name and ResourceClaimTemplateName, this PodResourceClaim resolves to the ResourceClaim generated for the PodGroup. All pods in the group that define an equivalent PodResourceClaim matching the PodGroupResourceClaim's Name and ResourceClaimTemplateName share the same generated ResourceClaim. ResourceClaims generated for a PodGroup are owned by the PodGroup and their lifecycles are tied to the PodGroup instead of any individual pod. This field is immutable and no changes will be made to the corresponding ResourceClaim by the control plane after creating the ResourceClaim. Exactly one of ResourceClaimName and ResourceClaimTemplateName must be set.
 
 ---@class corev1.PodResourceClaimStatus
 ---@field name string Name uniquely identifies this resource claim inside the pod. This must match the name of an entry in pod.spec.resourceClaims, which implies that the string must be a DNS_LABEL.
----@field resourceClaimName string ResourceClaimName is the name of the ResourceClaim that was generated for the Pod in the namespace of the Pod. If this is unset, then generating a ResourceClaim was not necessary. The pod.spec.resourceClaims entry can be ignored in this case. +optional
+---@field resourceClaimName string ResourceClaimName is the name of the ResourceClaim that was generated for the Pod in the namespace of the Pod. When the DRAWorkloadResourceClaims feature is enabled and the corresponding PodResourceClaim matches a PodGroupResourceClaim made by the Pod's PodGroup, then this is the name of the ResourceClaim generated and reserved for the PodGroup. If this is unset, then generating a ResourceClaim was not necessary. The pod.spec.resourceClaims entry can be ignored in this case. +optional
 
 ---@class corev1.PodSchedulingGate
 ---@field name string Name of the scheduling gate. Each scheduling gate must have a unique name field.
+
+---@class corev1.PodSchedulingGroup
+---@field podGroupName string PodGroupName specifies the name of the standalone PodGroup object that represents the runtime instance of this group. Must be a DNS subdomain. +optional +oneOf=GroupSelection
 
 ---@class corev1.PodSecurityContext
 ---@field appArmorProfile corev1.AppArmorProfile appArmorProfile is the AppArmor options to use by the containers in this pod. Note that this field cannot be set when spec.os.name is windows. +optional
@@ -1319,7 +1037,7 @@
 ---@field runAsGroup number The GID to run the entrypoint of the container process. Uses runtime default if unset. May also be set in SecurityContext. If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence for that container. Note that this field cannot be set when spec.os.name is windows. +optional
 ---@field runAsNonRoot boolean Indicates that the container must run as a non-root user. If true, the Kubelet will validate the image at runtime to ensure that it does not run as UID 0 (root) and fail to start the container if it does. If unset or false, no such validation will be performed. May also be set in SecurityContext. If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence. +optional
 ---@field runAsUser number The UID to run the entrypoint of the container process. Defaults to user specified in image metadata if unspecified. May also be set in SecurityContext. If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence for that container. Note that this field cannot be set when spec.os.name is windows. +optional
----@field seLinuxChangePolicy string seLinuxChangePolicy defines how the container's SELinux label is applied to all volumes used by the Pod. It has no effect on nodes that do not support SELinux or to volumes does not support SELinux. Valid values are "MountOption" and "Recursive". "Recursive" means relabeling of all files on all Pod volumes by the container runtime. This may be slow for large volumes, but allows mixing privileged and unprivileged Pods sharing the same volume on the same node. "MountOption" mounts all eligible Pod volumes with `-o context` mount option. This requires all Pods that share the same volume to use the same SELinux label. It is not possible to share the same volume among privileged and unprivileged Pods. Eligible volumes are in-tree FibreChannel and iSCSI volumes, and all CSI volumes whose CSI driver announces SELinux support by setting spec.seLinuxMount: true in their CSIDriver instance. Other volumes are always re-labelled recursively. "MountOption" value is allowed only when SELinuxMount feature gate is enabled. If not specified and SELinuxMount feature gate is enabled, "MountOption" is used. If not specified and SELinuxMount feature gate is disabled, "MountOption" is used for ReadWriteOncePod volumes and "Recursive" for all other volumes. This field affects only Pods that have SELinux label set, either in PodSecurityContext or in SecurityContext of all containers. All Pods that use the same volume should use the same seLinuxChangePolicy, otherwise some pods can get stuck in ContainerCreating state. Note that this field cannot be set when spec.os.name is windows. +featureGate=SELinuxChangePolicy +optional
+---@field seLinuxChangePolicy string seLinuxChangePolicy defines how the container's SELinux label is applied to all volumes used by the Pod. It has no effect on nodes that do not support SELinux or to volumes does not support SELinux. Valid values are "MountOption" and "Recursive". "Recursive" means relabeling of all files on all Pod volumes by the container runtime. This may be slow for large volumes, but allows mixing privileged and unprivileged Pods sharing the same volume on the same node. "MountOption" mounts all eligible Pod volumes with `-o context` mount option. This requires all Pods that share the same volume to use the same SELinux label. It is not possible to share the same volume among privileged and unprivileged Pods. Eligible volumes are in-tree FibreChannel and iSCSI volumes, and all CSI volumes whose CSI driver announces SELinux support by setting spec.seLinuxMount: true in their CSIDriver instance. Other volumes are always re-labelled recursively. If not specified, "MountOption" is used. This field affects only Pods that have SELinux label set, either in PodSecurityContext or in SecurityContext of all containers. All Pods that use the same volume should use the same seLinuxChangePolicy, otherwise some pods can get stuck in ContainerCreating state. Note that this field cannot be set when spec.os.name is windows. +featureGate=SELinuxChangePolicy +optional
 ---@field seLinuxOptions corev1.SELinuxOptions The SELinux context to be applied to all containers. If unspecified, the container runtime will allocate a random SELinux context for each container. May also be set in SecurityContext. If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence for that container. Note that this field cannot be set when spec.os.name is windows. +optional
 ---@field seccompProfile corev1.SeccompProfile The seccomp options to use by the containers in this pod. Note that this field cannot be set when spec.os.name is windows. +optional
 ---@field supplementalGroups number[] A list of groups applied to the first process run in each container, in addition to the container's primary GID and fsGroup (if specified). If the SupplementalGroupsPolicy feature is enabled, the supplementalGroupsPolicy field determines whether these are in addition to or instead of any group memberships defined in the container image. If unspecified, no additional groups are added, though group memberships defined in the container image may still be used, depending on the supplementalGroupsPolicy field. Note that this field cannot be set when spec.os.name is windows. +optional +listType=atomic
@@ -1336,41 +1054,44 @@
 ---@field dnsPolicy string Set DNS policy for the pod. Defaults to "ClusterFirst". Valid values are 'ClusterFirstWithHostNet', 'ClusterFirst', 'Default' or 'None'. DNS parameters given in DNSConfig will be merged with the policy selected with DNSPolicy. To have DNS options set along with hostNetwork, you have to specify DNS policy explicitly to 'ClusterFirstWithHostNet'. +optional
 ---@field enableServiceLinks boolean EnableServiceLinks indicates whether information about services should be injected into pod's environment variables, matching the syntax of Docker links. Optional: Defaults to true. +optional
 ---@field ephemeralContainers corev1.EphemeralContainer[] List of ephemeral containers run in this pod. Ephemeral containers may be run in an existing pod to perform user-initiated actions such as debugging. This list cannot be specified when creating a pod, and it cannot be modified by updating the pod spec. In order to add an ephemeral container to an existing pod, use the pod's ephemeralcontainers subresource. +optional +patchMergeKey=name +patchStrategy=merge +listType=map +listMapKey=name
+---@field evictionResponders corev1.EvictionResponder[] evictionResponders reference responders that react to Evictions based on EvictionRequests. Responders should observe and communicate through the Eviction Resource API to help with the graceful termination of a pod. The responders are selected sequentially, according to their specified priority. Responders should periodically report on an eviction progress by updating the .status.responders[].heartbeatTime field of the Eviction object. If this field is not updated within the heartbeat deadline defined by the Eviction API (currently 20 minutes), the eviction is passed over to the next responder with a lower priority. If there is no other responder, the last default imperative-eviction.k8s.io/evictor responder with a priority of 100 will evict the pod using the imperative Eviction API (pods/<name>/eviction subresource). The maximum length of the responders list is 10. Responders are not supported when the pod is part of a PodGroup (.spec.schedulingGroup is set). This field can only be set on creation and is immutable afterwards. +featureGate=EvictionRequestAPI +optional +patchMergeKey=name +patchStrategy=merge +listType=map +listMapKey=name +k8s:optional +k8s:listType=map +k8s:listMapKey=name +k8s:maxItems=10 +k8s:alpha(since: "1.37")=+k8s:dependentForbidden("schedulingGroup")
 ---@field hostAliases corev1.HostAlias[] HostAliases is an optional list of hosts and IPs that will be injected into the pod's hosts file if specified. +optional +patchMergeKey=ip +patchStrategy=merge +listType=map +listMapKey=ip
----@field hostIPC boolean Use the host's ipc namespace. Optional: Default to false. +k8s:conversion-gen=false +optional
----@field hostNetwork boolean Host networking requested for this pod. Use the host's network namespace. When using HostNetwork you should specify ports so the scheduler is aware. When `hostNetwork` is true, specified `hostPort` fields in port definitions must match `containerPort`, and unspecified `hostPort` fields in port definitions are defaulted to match `containerPort`. Default to false. +k8s:conversion-gen=false +optional
----@field hostPID boolean Use the host's pid namespace. Optional: Default to false. +k8s:conversion-gen=false +optional
----@field hostUsers boolean Use the host's user namespace. Optional: Default to true. If set to true or not present, the pod will be run in the host user namespace, useful for when the pod needs a feature only available to the host user namespace, such as loading a kernel module with CAP_SYS_MODULE. When set to false, a new userns is created for the pod. Setting false is useful for mitigating container breakout vulnerabilities even allowing users to run their containers as root without actually having root privileges on the host. This field is alpha-level and is only honored by servers that enable the UserNamespacesSupport feature. +k8s:conversion-gen=false +optional
+---@field hostIPC boolean Use the host's ipc namespace. Optional: Default to false. +optional
+---@field hostNetwork boolean Host networking requested for this pod. Use the host's network namespace. When using HostNetwork you should specify ports so the scheduler is aware. When `hostNetwork` is true, specified `hostPort` fields in port definitions must match `containerPort`, and unspecified `hostPort` fields in port definitions are defaulted to match `containerPort`. Default to false. +optional
+---@field hostPID boolean Use the host's pid namespace. Optional: Default to false. +optional
+---@field hostUsers boolean Use the host's user namespace. Optional: Default to true. If set to true or not present, the pod will be run in the host user namespace, useful for when the pod needs a feature only available to the host user namespace, such as loading a kernel module with CAP_SYS_MODULE. When set to false, a new userns is created for the pod. Setting false is useful for mitigating container breakout vulnerabilities even allowing users to run their containers as root without actually having root privileges on the host. +optional
 ---@field hostname string Specifies the hostname of the Pod If not specified, the pod's hostname will be set to a system-defined value. +optional
----@field hostnameOverride string HostnameOverride specifies an explicit override for the pod's hostname as perceived by the pod. This field only specifies the pod's hostname and does not affect its DNS records. When this field is set to a non-empty string: - It takes precedence over the values set in `hostname` and `subdomain`. - The Pod's hostname will be set to this value. - `setHostnameAsFQDN` must be nil or set to false. - `hostNetwork` must be set to false. This field must be a valid DNS subdomain as defined in RFC 1123 and contain at most 64 characters. Requires the HostnameOverride feature gate to be enabled. +featureGate=HostnameOverride +optional
+---@field hostnameOverride string HostnameOverride specifies an explicit override for the pod's hostname as perceived by the pod. This field only specifies the pod's hostname and does not affect its DNS records. When this field is set to a non-empty string: - It takes precedence over the values set in `hostname` and `subdomain`. - The Pod's hostname will be set to this value. - `setHostnameAsFQDN` must be nil or set to false. - `hostNetwork` must be set to false. This field must be a valid DNS subdomain as defined in RFC 1123 and contain at most 64 characters. +featureGate=HostnameOverride +optional
 ---@field imagePullSecrets corev1.LocalObjectReference[] ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod +optional +patchMergeKey=name +patchStrategy=merge +listType=map +listMapKey=name
 ---@field initContainers corev1.Container[] List of initialization containers belonging to the pod. Init containers are executed in order prior to containers being started. If any init container fails, the pod is considered to have failed and is handled according to its restartPolicy. The name for an init container or normal container must be unique among all containers. Init containers may not have Lifecycle actions, Readiness probes, Liveness probes, or Startup probes. The resourceRequirements of an init container are taken into account during scheduling by finding the highest request/limit for each resource type, and then using the max of that value or the sum of the normal containers. Limits are applied to init containers in a similar fashion. Init containers cannot currently be added or removed. Cannot be updated. More info: https://kubernetes.io/docs/concepts/workloads/pods/init-containers/ +patchMergeKey=name +patchStrategy=merge +listType=map +listMapKey=name
 ---@field nodeName string NodeName indicates in which node this pod is scheduled. If empty, this pod is a candidate for scheduling by the scheduler defined in schedulerName. Once this field is set, the kubelet for this node becomes responsible for the lifecycle of this pod. This field should not be used to express a desire for the pod to be scheduled on a specific node. https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodename +optional
 ---@field nodeSelector table<string, string> NodeSelector is a selector which must be true for the pod to fit on a node. Selector which must match a node's labels for the pod to be scheduled on that node. More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/ +optional +mapType=atomic
 ---@field os corev1.PodOS Specifies the OS of the containers in the pod. Some pod and container fields are restricted if this is set. If the OS field is set to linux, the following fields must be unset: -securityContext.windowsOptions If the OS field is set to windows, following fields must be unset: - spec.hostPID - spec.hostIPC - spec.hostUsers - spec.resources - spec.securityContext.appArmorProfile - spec.securityContext.seLinuxOptions - spec.securityContext.seccompProfile - spec.securityContext.fsGroup - spec.securityContext.fsGroupChangePolicy - spec.securityContext.sysctls - spec.shareProcessNamespace - spec.securityContext.runAsUser - spec.securityContext.runAsGroup - spec.securityContext.supplementalGroups - spec.securityContext.supplementalGroupsPolicy - spec.containers[*].securityContext.appArmorProfile - spec.containers[*].securityContext.seLinuxOptions - spec.containers[*].securityContext.seccompProfile - spec.containers[*].securityContext.capabilities - spec.containers[*].securityContext.readOnlyRootFilesystem - spec.containers[*].securityContext.privileged - spec.containers[*].securityContext.allowPrivilegeEscalation - spec.containers[*].securityContext.procMount - spec.containers[*].securityContext.runAsUser - spec.containers[*].securityContext.runAsGroup +optional
 ---@field overhead table<string, resource.Quantity> Overhead represents the resource overhead associated with running a pod for a given RuntimeClass. This field will be autopopulated at admission time by the RuntimeClass admission controller. If the RuntimeClass admission controller is enabled, overhead must not be set in Pod create requests. The RuntimeClass admission controller will reject Pod create requests which have the overhead already set. If RuntimeClass is configured and selected in the PodSpec, Overhead will be set to the value defined in the corresponding RuntimeClass, otherwise it will remain unset and treated as zero. More info: https://git.k8s.io/enhancements/keps/sig-node/688-pod-overhead/README.md +optional
----@field preemptionPolicy string PreemptionPolicy is the Policy for preempting pods with lower priority. One of Never, PreemptLowerPriority. Defaults to PreemptLowerPriority if unset. +optional
+---@field preemptionPolicy string PreemptionPolicy is the Policy for preempting pods with lower priority. One of Never, PreemptLowerPriority. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. Defaults to PreemptLowerPriority if unset. +optional
 ---@field priority number The priority value. Various system components use this field to find the priority of the pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. +optional
 ---@field priorityClassName string If specified, indicates the pod's priority. "system-node-critical" and "system-cluster-critical" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default. +optional
 ---@field readinessGates corev1.PodReadinessGate[] If specified, all readiness gates will be evaluated for pod readiness. A pod is ready when all its containers are ready AND all conditions specified in the readiness gates have status equal to "True" More info: https://git.k8s.io/enhancements/keps/sig-network/580-pod-readiness-gates +optional +listType=atomic
----@field resourceClaims corev1.PodResourceClaim[] ResourceClaims defines which ResourceClaims must be allocated and reserved before the Pod is allowed to start. The resources will be made available to those containers which consume them by name. This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. This field is immutable. +patchMergeKey=name +patchStrategy=merge,retainKeys +listType=map +listMapKey=name +featureGate=DynamicResourceAllocation +optional
+---@field resourceClaims corev1.PodResourceClaim[] ResourceClaims defines which ResourceClaims must be allocated and reserved before the Pod is allowed to start. The resources will be made available to those containers which consume them by name. This is a stable field but requires that the DynamicResourceAllocation feature gate is enabled. This field is immutable. +patchMergeKey=name +patchStrategy=merge,retainKeys +listType=map +listMapKey=name +featureGate=DynamicResourceAllocation +optional
 ---@field resources corev1.ResourceRequirements Resources is the total amount of CPU and Memory resources required by all containers in the pod. It supports specifying Requests and Limits for "cpu", "memory" and "hugepages-" resource names only. ResourceClaims are not supported. This field enables fine-grained control over resource allocation for the entire pod, allowing resource sharing among containers in a pod. TODO: For beta graduation, expand this comment with a detailed explanation. This is an alpha field and requires enabling the PodLevelResources feature gate. +featureGate=PodLevelResources +optional
 ---@field restartPolicy string Restart policy for all containers within the pod. One of Always, OnFailure, Never. In some contexts, only a subset of those values may be permitted. Default to Always. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy +optional
 ---@field runtimeClassName string RuntimeClassName refers to a RuntimeClass object in the node.k8s.io group, which should be used to run this pod. If no RuntimeClass resource matches the named class, the pod will not be run. If unset or empty, the "legacy" RuntimeClass will be used, which is an implicit class with an empty definition that uses the default runtime handler. More info: https://git.k8s.io/enhancements/keps/sig-node/585-runtime-class +optional
 ---@field schedulerName string If specified, the pod will be dispatched by specified scheduler. If not specified, the pod will be dispatched by default scheduler. +optional
 ---@field schedulingGates corev1.PodSchedulingGate[] SchedulingGates is an opaque list of values that if specified will block scheduling the pod. If schedulingGates is not empty, the pod will stay in the SchedulingGated state and the scheduler will not attempt to schedule the pod. SchedulingGates can only be set at pod creation time, and be removed only afterwards. +patchMergeKey=name +patchStrategy=merge +listType=map +listMapKey=name +optional
+---@field schedulingGroup corev1.PodSchedulingGroup SchedulingGroup provides a reference to the immediate scheduling runtime grouping object that this Pod belongs to. This field is used by the scheduler to identify the group and apply the correct group scheduling policies. The association with a group also impacts other lifecycle aspects of a Pod that are relevant in a wider context of scheduling like preemption, resource attachment, etc. If not specified, the Pod is treated as a single unit in all of these aspects. The group object referenced by this field may not exist at the time the Pod is created. This field is immutable, but a group object with the same name may be recreated with different policies. Doing this during pod scheduling may result in the placement not conforming to the expected policies. +featureGate=GenericWorkload +optional
 ---@field securityContext corev1.PodSecurityContext SecurityContext holds pod-level security attributes and common container settings. Optional: Defaults to empty. See type description for default values of each field. +optional
----@field serviceAccount string DeprecatedServiceAccount is a deprecated alias for ServiceAccountName. Deprecated: Use serviceAccountName instead. +k8s:conversion-gen=false +optional
+---@field serviceAccount string DeprecatedServiceAccount is a deprecated alias for ServiceAccountName. Deprecated: Use serviceAccountName instead. +optional
 ---@field serviceAccountName string ServiceAccountName is the name of the ServiceAccount to use to run this pod. More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/ +optional
 ---@field setHostnameAsFQDN boolean If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false. +optional
----@field shareProcessNamespace boolean Share a single process namespace between all of the containers in a pod. When this is set containers will be able to view and signal processes from other containers in the same pod, and the first process in each container will not be assigned PID 1. HostPID and ShareProcessNamespace cannot both be set. Optional: Default to false. +k8s:conversion-gen=false +optional
+---@field shareProcessNamespace boolean Share a single process namespace between all of the containers in a pod. When this is set containers will be able to view and signal processes from other containers in the same pod, and the first process in each container will not be assigned PID 1. HostPID and ShareProcessNamespace cannot both be set. Optional: Default to false. +optional
 ---@field subdomain string If specified, the fully qualified Pod hostname will be "<hostname>.<subdomain>.<pod namespace>.svc.<cluster domain>". If not specified, the pod will not have a domainname at all. +optional
 ---@field terminationGracePeriodSeconds number Optional duration in seconds the pod needs to terminate gracefully. May be decreased in delete request. Value must be non-negative integer. The value zero indicates stop immediately via the kill signal (no opportunity to shut down). If this value is nil, the default grace period will be used instead. The grace period is the duration in seconds after the processes running in the pod are sent a termination signal and the time when the processes are forcibly halted with a kill signal. Set this value longer than the expected cleanup time for your process. Defaults to 30 seconds. +optional
----@field tolerations corev1.Toleration[] If specified, the pod's tolerations. +optional +listType=atomic
+---@field tolerations corev1.Toleration[] If specified, the pod's tolerations. +optional +listType=atomic +k8s:alpha(since: "1.37")=+k8s:optional
 ---@field topologySpreadConstraints corev1.TopologySpreadConstraint[] TopologySpreadConstraints describes how a group of pods ought to spread across topology domains. Scheduler will schedule pods in a way which abides by the constraints. All topologySpreadConstraints are ANDed. +optional +patchMergeKey=topologyKey +patchStrategy=merge +listType=map +listMapKey=topologyKey +listMapKey=whenUnsatisfiable
 ---@field volumes corev1.Volume[] List of volumes that can be mounted by containers belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes +optional +patchMergeKey=name +patchStrategy=merge,retainKeys +listType=map +listMapKey=name
 
 ---@class corev1.PodStatus
+---@field allocatedResources table<string, resource.Quantity> AllocatedResources is the total requests allocated for this pod by the node. If pod-level requests are not set, this will be the total requests aggregated across containers in the pod. +featureGate=InPlacePodLevelResourcesVerticalScaling +optional
 ---@field conditions corev1.PodCondition[] Current service state of pod. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-conditions +optional +patchMergeKey=type +patchStrategy=merge +listType=map +listMapKey=type
 ---@field containerStatuses corev1.ContainerStatus[] Statuses of containers in this pod. Each container in the pod should have at most one status in this list, and all statuses should be for containers in the pod. However this is not enforced. If a status for a non-existent container is present in the list, or the list has duplicate names, the behavior of various Kubernetes components is not defined and those statuses might be ignored. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-and-container-status +optional +listType=atomic
 ---@field ephemeralContainerStatuses corev1.ContainerStatus[] Statuses for any ephemeral containers that have run in this pod. Each ephemeral container in the pod should have at most one status in this list, and all statuses should be for containers in the pod. However this is not enforced. If a status for a non-existent container is present in the list, or the list has duplicate names, the behavior of various Kubernetes components is not defined and those statuses might be ignored. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-and-container-status +optional +listType=atomic
@@ -1379,8 +1100,9 @@
 ---@field hostIPs corev1.HostIP[] hostIPs holds the IP addresses allocated to the host. If this field is specified, the first entry must match the hostIP field. This list is empty if the pod has not started yet. A pod can be assigned to a node that has a problem in kubelet which in turns means that HostIPs will not be updated even if there is a node is assigned to this pod. +optional +patchStrategy=merge +patchMergeKey=ip +listType=atomic
 ---@field initContainerStatuses corev1.ContainerStatus[] Statuses of init containers in this pod. The most recent successful non-restartable init container will have ready = true, the most recently started container will have startTime set. Each init container in the pod should have at most one status in this list, and all statuses should be for containers in the pod. However this is not enforced. If a status for a non-existent container is present in the list, or the list has duplicate names, the behavior of various Kubernetes components is not defined and those statuses might be ignored. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-and-container-status +listType=atomic
 ---@field message string A human readable message indicating details about why the pod is in this condition. +optional
+---@field nodeAllocatableResourceClaimStatuses corev1.NodeAllocatableResourceClaimStatus[] NodeAllocatableResourceClaimStatuses contains the status of node-allocatable resources that were allocated for this pod through DRA claims. This includes resources currently reported in v1.Node `status.allocatable` that are not extended resources (see https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#extended-resources). Examples include "cpu", "memory", "ephemeral-storage", and hugepages. +featureGate=DRANodeAllocatableResources +optional +patchStrategy=merge +patchMergeKey=resourceClaimName +listType=map +listMapKey=resourceClaimName +k8s:optional +k8s:listType=map +k8s:listMapKey=resourceClaimName
 ---@field nominatedNodeName string nominatedNodeName is set only when this pod preempts other pods on the node, but it cannot be scheduled right away as preemption victims receive their graceful termination periods. This field does not guarantee that the pod will be scheduled on this node. Scheduler may decide to place the pod elsewhere if other nodes become available sooner. Scheduler may also decide to give the resources on this node to a higher priority pod that is created after preemption. As a result, this field may be different than PodSpec.nodeName when the pod is scheduled. +optional
----@field observedGeneration number If set, this represents the .metadata.generation that the pod status was set based upon. This is an alpha field. Enable PodObservedGenerationTracking to be able to use this field. +featureGate=PodObservedGenerationTracking +optional
+---@field observedGeneration number If set, this represents the .metadata.generation that the pod status was set based upon. The PodObservedGenerationTracking feature gate must be enabled to use this field. +optional
 ---@field phase string The phase of a Pod is a simple, high-level summary of where the Pod is in its lifecycle. The conditions array, the reason and message fields, and the individual container status arrays contain more detail about the pod's status. There are five possible phase values: Pending: The pod has been accepted by the Kubernetes system, but one or more of the container images has not been created. This includes time before being scheduled as well as time spent downloading images over the network, which could take a while. Running: The pod has been bound to a node, and all of the containers have been created. At least one container is still running, or is in the process of starting or restarting. Succeeded: All containers in the pod have terminated in success, and will not be restarted. Failed: All containers in the pod have terminated, and at least one container has terminated in failure. The container either exited with non-zero status or was terminated by the system. Unknown: For some reason the state of the pod could not be obtained, typically due to an error in communicating with the host of the pod. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-phase +optional
 ---@field podIP string podIP address allocated to the pod. Routable at least within the cluster. Empty if not yet allocated. +optional
 ---@field podIPs corev1.PodIP[] podIPs holds the IP addresses allocated to the pod. If this field is specified, the 0th entry must match the podIP field. Pods may be allocated at most 1 value for each of IPv4 and IPv6. This list is empty if no IPs have been allocated yet. +optional +patchStrategy=merge +patchMergeKey=ip +listType=map +listMapKey=ip
@@ -1388,72 +1110,35 @@
 ---@field reason string A brief CamelCase message indicating details about why the pod is in this state. e.g. 'Evicted' +optional
 ---@field resize string Status of resources resize desired for pod's containers. It is empty if no resources resize is pending. Any changes to container resources will automatically set this to "Proposed" Deprecated: Resize status is moved to two pod conditions PodResizePending and PodResizeInProgress. PodResizePending will track states where the spec has been resized, but the Kubelet has not yet allocated the resources. PodResizeInProgress will track in-progress resizes, and should be present whenever allocated resources != acknowledged resources. +featureGate=InPlacePodVerticalScaling +optional
 ---@field resourceClaimStatuses corev1.PodResourceClaimStatus[] Status of resource claims. +patchMergeKey=name +patchStrategy=merge,retainKeys +listType=map +listMapKey=name +featureGate=DynamicResourceAllocation +optional
+---@field resources corev1.ResourceRequirements Resources represents the compute resource requests and limits that have been applied at the pod level if pod-level requests or limits are set in PodSpec.Resources +featureGate=InPlacePodLevelResourcesVerticalScaling +optional
 ---@field startTime v1.Time RFC 3339 date and time at which the object was acknowledged by the Kubelet. This is before the Kubelet pulled the container image(s) for the pod. +optional
+---@field volumeHealth corev1.PodVolumeHealth[] volumeHealth contains node-reported health for each volume the pod is using. Populated by the kubelet on the pod's node. +featureGate=CSIVolumeHealth +optional +listType=map +listMapKey=name +k8s:optional +k8s:listType=map +k8s:listMapKey=name
 
 ---@class corev1.PodTemplateSpec
----@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
+---@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional +k8s:opaqueType
 ---@field spec corev1.PodSpec Specification of the desired behavior of the pod. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
+
+---@class corev1.PodVolumeHealth
+---@field healthConditions corev1.VolumeHealthCondition[] conditions is the set of adverse conditions reported by the CSI node plugin for this volume on this node. At most 16 conditions may be reported. +optional +listType=map +listMapKey=status +patchMergeKey=status +patchStrategy=merge +listMapKey=reason +k8s:optional +k8s:listType=map +k8s:listMapKey=status +k8s:listMapKey=reason +k8s:maxItems=16
+---@field lastTransitionTime v1.Time lastTransitionTime is when the current set of conditions first appeared. +optional
+---@field name string name matches an entry in pod.spec.volumes. +required +k8s:required
 
 ---@class corev1.PortStatus
 ---@field error string Error is to record the problem with the service port The format of the error shall comply with the following rules: - built-in error values shall be specified in this file and those shall use CamelCase names - cloud provider specific error values must have names that comply with the format foo.example.com/CamelCase. --- The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt) +optional +kubebuilder:validation:Required +kubebuilder:validation:Pattern=`^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$` +kubebuilder:validation:MaxLength=316
 ---@field port number Port is the port number of the service port of which status is recorded here
 ---@field protocol string Protocol is the protocol of the service port of which status is recorded here The supported values are: "TCP", "UDP", "SCTP"
 
----@class corev1.PortworxVolumeSource
----@field fsType string fSType represents the filesystem type to mount Must be a filesystem type supported by the host operating system. Ex. "ext4", "xfs". Implicitly inferred to be "ext4" if unspecified.
----@field readOnly boolean readOnly defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. +optional
----@field volumeID string volumeID uniquely identifies a Portworx volume
-
 ---@class corev1.PreferredSchedulingTerm
 ---@field preference corev1.NodeSelectorTerm A node selector term, associated with the corresponding weight.
 ---@field weight number Weight associated with matching the corresponding nodeSelectorTerm, in the range 1-100.
 
 ---@class corev1.Probe
----@field ProbeHandler corev1.ProbeHandler The action taken to determine the health of a container
 ---@field failureThreshold number Minimum consecutive failures for the probe to be considered failed after having succeeded. Defaults to 3. Minimum value is 1. +optional
 ---@field initialDelaySeconds number Number of seconds after the container has started before liveness probes are initiated. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes +optional
 ---@field periodSeconds number How often (in seconds) to perform the probe. Default to 10 seconds. Minimum value is 1. +optional
 ---@field successThreshold number Minimum consecutive successes for the probe to be considered successful after having failed. Defaults to 1. Must be 1 for liveness and startup. Minimum value is 1. +optional
 ---@field terminationGracePeriodSeconds number Optional duration in seconds the pod needs to terminate gracefully upon probe failure. The grace period is the duration in seconds after the processes running in the pod are sent a termination signal and the time when the processes are forcibly halted with a kill signal. Set this value longer than the expected cleanup time for your process. If this value is nil, the pod's terminationGracePeriodSeconds will be used. Otherwise, this value overrides the value provided by the pod spec. Value must be non-negative integer. The value zero indicates stop immediately via the kill signal (no opportunity to shut down). This is a beta field and requires enabling ProbeTerminationGracePeriod feature gate. Minimum value is 1. spec.terminationGracePeriodSeconds is used if unset. +optional
 ---@field timeoutSeconds number Number of seconds after which the probe times out. Defaults to 1 second. Minimum value is 1. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes +optional
-
----@class corev1.ProbeHandler
----@field exec corev1.ExecAction Exec specifies a command to execute in the container. +optional
----@field grpc corev1.GRPCAction GRPC specifies a GRPC HealthCheckRequest. +optional
----@field httpGet corev1.HTTPGetAction HTTPGet specifies an HTTP GET request to perform. +optional
----@field tcpSocket corev1.TCPSocketAction TCPSocket specifies a connection to a TCP port. +optional
-
----@class corev1.ProjectedVolumeSource
----@field defaultMode number defaultMode are the mode bits used to set permissions on created files by default. Must be an octal value between 0000 and 0777 or a decimal value between 0 and 511. YAML accepts both octal and decimal values, JSON requires decimal values for mode bits. Directories within the path are not affected by this setting. This might be in conflict with other options that affect the file mode, like fsGroup, and the result can be other mode bits set. +optional
----@field sources corev1.VolumeProjection[] sources is the list of volume projections. Each entry in this list handles one source. +optional +listType=atomic
-
----@class corev1.QuobyteVolumeSource
----@field group string group to map volume access to Default is no group +optional
----@field readOnly boolean readOnly here will force the Quobyte volume to be mounted with read-only permissions. Defaults to false. +optional
----@field registry string registry represents a single or multiple Quobyte Registry services specified as a string as host:port pair (multiple entries are separated with commas) which acts as the central registry for volumes
----@field tenant string tenant owning the given Quobyte volume in the Backend Used with dynamically provisioned Quobyte volumes, value is set by the plugin +optional
----@field user string user to map volume access to Defaults to serivceaccount user +optional
----@field volume string volume is a string that references an already created Quobyte volume by name.
-
----@class corev1.RBDPersistentVolumeSource
----@field fsType string fsType is the filesystem type of the volume that you want to mount. Tip: Ensure that the filesystem type is supported by the host operating system. Examples: "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified. More info: https://kubernetes.io/docs/concepts/storage/volumes#rbd TODO: how do we prevent errors in the filesystem from compromising the machine +optional
----@field image string image is the rados image name. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it
----@field keyring string keyring is the path to key ring for RBDUser. Default is /etc/ceph/keyring. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it +optional +default="/etc/ceph/keyring"
----@field monitors string[] monitors is a collection of Ceph monitors. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it +listType=atomic
----@field pool string pool is the rados pool name. Default is rbd. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it +optional +default="rbd"
----@field readOnly boolean readOnly here will force the ReadOnly setting in VolumeMounts. Defaults to false. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it +optional
----@field secretRef corev1.SecretReference secretRef is name of the authentication secret for RBDUser. If provided overrides keyring. Default is nil. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it +optional
----@field user string user is the rados user name. Default is admin. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it +optional +default="admin"
-
----@class corev1.RBDVolumeSource
----@field fsType string fsType is the filesystem type of the volume that you want to mount. Tip: Ensure that the filesystem type is supported by the host operating system. Examples: "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified. More info: https://kubernetes.io/docs/concepts/storage/volumes#rbd TODO: how do we prevent errors in the filesystem from compromising the machine +optional
----@field image string image is the rados image name. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it
----@field keyring string keyring is the path to key ring for RBDUser. Default is /etc/ceph/keyring. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it +optional +default="/etc/ceph/keyring"
----@field monitors string[] monitors is a collection of Ceph monitors. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it +listType=atomic
----@field pool string pool is the rados pool name. Default is rbd. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it +optional +default="rbd"
----@field readOnly boolean readOnly here will force the ReadOnly setting in VolumeMounts. Defaults to false. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it +optional
----@field secretRef corev1.LocalObjectReference secretRef is name of the authentication secret for RBDUser. If provided overrides keyring. Default is nil. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it +optional
----@field user string user is the rados user name. Default is admin. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it +optional +default="admin"
 
 ---@class corev1.ResourceClaim
 ---@field name string Name must match the name of one entry in pod.spec.resourceClaims of the Pod where this field is used. It makes that resource available inside a container.
@@ -1466,6 +1151,7 @@
 
 ---@class corev1.ResourceHealth
 ---@field health string Health of the resource. can be one of: - Healthy: operates as normal - Unhealthy: reported unhealthy. We consider this a temporary health issue since we do not have a mechanism today to distinguish temporary and permanent issues. - Unknown: The status cannot be determined. For example, Device Plugin got unregistered and hasn't been re-registered since. In future we may want to introduce the PermanentlyUnhealthy Status.
+---@field message string Message provides human-readable context for Health (e.g. "ECC error count exceeded threshold"). This field is populated by the kubelet when ResourceHealthStatusMessage is enabled if the DRA plugin returns a message, and is null otherwise. +featureGate=ResourceHealthStatusMessage +optional
 ---@field resourceID string ResourceID is the unique identifier of the resource. See the ResourceID type for more information.
 
 ---@class corev1.ResourceRequirements
@@ -1474,7 +1160,7 @@
 ---@field requests table<string, resource.Quantity> Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. Requests cannot exceed Limits. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/ +optional
 
 ---@class corev1.ResourceStatus
----@field name string Name of the resource. Must be unique within the pod and in case of non-DRA resource, match one of the resources from the pod spec. For DRA resources, the value must be "claim:<claim_name>/<request>". When this status is reported about a container, the "claim_name" and "request" must match one of the claims of this container. +required
+---@field name string Name of the resource. Must be unique within the pod and in case of non-DRA resource, match one of the resources from the pod spec. For DRA resources, the value must be "claim:<claim_name>/<request>" when container.resources.claims[*].request is set or "claim:<claim_name>" when container.resources.claims[*].request is empty. For DRA-backed extended resources, "claim:<claim_name>/<request>" is used when the claim name and request name are recorded in pod.status.extendedResourceClaimStatus. When this status is reported about a container, the "claim_name" and "request" must match one of the claims of this container. +required
 ---@field resources corev1.ResourceHealth[] List of unique resources health. Each element in the list contains an unique resource ID and its health. At a minimum, for the lifetime of a Pod, resource ID must uniquely identify the resource allocated to the Pod on the Node. If other Pod on the same Node reports the status with the same resource ID, it must be the same resource they share. See ResourceID type definition for a specific format it has in various use cases. +listType=map +listMapKey=resourceID
 
 ---@class corev1.SELinuxOptions
@@ -1483,77 +1169,34 @@
 ---@field type string Type is a SELinux type label that applies to the container. +optional
 ---@field user string User is a SELinux user label that applies to the container. +optional
 
----@class corev1.ScaleIOPersistentVolumeSource
----@field fsType string fsType is the filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. "ext4", "xfs", "ntfs". Default is "xfs" +optional +default="xfs"
----@field gateway string gateway is the host address of the ScaleIO API Gateway.
----@field protectionDomain string protectionDomain is the name of the ScaleIO Protection Domain for the configured storage. +optional
----@field readOnly boolean readOnly defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. +optional
----@field secretRef corev1.SecretReference secretRef references to the secret for ScaleIO user and other sensitive information. If this is not provided, Login operation will fail.
----@field sslEnabled boolean sslEnabled is the flag to enable/disable SSL communication with Gateway, default false +optional
----@field storageMode string storageMode indicates whether the storage for a volume should be ThickProvisioned or ThinProvisioned. Default is ThinProvisioned. +optional +default="ThinProvisioned"
----@field storagePool string storagePool is the ScaleIO Storage Pool associated with the protection domain. +optional
----@field system string system is the name of the storage system as configured in ScaleIO.
----@field volumeName string volumeName is the name of a volume already created in the ScaleIO system that is associated with this volume source.
-
----@class corev1.ScaleIOVolumeSource
----@field fsType string fsType is the filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. "ext4", "xfs", "ntfs". Default is "xfs". +optional +default="xfs"
----@field gateway string gateway is the host address of the ScaleIO API Gateway.
----@field protectionDomain string protectionDomain is the name of the ScaleIO Protection Domain for the configured storage. +optional
----@field readOnly boolean readOnly Defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. +optional
----@field secretRef corev1.LocalObjectReference secretRef references to the secret for ScaleIO user and other sensitive information. If this is not provided, Login operation will fail.
----@field sslEnabled boolean sslEnabled Flag enable/disable SSL communication with Gateway, default false +optional
----@field storageMode string storageMode indicates whether the storage for a volume should be ThickProvisioned or ThinProvisioned. Default is ThinProvisioned. +optional +default="ThinProvisioned"
----@field storagePool string storagePool is the ScaleIO Storage Pool associated with the protection domain. +optional
----@field system string system is the name of the storage system as configured in ScaleIO.
----@field volumeName string volumeName is the name of a volume already created in the ScaleIO system that is associated with this volume source.
-
 ---@class corev1.SeccompProfile
 ---@field localhostProfile string localhostProfile indicates a profile defined in a file on the node should be used. The profile must be preconfigured on the node to work. Must be a descending path, relative to the kubelet's configured seccomp profile location. Must be set if type is "Localhost". Must NOT be set for any other type. +optional
 ---@field type string type indicates which kind of seccomp profile will be applied. Valid options are: Localhost - a profile defined in a file on the node should be used. RuntimeDefault - the container runtime default profile should be used. Unconfined - no profile should be applied. +unionDiscriminator
 
 ---@class corev1.Secret
----@field TypeMeta v1.TypeMeta
 ---@field data table<string, number[]> Data contains the secret data. Each key must consist of alphanumeric characters, '-', '_' or '.'. The serialized form of the secret data is a base64 encoded string, representing the arbitrary (possibly non-string) data value here. Described in https://tools.ietf.org/html/rfc4648#section-4 +optional
 ---@field immutable boolean Immutable, if set to true, ensures that data stored in the Secret cannot be updated (only object metadata can be modified). If not set to true, the field can be modified at any time. Defaulted to nil. +optional
 ---@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 ---@field stringData table<string, string> stringData allows specifying non-binary secret data in string form. It is provided as a write-only input field for convenience. All keys and values are merged into the data field on write, overwriting any existing values. The stringData field is never output when reading from the API. +k8s:conversion-gen=false +optional
----@field type string Used to facilitate programmatic handling of secret data. More info: https://kubernetes.io/docs/concepts/configuration/secret/#secret-types +optional
+---@field type string Used to facilitate programmatic handling of secret data. More info: https://kubernetes.io/docs/concepts/configuration/secret/#secret-types +optional +k8s:optional +k8s:alpha(since: "1.37")=+k8s:immutable
 
 ---@class corev1.SecretEnvSource
----@field LocalObjectReference corev1.LocalObjectReference The Secret to select from.
 ---@field optional boolean Specify whether the Secret must be defined +optional
 
 ---@class corev1.SecretKeySelector
----@field LocalObjectReference corev1.LocalObjectReference The name of the secret in the pod's namespace to select from.
 ---@field key string The key of the secret to select from. Must be a valid secret key.
 ---@field optional boolean Specify whether the Secret or its key must be defined +optional
 
 ---@class corev1.SecretList
----@field TypeMeta v1.TypeMeta
 ---@field items corev1.Secret[] Items is a list of secret objects. More info: https://kubernetes.io/docs/concepts/configuration/secret
 ---@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +optional
-
----@class corev1.SecretProjection
----@field LocalObjectReference corev1.LocalObjectReference
----@field items corev1.KeyToPath[] items if unspecified, each key-value pair in the Data field of the referenced Secret will be projected into the volume as a file whose name is the key and content is the value. If specified, the listed keys will be projected into the specified paths, and unlisted keys will not be present. If a key is specified which is not present in the Secret, the volume setup will error unless it is marked optional. Paths must be relative and may not contain the '..' path or start with '..'. +optional +listType=atomic
----@field optional boolean optional field specify whether the Secret or its key must be defined +optional
-
----@class corev1.SecretReference
----@field name string name is unique within a namespace to reference a secret resource. +optional
----@field namespace string namespace defines the space within which the secret name must be unique. +optional
-
----@class corev1.SecretVolumeSource
----@field defaultMode number defaultMode is Optional: mode bits used to set permissions on created files by default. Must be an octal value between 0000 and 0777 or a decimal value between 0 and 511. YAML accepts both octal and decimal values, JSON requires decimal values for mode bits. Defaults to 0644. Directories within the path are not affected by this setting. This might be in conflict with other options that affect the file mode, like fsGroup, and the result can be other mode bits set. +optional
----@field items corev1.KeyToPath[] items If unspecified, each key-value pair in the Data field of the referenced Secret will be projected into the volume as a file whose name is the key and content is the value. If specified, the listed keys will be projected into the specified paths, and unlisted keys will not be present. If a key is specified which is not present in the Secret, the volume setup will error unless it is marked optional. Paths must be relative and may not contain the '..' path or start with '..'. +optional +listType=atomic
----@field optional boolean optional field specify whether the Secret or its keys must be defined +optional
----@field secretName string secretName is the name of the secret in the pod's namespace to use. More info: https://kubernetes.io/docs/concepts/storage/volumes#secret +optional
 
 ---@class corev1.SecurityContext
 ---@field allowPrivilegeEscalation boolean AllowPrivilegeEscalation controls whether a process can gain more privileges than its parent process. This bool directly controls if the no_new_privs flag will be set on the container process. AllowPrivilegeEscalation is true always when the container is: 1) run as Privileged 2) has CAP_SYS_ADMIN Note that this field cannot be set when spec.os.name is windows. +optional
 ---@field appArmorProfile corev1.AppArmorProfile appArmorProfile is the AppArmor options to use by this container. If set, this profile overrides the pod's appArmorProfile. Note that this field cannot be set when spec.os.name is windows. +optional
 ---@field capabilities corev1.Capabilities The capabilities to add/drop when running containers. Defaults to the default set of capabilities granted by the container runtime. Note that this field cannot be set when spec.os.name is windows. +optional
 ---@field privileged boolean Run container in privileged mode. Processes in privileged containers are essentially equivalent to root on the host. Defaults to false. Note that this field cannot be set when spec.os.name is windows. +optional
----@field procMount string procMount denotes the type of proc mount to use for the containers. The default value is Default which uses the container runtime defaults for readonly paths and masked paths. This requires the ProcMountType feature flag to be enabled. Note that this field cannot be set when spec.os.name is windows. +optional
+---@field procMount string procMount denotes the type of proc mount to use for the containers. The default value is Default which uses the container runtime defaults for readonly paths and masked paths. Note that this field cannot be set when spec.os.name is windows. +optional
 ---@field readOnlyRootFilesystem boolean Whether this container has a read-only root filesystem. Default is false. Note that this field cannot be set when spec.os.name is windows. +optional
 ---@field runAsGroup number The GID to run the entrypoint of the container process. Uses runtime default if unset. May also be set in PodSecurityContext. If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence. Note that this field cannot be set when spec.os.name is windows. +optional
 ---@field runAsNonRoot boolean Indicates that the container must run as a non-root user. If true, the Kubelet will validate the image at runtime to ensure that it does not run as UID 0 (root) and fail to start the container if it does. If unset or false, no such validation will be performed. May also be set in PodSecurityContext. If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence. +optional
@@ -1563,30 +1206,21 @@
 ---@field windowsOptions corev1.WindowsSecurityContextOptions The Windows specific settings applied to all containers. If unspecified, the options from the PodSecurityContext will be used. If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence. Note that this field cannot be set when spec.os.name is linux. +optional
 
 ---@class corev1.Service
----@field TypeMeta v1.TypeMeta
 ---@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 ---@field spec corev1.ServiceSpec Spec defines the behavior of a service. https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
 ---@field status corev1.ServiceStatus Most recently observed status of the service. Populated by the system. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
 
 ---@class corev1.ServiceAccount
----@field TypeMeta v1.TypeMeta
 ---@field automountServiceAccountToken boolean AutomountServiceAccountToken indicates whether pods running as this service account should have an API token automatically mounted. Can be overridden at the pod level. +optional
 ---@field imagePullSecrets corev1.LocalObjectReference[] ImagePullSecrets is a list of references to secrets in the same namespace to use for pulling any images in pods that reference this ServiceAccount. ImagePullSecrets are distinct from Secrets because Secrets can be mounted in the pod, but ImagePullSecrets are only accessed by the kubelet. More info: https://kubernetes.io/docs/concepts/containers/images/#specifying-imagepullsecrets-on-a-pod +optional +listType=atomic
 ---@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 ---@field secrets corev1.ObjectReference[] Secrets is a list of the secrets in the same namespace that pods running using this ServiceAccount are allowed to use. Pods are only limited to this list if this service account has a "kubernetes.io/enforce-mountable-secrets" annotation set to "true". The "kubernetes.io/enforce-mountable-secrets" annotation is deprecated since v1.32. Prefer separate namespaces to isolate access to mounted secrets. This field should not be used to find auto-generated service account token secrets for use outside of pods. Instead, tokens can be requested directly using the TokenRequest API, or service account token secrets can be manually created. More info: https://kubernetes.io/docs/concepts/configuration/secret +optional +patchMergeKey=name +patchStrategy=merge +listType=map +listMapKey=name
 
 ---@class corev1.ServiceAccountList
----@field TypeMeta v1.TypeMeta
 ---@field items corev1.ServiceAccount[] List of ServiceAccounts. More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
 ---@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +optional
 
----@class corev1.ServiceAccountTokenProjection
----@field audience string audience is the intended audience of the token. A recipient of a token must identify itself with an identifier specified in the audience of the token, and otherwise should reject the token. The audience defaults to the identifier of the apiserver. +optional
----@field expirationSeconds number expirationSeconds is the requested duration of validity of the service account token. As the token approaches expiration, the kubelet volume plugin will proactively rotate the service account token. The kubelet will start trying to rotate the token if the token is older than 80 percent of its time to live or if the token is older than 24 hours.Defaults to 1 hour and must be at least 10 minutes. +optional
----@field path string path is the path relative to the mount point of the file to project the token into.
-
 ---@class corev1.ServiceList
----@field TypeMeta v1.TypeMeta
 ---@field items corev1.Service[] List of services
 ---@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +optional
 
@@ -1617,11 +1251,11 @@
 ---@field selector table<string, string> Route service traffic to pods with label keys and values matching this selector. If empty or not present, the service is assumed to have an external process managing its endpoints, which Kubernetes will not modify. Only applies to types ClusterIP, NodePort, and LoadBalancer. Ignored if type is ExternalName. More info: https://kubernetes.io/docs/concepts/services-networking/service/ +optional +mapType=atomic
 ---@field sessionAffinity string Supports "ClientIP" and "None". Used to maintain session affinity. Enable client IP based session affinity. Must be ClientIP or None. Defaults to None. More info: https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies +optional
 ---@field sessionAffinityConfig corev1.SessionAffinityConfig sessionAffinityConfig contains the configurations of session affinity. +optional
----@field trafficDistribution string TrafficDistribution offers a way to express preferences for how traffic is distributed to Service endpoints. Implementations can use this field as a hint, but are not required to guarantee strict adherence. If the field is not set, the implementation will apply its default routing strategy. If set to "PreferClose", implementations should prioritize endpoints that are in the same zone. +featureGate=ServiceTrafficDistribution +optional
+---@field trafficDistribution string TrafficDistribution offers a way to express preferences for how traffic is distributed to Service endpoints. Implementations can use this field as a hint, but are not required to guarantee strict adherence. If the field is not set, the implementation will apply its default routing strategy. If set to "PreferClose", implementations should prioritize endpoints that are in the same zone. +optional
 ---@field type string type determines how the Service is exposed. Defaults to ClusterIP. Valid options are ExternalName, ClusterIP, NodePort, and LoadBalancer. "ClusterIP" allocates a cluster-internal IP address for load-balancing to endpoints. Endpoints are determined by the selector or if that is not specified, by manual construction of an Endpoints object or EndpointSlice objects. If clusterIP is "None", no virtual IP is allocated and the endpoints are published as a set of endpoints rather than a virtual IP. "NodePort" builds on ClusterIP and allocates a port on every node which routes to the same endpoints as the clusterIP. "LoadBalancer" builds on NodePort and creates an external load-balancer (if supported in the current cloud) which routes to the same endpoints as the clusterIP. "ExternalName" aliases this service to the specified externalName. Several other fields do not apply to ExternalName services. More info: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types +optional
 
 ---@class corev1.ServiceStatus
----@field conditions v1.Condition[] Current service state +optional +patchMergeKey=type +patchStrategy=merge +listType=map +listMapKey=type
+---@field conditions v1.Condition[] Current service state +optional +patchMergeKey=type +patchStrategy=merge +listType=map +listMapKey=type +k8s:alpha(since: "1.37")=+k8s:eachVal=+k8s:opaqueType
 ---@field loadBalancer corev1.LoadBalancerStatus LoadBalancer contains the current status of the load-balancer, if one is present. +optional
 
 ---@class corev1.SessionAffinityConfig
@@ -1629,20 +1263,6 @@
 
 ---@class corev1.SleepAction
 ---@field seconds number Seconds is the number of seconds to sleep.
-
----@class corev1.StorageOSPersistentVolumeSource
----@field fsType string fsType is the filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified. +optional
----@field readOnly boolean readOnly defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. +optional
----@field secretRef corev1.ObjectReference secretRef specifies the secret to use for obtaining the StorageOS API credentials. If not specified, default values will be attempted. +optional
----@field volumeName string volumeName is the human-readable name of the StorageOS volume. Volume names are only unique within a namespace.
----@field volumeNamespace string volumeNamespace specifies the scope of the volume within StorageOS. If no namespace is specified then the Pod's namespace will be used. This allows the Kubernetes name scoping to be mirrored within StorageOS for tighter integration. Set VolumeName to any name to override the default behaviour. Set to "default" if you are not using namespaces within StorageOS. Namespaces that do not pre-exist within StorageOS will be created. +optional
-
----@class corev1.StorageOSVolumeSource
----@field fsType string fsType is the filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified. +optional
----@field readOnly boolean readOnly defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. +optional
----@field secretRef corev1.LocalObjectReference secretRef specifies the secret to use for obtaining the StorageOS API credentials. If not specified, default values will be attempted. +optional
----@field volumeName string volumeName is the human-readable name of the StorageOS volume. Volume names are only unique within a namespace.
----@field volumeNamespace string volumeNamespace specifies the scope of the volume within StorageOS. If no namespace is specified then the Pod's namespace will be used. This allows the Kubernetes name scoping to be mirrored within StorageOS for tighter integration. Set VolumeName to any name to override the default behaviour. Set to "default" if you are not using namespaces within StorageOS. Namespaces that do not pre-exist within StorageOS will be created. +optional
 
 ---@class corev1.Sysctl
 ---@field name string Name of a property to set
@@ -1660,8 +1280,8 @@
 
 ---@class corev1.Toleration
 ---@field effect string Effect indicates the taint effect to match. Empty means match all taint effects. When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute. +optional
----@field key string Key is the taint key that the toleration applies to. Empty means match all taint keys. If the key is empty, operator must be Exists; this combination means to match all values and all keys. +optional
----@field operator string Operator represents a key's relationship to the value. Valid operators are Exists and Equal. Defaults to Equal. Exists is equivalent to wildcard for value, so that a pod can tolerate all taints of a particular category. +optional
+---@field key string Key is the taint key that the toleration applies to. Empty means match all taint keys. If the key is empty, operator must be Exists; this combination means to match all values and all keys. +optional +k8s:alpha(since: "1.37")=+k8s:optional +k8s:alpha(since: "1.37")=+k8s:format=k8s-label-key
+---@field operator string Operator represents a key's relationship to the value. Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal. Exists is equivalent to wildcard for value, so that a pod can tolerate all taints of a particular category. Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators). +optional
 ---@field tolerationSeconds number TolerationSeconds represents the period of time the toleration (which must be of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default, it is not set, which means tolerate the taint forever (do not evict). Zero and negative values will be treated as 0 (evict immediately) by the system. +optional
 ---@field value string Value is the taint value the toleration matches to. If the operator is Exists, the value should be empty, otherwise just a regular string. +optional
 
@@ -1694,19 +1314,28 @@
 ---@field namespace string Namespace is the namespace of resource being referenced Note that when a namespace is specified, a gateway.networking.k8s.io/ReferenceGrant object is required in the referent namespace to allow that namespace's owner to accept the reference. See the ReferenceGrant documentation for details. (Alpha) This field requires the CrossNamespaceVolumeDataSource feature gate to be enabled. +featureGate=CrossNamespaceVolumeDataSource +optional
 
 ---@class corev1.Volume
----@field VolumeSource corev1.VolumeSource volumeSource represents the location and type of the mounted volume. If not specified, the Volume is implied to be an EmptyDir. This implied behavior is deprecated and will be removed in a future version.
 ---@field name string name of the volume. Must be a DNS_LABEL and unique within the pod. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
 
 ---@class corev1.VolumeDevice
 ---@field devicePath string devicePath is the path inside of the container that the device will be mapped to.
 ---@field name string name must match the name of a persistentVolumeClaim in the pod
 
+---@class corev1.VolumeHealthCondition
+---@field message string message is a human-readable description. Maximum permitted length of a message is 1024 bytes. +optional +k8s:optional +k8s:maxBytes=1024
+---@field reason string reason is a brief CamelCase machine-parseable reason. Together with status it forms the unique identity of a condition entry. Maximum permitted length of a reason is 256 bytes. +required +k8s:required +k8s:maxBytes=256
+---@field status string status is the machine-parseable health category. Possible values: - "Inaccessible": the volume cannot be accessed. - "DataLoss": data loss has been detected on the volume. - "Degraded": the volume is functioning with reduced capability. +required +k8s:required
+
+---@class corev1.VolumeHealthStatus
+---@field healthConditions corev1.VolumeHealthCondition[] conditions is the set of adverse conditions reported by the CSI controller plugin. An empty list means no adverse condition. At most 16 conditions may be reported. +optional +listType=map +listMapKey=status +patchMergeKey=status +patchStrategy=merge +listMapKey=reason +k8s:optional +k8s:listType=map +k8s:listMapKey=status +k8s:listMapKey=reason +k8s:maxItems=16
+---@field lastTransitionTime v1.Time lastTransitionTime is when the current set of conditions first appeared. +optional
+
 ---@class corev1.VolumeMount
----@field mountPath string Path within the container at which the volume should be mounted. Must not contain ':'.
+---@field bindMountOptions string[] bindMountOptions is the list of additional bind mount options to apply when mounting this volume into the container. Allowed values are noexec, nodev, and nosuid. These are Linux mount options and have no effect on Windows nodes. This field is not supported with image volumes. This is an alpha field and requires enabling the VolumeBindMountOptions feature gate. +featureGate=VolumeBindMountOptions +optional +listType=set
+---@field mountPath string Path within the container at which the volume should be mounted.
 ---@field mountPropagation string mountPropagation determines how mounts are propagated from the host to container and the other way around. When not set, MountPropagationNone is used. This field is beta in 1.10. When RecursiveReadOnly is set to IfPossible or to Enabled, MountPropagation must be None or unspecified (which defaults to None). +optional
 ---@field name string This must match the Name of a Volume.
 ---@field readOnly boolean Mounted read-only if true, read-write otherwise (false or unspecified). Defaults to false. +optional
----@field recursiveReadOnly string RecursiveReadOnly specifies whether read-only mounts should be handled recursively. If ReadOnly is false, this field has no meaning and must be unspecified. If ReadOnly is true, and this field is set to Disabled, the mount is not made recursively read-only. If this field is set to IfPossible, the mount is made recursively read-only, if it is supported by the container runtime. If this field is set to Enabled, the mount is made recursively read-only if it is supported by the container runtime, otherwise the pod will not be started and an error will be generated to indicate the reason. If this field is set to IfPossible or Enabled, MountPropagation must be set to None (or be unspecified, which defaults to None). If this field is not specified, it is treated as an equivalent of Disabled. +featureGate=RecursiveReadOnlyMounts +optional
+---@field recursiveReadOnly string RecursiveReadOnly specifies whether read-only mounts should be handled recursively. If ReadOnly is false, this field has no meaning and must be unspecified. If ReadOnly is true, and this field is set to Disabled, the mount is not made recursively read-only. If this field is set to IfPossible, the mount is made recursively read-only, if it is supported by the container runtime. If this field is set to Enabled, the mount is made recursively read-only if it is supported by the container runtime, otherwise the pod will not be started and an error will be generated to indicate the reason. If this field is set to IfPossible or Enabled, MountPropagation must be set to None (or be unspecified, which defaults to None). If this field is not specified, it is treated as an equivalent of Disabled. +optional
 ---@field subPath string Path within the volume from which the container's volume should be mounted. Defaults to "" (volume's root). +optional
 ---@field subPathExpr string Expanded path within the volume from which the container's volume should be mounted. Behaves similarly to SubPath but environment variable references $(VAR_NAME) are expanded using the container's environment. Defaults to "" (volume's root). SubPathExpr and SubPath are mutually exclusive. +optional
 
@@ -1714,60 +1343,18 @@
 ---@field mountPath string MountPath corresponds to the original VolumeMount.
 ---@field name string Name corresponds to the name of the original VolumeMount.
 ---@field readOnly boolean ReadOnly corresponds to the original VolumeMount. +optional
----@field recursiveReadOnly string RecursiveReadOnly must be set to Disabled, Enabled, or unspecified (for non-readonly mounts). An IfPossible value in the original VolumeMount must be translated to Disabled or Enabled, depending on the mount result. +featureGate=RecursiveReadOnlyMounts +optional
+---@field recursiveReadOnly string RecursiveReadOnly must be set to Disabled, Enabled, or unspecified (for non-readonly mounts). An IfPossible value in the original VolumeMount must be translated to Disabled or Enabled, depending on the mount result. +optional
+---@field volumeStatus corev1.VolumeStatus volumeStatus represents volume-type-specific status about the mounted volume. +optional
 
 ---@class corev1.VolumeNodeAffinity
 ---@field required corev1.NodeSelector required specifies hard node constraints that must be met.
-
----@class corev1.VolumeProjection
----@field clusterTrustBundle corev1.ClusterTrustBundleProjection ClusterTrustBundle allows a pod to access the `.spec.trustBundle` field of ClusterTrustBundle objects in an auto-updating file. Alpha, gated by the ClusterTrustBundleProjection feature gate. ClusterTrustBundle objects can either be selected by name, or by the combination of signer name and a label selector. Kubelet performs aggressive normalization of the PEM contents written into the pod filesystem. Esoteric PEM features such as inter-block comments and block headers are stripped. Certificates are deduplicated. The ordering of certificates within the file is arbitrary, and Kubelet may change the order over time. +featureGate=ClusterTrustBundleProjection +optional
----@field configMap corev1.ConfigMapProjection configMap information about the configMap data to project +optional
----@field downwardAPI corev1.DownwardAPIProjection downwardAPI information about the downwardAPI data to project +optional
----@field podCertificate corev1.PodCertificateProjection Projects an auto-rotating credential bundle (private key and certificate chain) that the pod can use either as a TLS client or server. Kubelet generates a private key and uses it to send a PodCertificateRequest to the named signer. Once the signer approves the request and issues a certificate chain, Kubelet writes the key and certificate chain to the pod filesystem. The pod does not start until certificates have been issued for each podCertificate projected volume source in its spec. Kubelet will begin trying to rotate the certificate at the time indicated by the signer using the PodCertificateRequest.Status.BeginRefreshAt timestamp. Kubelet can write a single file, indicated by the credentialBundlePath field, or separate files, indicated by the keyPath and certificateChainPath fields. The credential bundle is a single file in PEM format. The first PEM entry is the private key (in PKCS#8 format), and the remaining PEM entries are the certificate chain issued by the signer (typically, signers will return their certificate chain in leaf-to-root order). Prefer using the credential bundle format, since your application code can read it atomically. If you use keyPath and certificateChainPath, your application must make two separate file reads. If these coincide with a certificate rotation, it is possible that the private key and leaf certificate you read may not correspond to each other. Your application will need to check for this condition, and re-read until they are consistent. The named signer controls chooses the format of the certificate it issues; consult the signer implementation's documentation to learn how to use the certificates it issues. +featureGate=PodCertificateProjection +optional
----@field secret corev1.SecretProjection secret information about the secret data to project +optional
----@field serviceAccountToken corev1.ServiceAccountTokenProjection serviceAccountToken is information about the serviceAccountToken data to project +optional
 
 ---@class corev1.VolumeResourceRequirements
 ---@field limits table<string, resource.Quantity> Limits describes the maximum amount of compute resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/ +optional
 ---@field requests table<string, resource.Quantity> Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. Requests cannot exceed Limits. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/ +optional
 
----@class corev1.VolumeSource
----@field awsElasticBlockStore corev1.AWSElasticBlockStoreVolumeSource awsElasticBlockStore represents an AWS Disk resource that is attached to a kubelet's host machine and then exposed to the pod. Deprecated: AWSElasticBlockStore is deprecated. All operations for the in-tree awsElasticBlockStore type are redirected to the ebs.csi.aws.com CSI driver. More info: https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore +optional
----@field azureDisk corev1.AzureDiskVolumeSource azureDisk represents an Azure Data Disk mount on the host and bind mount to the pod. Deprecated: AzureDisk is deprecated. All operations for the in-tree azureDisk type are redirected to the disk.csi.azure.com CSI driver. +optional
----@field azureFile corev1.AzureFileVolumeSource azureFile represents an Azure File Service mount on the host and bind mount to the pod. Deprecated: AzureFile is deprecated. All operations for the in-tree azureFile type are redirected to the file.csi.azure.com CSI driver. +optional
----@field cephfs corev1.CephFSVolumeSource cephFS represents a Ceph FS mount on the host that shares a pod's lifetime. Deprecated: CephFS is deprecated and the in-tree cephfs type is no longer supported. +optional
----@field cinder corev1.CinderVolumeSource cinder represents a cinder volume attached and mounted on kubelets host machine. Deprecated: Cinder is deprecated. All operations for the in-tree cinder type are redirected to the cinder.csi.openstack.org CSI driver. More info: https://examples.k8s.io/mysql-cinder-pd/README.md +optional
----@field configMap corev1.ConfigMapVolumeSource configMap represents a configMap that should populate this volume +optional
----@field csi corev1.CSIVolumeSource csi (Container Storage Interface) represents ephemeral storage that is handled by certain external CSI drivers. +optional
----@field downwardAPI corev1.DownwardAPIVolumeSource downwardAPI represents downward API about the pod that should populate this volume +optional
----@field emptyDir corev1.EmptyDirVolumeSource emptyDir represents a temporary directory that shares a pod's lifetime. More info: https://kubernetes.io/docs/concepts/storage/volumes#emptydir +optional
----@field ephemeral corev1.EphemeralVolumeSource ephemeral represents a volume that is handled by a cluster storage driver. The volume's lifecycle is tied to the pod that defines it - it will be created before the pod starts, and deleted when the pod is removed. Use this if: a) the volume is only needed while the pod runs, b) features of normal volumes like restoring from snapshot or capacity tracking are needed, c) the storage driver is specified through a storage class, and d) the storage driver supports dynamic volume provisioning through a PersistentVolumeClaim (see EphemeralVolumeSource for more information on the connection between this volume type and PersistentVolumeClaim). Use PersistentVolumeClaim or one of the vendor-specific APIs for volumes that persist for longer than the lifecycle of an individual pod. Use CSI for light-weight local ephemeral volumes if the CSI driver is meant to be used that way - see the documentation of the driver for more information. A pod can use both types of ephemeral volumes and persistent volumes at the same time. +optional
----@field fc corev1.FCVolumeSource fc represents a Fibre Channel resource that is attached to a kubelet's host machine and then exposed to the pod. +optional
----@field flexVolume corev1.FlexVolumeSource flexVolume represents a generic volume resource that is provisioned/attached using an exec based plugin. Deprecated: FlexVolume is deprecated. Consider using a CSIDriver instead. +optional
----@field flocker corev1.FlockerVolumeSource flocker represents a Flocker volume attached to a kubelet's host machine. This depends on the Flocker control service being running. Deprecated: Flocker is deprecated and the in-tree flocker type is no longer supported. +optional
----@field gcePersistentDisk corev1.GCEPersistentDiskVolumeSource gcePersistentDisk represents a GCE Disk resource that is attached to a kubelet's host machine and then exposed to the pod. Deprecated: GCEPersistentDisk is deprecated. All operations for the in-tree gcePersistentDisk type are redirected to the pd.csi.storage.gke.io CSI driver. More info: https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk +optional
----@field gitRepo corev1.GitRepoVolumeSource gitRepo represents a git repository at a particular revision. Deprecated: GitRepo is deprecated. To provision a container with a git repo, mount an EmptyDir into an InitContainer that clones the repo using git, then mount the EmptyDir into the Pod's container. +optional
----@field glusterfs corev1.GlusterfsVolumeSource glusterfs represents a Glusterfs mount on the host that shares a pod's lifetime. Deprecated: Glusterfs is deprecated and the in-tree glusterfs type is no longer supported. +optional
----@field hostPath corev1.HostPathVolumeSource hostPath represents a pre-existing file or directory on the host machine that is directly exposed to the container. This is generally used for system agents or other privileged things that are allowed to see the host machine. Most containers will NOT need this. More info: https://kubernetes.io/docs/concepts/storage/volumes#hostpath --- TODO(jonesdl) We need to restrict who can use host directory mounts and who can/can not mount host directories as read/write. +optional
----@field image corev1.ImageVolumeSource image represents an OCI object (a container image or artifact) pulled and mounted on the kubelet's host machine. The volume is resolved at pod startup depending on which PullPolicy value is provided: - Always: the kubelet always attempts to pull the reference. Container creation will fail If the pull fails. - Never: the kubelet never pulls the reference and only uses a local image or artifact. Container creation will fail if the reference isn't present. - IfNotPresent: the kubelet pulls if the reference isn't already present on disk. Container creation will fail if the reference isn't present and the pull fails. The volume gets re-resolved if the pod gets deleted and recreated, which means that new remote content will become available on pod recreation. A failure to resolve or pull the image during pod startup will block containers from starting and may add significant latency. Failures will be retried using normal volume backoff and will be reported on the pod reason and message. The types of objects that may be mounted by this volume are defined by the container runtime implementation on a host machine and at minimum must include all valid types supported by the container image field. The OCI object gets mounted in a single directory (spec.containers[*].volumeMounts.mountPath) by merging the manifest layers in the same way as for container images. The volume will be mounted read-only (ro) and non-executable files (noexec). Sub path mounts for containers are not supported (spec.containers[*].volumeMounts.subpath) before 1.33. The field spec.securityContext.fsGroupChangePolicy has no effect on this volume type. +featureGate=ImageVolume +optional
----@field iscsi corev1.ISCSIVolumeSource iscsi represents an ISCSI Disk resource that is attached to a kubelet's host machine and then exposed to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes/#iscsi +optional
----@field nfs corev1.NFSVolumeSource nfs represents an NFS mount on the host that shares a pod's lifetime More info: https://kubernetes.io/docs/concepts/storage/volumes#nfs +optional
----@field persistentVolumeClaim corev1.PersistentVolumeClaimVolumeSource persistentVolumeClaimVolumeSource represents a reference to a PersistentVolumeClaim in the same namespace. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims +optional
----@field photonPersistentDisk corev1.PhotonPersistentDiskVolumeSource photonPersistentDisk represents a PhotonController persistent disk attached and mounted on kubelets host machine. Deprecated: PhotonPersistentDisk is deprecated and the in-tree photonPersistentDisk type is no longer supported.
----@field portworxVolume corev1.PortworxVolumeSource portworxVolume represents a portworx volume attached and mounted on kubelets host machine. Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type are redirected to the pxd.portworx.com CSI driver when the CSIMigrationPortworx feature-gate is on. +optional
----@field projected corev1.ProjectedVolumeSource projected items for all in one resources secrets, configmaps, and downward API
----@field quobyte corev1.QuobyteVolumeSource quobyte represents a Quobyte mount on the host that shares a pod's lifetime. Deprecated: Quobyte is deprecated and the in-tree quobyte type is no longer supported. +optional
----@field rbd corev1.RBDVolumeSource rbd represents a Rados Block Device mount on the host that shares a pod's lifetime. Deprecated: RBD is deprecated and the in-tree rbd type is no longer supported. +optional
----@field scaleIO corev1.ScaleIOVolumeSource scaleIO represents a ScaleIO persistent volume attached and mounted on Kubernetes nodes. Deprecated: ScaleIO is deprecated and the in-tree scaleIO type is no longer supported. +optional
----@field secret corev1.SecretVolumeSource secret represents a secret that should populate this volume. More info: https://kubernetes.io/docs/concepts/storage/volumes#secret +optional
----@field storageos corev1.StorageOSVolumeSource storageOS represents a StorageOS volume attached and mounted on Kubernetes nodes. Deprecated: StorageOS is deprecated and the in-tree storageos type is no longer supported. +optional
----@field vsphereVolume corev1.VsphereVirtualDiskVolumeSource vsphereVolume represents a vSphere volume attached and mounted on kubelets host machine. Deprecated: VsphereVolume is deprecated. All operations for the in-tree vsphereVolume type are redirected to the csi.vsphere.vmware.com CSI driver. +optional
-
----@class corev1.VsphereVirtualDiskVolumeSource
----@field fsType string fsType is filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified. +optional
----@field storagePolicyID string storagePolicyID is the storage Policy Based Management (SPBM) profile ID associated with the StoragePolicyName. +optional
----@field storagePolicyName string storagePolicyName is the storage Policy Based Management (SPBM) profile name. +optional
----@field volumePath string volumePath is the path that identifies vSphere volume vmdk
+---@class corev1.VolumeStatus
+---@field image corev1.ImageVolumeStatus image represents an OCI object (a container image or artifact) pulled and mounted on the kubelet's host machine. +featureGate=ImageVolumeWithDigest +optional
 
 ---@class corev1.WeightedPodAffinityTerm
 ---@field podAffinityTerm corev1.PodAffinityTerm Required. A pod affinity term, associated with the corresponding weight.
@@ -1780,7 +1367,7 @@
 ---@field runAsUserName string The UserName in Windows to run the entrypoint of the container process. Defaults to the user specified in image metadata if unspecified. May also be set in PodSecurityContext. If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence. +optional
 
 ---@class discoveryv1.Endpoint
----@field addresses string[] addresses of this endpoint. For EndpointSlices of addressType "IPv4" or "IPv6", the values are IP addresses in canonical form. The syntax and semantics of other addressType values are not defined. This must contain at least one address but no more than 100. EndpointSlices generated by the EndpointSlice controller will always have exactly 1 address. No semantics are defined for additional addresses beyond the first, and kube-proxy does not look at them. +listType=set
+---@field addresses string[] addresses of this endpoint. For EndpointSlices of addressType "IPv4" or "IPv6", the values are IP addresses in canonical form. The syntax and semantics of other addressType values are not defined. This must contain at least one address but no more than 100. EndpointSlices generated by the EndpointSlice controller will always have exactly 1 address. No semantics are defined for additional addresses beyond the first, and kube-proxy does not look at them. +listType=set +required +k8s:beta(since: "1.37")=+k8s:required +k8s:beta(since: "1.37")=+k8s:maxItems=100
 ---@field conditions discoveryv1.EndpointConditions conditions contains information about the current status of the endpoint.
 ---@field deprecatedTopology table<string, string> deprecatedTopology contains topology information part of the v1beta1 API. This field is deprecated, and will be removed when the v1beta1 API is removed (no sooner than kubernetes v1.24). While this field can hold values, it is not writable through the v1 API, and any attempts to write to it will be silently ignored. Topology information can be found in the zone and nodeName fields instead. +optional
 ---@field hints discoveryv1.EndpointHints hints contains information associated with how an endpoint should be consumed. +optional
@@ -1795,7 +1382,7 @@
 ---@field terminating boolean terminating indicates that this endpoint is terminating. A nil value should be interpreted as "false". +optional
 
 ---@class discoveryv1.EndpointHints
----@field forNodes discoveryv1.ForNode[] forNodes indicates the node(s) this endpoint should be consumed by when using topology aware routing. May contain a maximum of 8 entries. This is an Alpha feature and is only used when the PreferSameTrafficDistribution feature gate is enabled. +listType=atomic
+---@field forNodes discoveryv1.ForNode[] forNodes indicates the node(s) this endpoint should be consumed by when using topology aware routing. May contain a maximum of 8 entries. +listType=atomic
 ---@field forZones discoveryv1.ForZone[] forZones indicates the zone(s) this endpoint should be consumed by when using topology aware routing. May contain a maximum of 8 entries. +listType=atomic
 
 ---@class discoveryv1.EndpointPort
@@ -1805,14 +1392,12 @@
 ---@field protocol string protocol represents the IP protocol for this port. Must be UDP, TCP, or SCTP. Default is TCP.
 
 ---@class discoveryv1.EndpointSlice
----@field TypeMeta v1.TypeMeta
----@field addressType string addressType specifies the type of address carried by this EndpointSlice. All addresses in this slice must be the same type. This field is immutable after creation. The following address types are currently supported: * IPv4: Represents an IPv4 Address. * IPv6: Represents an IPv6 Address. * FQDN: Represents a Fully Qualified Domain Name. (Deprecated) The EndpointSlice controller only generates, and kube-proxy only processes, slices of addressType "IPv4" and "IPv6". No semantics are defined for the "FQDN" type.
----@field endpoints discoveryv1.Endpoint[] endpoints is a list of unique endpoints in this slice. Each slice may include a maximum of 1000 endpoints. +listType=atomic
+---@field addressType string addressType specifies the type of address carried by this EndpointSlice. All addresses in this slice must be the same type. This field is immutable after creation. The following address types are currently supported: * IPv4: Represents an IPv4 Address. * IPv6: Represents an IPv6 Address. * FQDN: Represents a Fully Qualified Domain Name. (Deprecated) The EndpointSlice controller only generates, and kube-proxy only processes, slices of addressType "IPv4" and "IPv6". No semantics are defined for the "FQDN" type. +required +k8s:beta(since: "1.37")=+k8s:required +k8s:beta(since: "1.37")=+k8s:immutable
+---@field endpoints discoveryv1.Endpoint[] endpoints is a list of unique endpoints in this slice. Each slice may include a maximum of 1000 endpoints. +optional +listType=atomic +k8s:beta(since: "1.37")=+k8s:optional
 ---@field metadata v1.ObjectMeta Standard object's metadata. +optional
 ---@field ports discoveryv1.EndpointPort[] ports specifies the list of network ports exposed by each endpoint in this slice. Each port must have a unique name. Each slice may include a maximum of 100 ports. Services always have at least 1 port, so EndpointSlices generated by the EndpointSlice controller will likewise always have at least 1 port. EndpointSlices used for other purposes may have an empty ports list. +optional +listType=atomic
 
 ---@class discoveryv1.EndpointSliceList
----@field TypeMeta v1.TypeMeta
 ---@field items discoveryv1.EndpointSlice[] items is the list of endpoint slices
 ---@field metadata v1.ListMeta Standard list metadata. +optional
 
@@ -1823,14 +1408,13 @@
 ---@field name string name represents the name of the zone.
 
 ---@class eventsv1.Event
----@field TypeMeta v1.TypeMeta
 ---@field action string action is what action was taken/failed regarding to the regarding object. It is machine-readable. This field cannot be empty for new Events and it can have at most 128 characters.
 ---@field deprecatedCount number deprecatedCount is the deprecated field assuring backward compatibility with core.v1 Event type. +optional
 ---@field deprecatedFirstTimestamp v1.Time deprecatedFirstTimestamp is the deprecated field assuring backward compatibility with core.v1 Event type. +optional
 ---@field deprecatedLastTimestamp v1.Time deprecatedLastTimestamp is the deprecated field assuring backward compatibility with core.v1 Event type. +optional
 ---@field deprecatedSource corev1.EventSource deprecatedSource is the deprecated field assuring backward compatibility with core.v1 Event type. +optional
 ---@field eventTime v1.MicroTime eventTime is the time when this Event was first observed. It is required.
----@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
+---@field metadata v1.ObjectMeta metadata is the standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 ---@field note string note is a human-readable description of the status of this operation. Maximal length of the note is 1kB, but libraries should be prepared to handle values up to 64kB. +optional
 ---@field reason string reason is why the action was taken. It is human-readable. This field cannot be empty for new Events and it can have at most 128 characters.
 ---@field regarding corev1.ObjectReference regarding contains the object this Event is about. In most cases it's an Object reporting controller implements, e.g. ReplicaSetController implements ReplicaSets and this event is emitted because it acts on some changes in a ReplicaSet object. +optional
@@ -1841,29 +1425,19 @@
 ---@field type string type is the type of this event (Normal, Warning), new types could be added in the future. It is machine-readable. This field cannot be empty for new Events.
 
 ---@class eventsv1.EventList
----@field TypeMeta v1.TypeMeta
 ---@field items eventsv1.Event[] items is a list of schema objects.
----@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
+---@field metadata v1.ListMeta metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 
 ---@class eventsv1.EventSeries
 ---@field count number count is the number of occurrences in this series up to the last heartbeat time.
 ---@field lastObservedTime v1.MicroTime lastObservedTime is the time when last Event from the series was seen before last heartbeat.
 
----@class networkingv1.HTTPIngressPath
----@field backend networkingv1.IngressBackend backend defines the referenced service endpoint to which the traffic will be forwarded to.
----@field path string path is matched against the path of an incoming request. Currently it can contain characters disallowed from the conventional "path" part of a URL as defined by RFC 3986. Paths must begin with a '/' and must be present when using PathType with value "Exact" or "Prefix". +optional
----@field pathType string pathType determines the interpretation of the path matching. PathType can be one of the following values: * Exact: Matches the URL path exactly. * Prefix: Matches based on a URL path prefix split by '/'. Matching is done on a path element by element basis. A path element refers is the list of labels in the path split by the '/' separator. A request is a match for path p if every p is an element-wise prefix of p of the request path. Note that if the last element of the path is a substring of the last element in request path, it is not a match (e.g. /foo/bar matches /foo/bar/baz, but does not match /foo/barbaz). * ImplementationSpecific: Interpretation of the Path matching is up to the IngressClass. Implementations can treat this as a separate PathType or treat it identically to Prefix or Exact path types. Implementations are required to support all path types.
-
----@class networkingv1.HTTPIngressRuleValue
----@field paths networkingv1.HTTPIngressPath[] paths is a collection of paths that map requests to backends. +listType=atomic
-
 ---@class networkingv1.IPBlock
----@field cidr string cidr is a string representing the IPBlock Valid examples are "192.168.1.0/24" or "2001:db8::/64"
+---@field cidr string cidr is a string representing the IPBlock Valid examples are "192.168.1.0/24" or "2001:db8::/64" +required +k8s:beta(since: "1.37")=+k8s:required
 ---@field except string[] except is a slice of CIDRs that should not be included within an IPBlock Valid examples are "192.168.1.0/24" or "2001:db8::/64" Except values will be rejected if they are outside the cidr range +optional +listType=atomic
 
 ---@class networkingv1.Ingress
----@field TypeMeta v1.TypeMeta
----@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
+---@field metadata v1.ObjectMeta metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 ---@field spec networkingv1.IngressSpec spec is the desired state of the Ingress. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
 ---@field status networkingv1.IngressStatus status is the current state of the Ingress. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status +optional
 
@@ -1872,7 +1446,6 @@
 ---@field service networkingv1.IngressServiceBackend service references a service as a backend. This is a mutually exclusive setting with "Resource". +optional
 
 ---@class networkingv1.IngressList
----@field TypeMeta v1.TypeMeta
 ---@field items networkingv1.Ingress[] items is the list of Ingress.
 ---@field metadata v1.ListMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 
@@ -1890,11 +1463,7 @@
 ---@field protocol string protocol is the protocol of the ingress port. The supported values are: "TCP", "UDP", "SCTP"
 
 ---@class networkingv1.IngressRule
----@field IngressRuleValue networkingv1.IngressRuleValue IngressRuleValue represents a rule to route requests for this IngressRule. If unspecified, the rule defaults to a http catch-all. Whether that sends just traffic matching the host to the default backend or all traffic to the default backend, is left to the controller fulfilling the Ingress. Http is currently the only supported IngressRuleValue. +optional
 ---@field host string host is the fully qualified domain name of a network host, as defined by RFC 3986. Note the following deviations from the "host" part of the URI as defined in RFC 3986: 1. IPs are not allowed. Currently an IngressRuleValue can only apply to the IP in the Spec of the parent Ingress. 2. The `:` delimiter is not respected because ports are not allowed. Currently the port of an Ingress is implicitly :80 for http and :443 for https. Both these may change in the future. Incoming requests are matched against the host before the IngressRuleValue. If the host is unspecified, the Ingress routes all traffic based on the specified IngressRuleValue. host can be "precise" which is a domain name without the terminating dot of a network host (e.g. "foo.bar.com") or "wildcard", which is a domain name prefixed with a single wildcard label (e.g. "*.foo.com"). The wildcard character '*' must appear by itself as the first DNS label and matches only a single label. You cannot have a wildcard label by itself (e.g. Host == "*"). Requests will be matched against the Host field in the following way: 1. If host is precise, the request matches this rule if the http host header is equal to Host. 2. If host is a wildcard, then the request matches this rule if the http host header is to equal to the suffix (removing the first label) of the wildcard rule. +optional
-
----@class networkingv1.IngressRuleValue
----@field http networkingv1.HTTPIngressRuleValue +optional
 
 ---@class networkingv1.IngressServiceBackend
 ---@field name string name is the referenced service. The service must exist in the same namespace as the Ingress object.
@@ -1914,25 +1483,23 @@
 ---@field secretName string secretName is the name of the secret used to terminate TLS traffic on port 443. Field is left optional to allow TLS routing based on SNI hostname alone. If the SNI host in a listener conflicts with the "Host" header field used by an IngressRule, the SNI host is used for termination and value of the "Host" header is used for routing. +optional
 
 ---@class networkingv1.NetworkPolicy
----@field TypeMeta v1.TypeMeta
----@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
+---@field metadata v1.ObjectMeta metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 ---@field spec networkingv1.NetworkPolicySpec spec represents the specification of the desired behavior for this NetworkPolicy. +optional
 
 ---@class networkingv1.NetworkPolicyEgressRule
 ---@field ports networkingv1.NetworkPolicyPort[] ports is a list of destination ports for outgoing traffic. Each item in this list is combined using a logical OR. If this field is empty or missing, this rule matches all ports (traffic not restricted by port). If this field is present and contains at least one item, then this rule allows traffic only if the traffic matches at least one port in the list. +optional +listType=atomic
----@field to networkingv1.NetworkPolicyPeer[] to is a list of destinations for outgoing traffic of pods selected for this rule. Items in this list are combined using a logical OR operation. If this field is empty or missing, this rule matches all destinations (traffic not restricted by destination). If this field is present and contains at least one item, this rule allows traffic only if the traffic matches at least one item in the to list. +optional +listType=atomic
+---@field to networkingv1.NetworkPolicyPeer[] to is a list of destinations for outgoing traffic of pods selected for this rule. Items in this list are combined using a logical OR operation. If this field is empty or missing, this rule matches all destinations (traffic not restricted by destination). If this field is present and contains at least one item, this rule allows traffic only if the traffic matches at least one item in the to list. +optional +listType=atomic +k8s:beta(since: "1.37")=+k8s:optional
 
 ---@class networkingv1.NetworkPolicyIngressRule
----@field from networkingv1.NetworkPolicyPeer[] from is a list of sources which should be able to access the pods selected for this rule. Items in this list are combined using a logical OR operation. If this field is empty or missing, this rule matches all sources (traffic not restricted by source). If this field is present and contains at least one item, this rule allows traffic only if the traffic matches at least one item in the from list. +optional +listType=atomic
+---@field from networkingv1.NetworkPolicyPeer[] from is a list of sources which should be able to access the pods selected for this rule. Items in this list are combined using a logical OR operation. If this field is empty or missing, this rule matches all sources (traffic not restricted by source). If this field is present and contains at least one item, this rule allows traffic only if the traffic matches at least one item in the from list. +optional +listType=atomic +k8s:beta(since: "1.37")=+k8s:optional
 ---@field ports networkingv1.NetworkPolicyPort[] ports is a list of ports which should be made accessible on the pods selected for this rule. Each item in this list is combined using a logical OR. If this field is empty or missing, this rule matches all ports (traffic not restricted by port). If this field is present and contains at least one item, then this rule allows traffic only if the traffic matches at least one port in the list. +optional +listType=atomic
 
 ---@class networkingv1.NetworkPolicyList
----@field TypeMeta v1.TypeMeta
 ---@field items networkingv1.NetworkPolicy[] items is a list of schema objects.
 ---@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 
 ---@class networkingv1.NetworkPolicyPeer
----@field ipBlock networkingv1.IPBlock ipBlock defines policy on a particular IPBlock. If this field is set then neither of the other fields can be. +optional
+---@field ipBlock networkingv1.IPBlock ipBlock defines policy on a particular IPBlock. If this field is set then neither of the other fields can be. +optional +k8s:beta(since: "1.37")=+k8s:optional
 ---@field namespaceSelector v1.LabelSelector namespaceSelector selects namespaces using cluster-scoped labels. This field follows standard label selector semantics; if present but empty, it selects all namespaces. If podSelector is also set, then the NetworkPolicyPeer as a whole selects the pods matching podSelector in the namespaces selected by namespaceSelector. Otherwise it selects all pods in the namespaces selected by namespaceSelector. +optional
 ---@field podSelector v1.LabelSelector podSelector is a label selector which selects pods. This field follows standard label selector semantics; if present but empty, it selects all pods. If namespaceSelector is also set, then the NetworkPolicyPeer as a whole selects the pods matching podSelector in the Namespaces selected by NamespaceSelector. Otherwise it selects the pods matching podSelector in the policy's own namespace. +optional
 
@@ -1942,8 +1509,8 @@
 ---@field protocol string protocol represents the protocol (TCP, UDP, or SCTP) which traffic must match. If not specified, this field defaults to TCP. +optional
 
 ---@class networkingv1.NetworkPolicySpec
----@field egress networkingv1.NetworkPolicyEgressRule[] egress is a list of egress rules to be applied to the selected pods. Outgoing traffic is allowed if there are no NetworkPolicies selecting the pod (and cluster policy otherwise allows the traffic), OR if the traffic matches at least one egress rule across all of the NetworkPolicy objects whose podSelector matches the pod. If this field is empty then this NetworkPolicy limits all outgoing traffic (and serves solely to ensure that the pods it selects are isolated by default). This field is beta-level in 1.8 +optional +listType=atomic
----@field ingress networkingv1.NetworkPolicyIngressRule[] ingress is a list of ingress rules to be applied to the selected pods. Traffic is allowed to a pod if there are no NetworkPolicies selecting the pod (and cluster policy otherwise allows the traffic), OR if the traffic source is the pod's local node, OR if the traffic matches at least one ingress rule across all of the NetworkPolicy objects whose podSelector matches the pod. If this field is empty then this NetworkPolicy does not allow any traffic (and serves solely to ensure that the pods it selects are isolated by default) +optional +listType=atomic
+---@field egress networkingv1.NetworkPolicyEgressRule[] egress is a list of egress rules to be applied to the selected pods. Outgoing traffic is allowed if there are no NetworkPolicies selecting the pod (and cluster policy otherwise allows the traffic), OR if the traffic matches at least one egress rule across all of the NetworkPolicy objects whose podSelector matches the pod. If this field is empty then this NetworkPolicy limits all outgoing traffic (and serves solely to ensure that the pods it selects are isolated by default). This field is beta-level in 1.8 +optional +listType=atomic +k8s:beta(since: "1.37")=+k8s:optional
+---@field ingress networkingv1.NetworkPolicyIngressRule[] ingress is a list of ingress rules to be applied to the selected pods. Traffic is allowed to a pod if there are no NetworkPolicies selecting the pod (and cluster policy otherwise allows the traffic), OR if the traffic source is the pod's local node, OR if the traffic matches at least one ingress rule across all of the NetworkPolicy objects whose podSelector matches the pod. If this field is empty then this NetworkPolicy does not allow any traffic (and serves solely to ensure that the pods it selects are isolated by default) +optional +listType=atomic +k8s:beta(since: "1.37")=+k8s:optional
 ---@field podSelector v1.LabelSelector podSelector selects the pods to which this NetworkPolicy object applies. The array of rules is applied to any pods selected by this field. An empty selector matches all pods in the policy's namespace. Multiple network policies can select the same set of pods. In this case, the ingress rules for each are combined additively. This field is optional. If it is not specified, it defaults to an empty selector. +optional
 ---@field policyTypes string[] policyTypes is a list of rule types that the NetworkPolicy relates to. Valid options are ["Ingress"], ["Egress"], or ["Ingress", "Egress"]. If this field is not specified, it will default based on the existence of ingress or egress rules; policies that contain an egress section are assumed to affect egress, and all policies (whether or not they contain an ingress section) are assumed to affect ingress. If you want to write an egress-only policy, you must explicitly specify policyTypes [ "Egress" ]. Likewise, if you want to write a policy that specifies that no egress is allowed, you must specify a policyTypes value that include "Egress" (since such a policy would not include an egress section and would otherwise default to just [ "Ingress" ]). This field is beta-level in 1.8 +optional +listType=atomic
 
@@ -1952,119 +1519,127 @@
 ---@field number number number is the numerical port number (e.g. 80) on the Service. This is a mutually exclusive setting with "Name". +optional
 
 ---@class policyv1.PodDisruptionBudget
----@field TypeMeta v1.TypeMeta
----@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
----@field spec policyv1.PodDisruptionBudgetSpec Specification of the desired behavior of the PodDisruptionBudget. +optional
----@field status policyv1.PodDisruptionBudgetStatus Most recently observed status of the PodDisruptionBudget. +optional
+---@field metadata v1.ObjectMeta metadata is the standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
+---@field spec policyv1.PodDisruptionBudgetSpec spec is the specification of the desired behavior of the PodDisruptionBudget. +optional
+---@field status policyv1.PodDisruptionBudgetStatus status is the most recently observed status of the PodDisruptionBudget. +optional
 
 ---@class policyv1.PodDisruptionBudgetList
----@field TypeMeta v1.TypeMeta
 ---@field items policyv1.PodDisruptionBudget[] Items is a list of PodDisruptionBudgets
 ---@field metadata v1.ListMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 
 ---@class policyv1.PodDisruptionBudgetSpec
----@field maxUnavailable intstr.IntOrString An eviction is allowed if at most "maxUnavailable" pods selected by "selector" are unavailable after the eviction, i.e. even in absence of the evicted pod. For example, one can prevent all voluntary evictions by specifying 0. This is a mutually exclusive setting with "minAvailable". +optional
----@field minAvailable intstr.IntOrString An eviction is allowed if at least "minAvailable" pods selected by "selector" will still be available after the eviction, i.e. even in the absence of the evicted pod. So for example you can prevent all voluntary evictions by specifying "100%". +optional
----@field selector v1.LabelSelector Label query over pods whose evictions are managed by the disruption budget. A null selector will match no pods, while an empty ({}) selector will select all pods within the namespace. +patchStrategy=replace +optional
----@field unhealthyPodEvictionPolicy string UnhealthyPodEvictionPolicy defines the criteria for when unhealthy pods should be considered for eviction. Current implementation considers healthy pods, as pods that have status.conditions item with type="Ready",status="True". Valid policies are IfHealthyBudget and AlwaysAllow. If no policy is specified, the default behavior will be used, which corresponds to the IfHealthyBudget policy. IfHealthyBudget policy means that running pods (status.phase="Running"), but not yet healthy can be evicted only if the guarded application is not disrupted (status.currentHealthy is at least equal to status.desiredHealthy). Healthy pods will be subject to the PDB for eviction. AlwaysAllow policy means that all running pods (status.phase="Running"), but not yet healthy are considered disrupted and can be evicted regardless of whether the criteria in a PDB is met. This means perspective running pods of a disrupted application might not get a chance to become healthy. Healthy pods will be subject to the PDB for eviction. Additional policies may be added in the future. Clients making eviction decisions should disallow eviction of unhealthy pods if they encounter an unrecognized policy in this field. +optional
+---@field maxUnavailable intstr.IntOrString maxUnavailable indicates that an eviction is allowed if at most "maxUnavailable" pods selected by "selector" are unavailable after the eviction, i.e. even in absence of the evicted pod. For example, one can prevent all voluntary evictions by specifying 0. This is a mutually exclusive setting with "minAvailable". +optional
+---@field minAvailable intstr.IntOrString minAvailable indicates that an eviction is allowed if at least "minAvailable" pods selected by "selector" will still be available after the eviction, i.e. even in the absence of the evicted pod. So for example you can prevent all voluntary evictions by specifying "100%". +optional
+---@field selector v1.LabelSelector selector is a label query over pods whose evictions are managed by the disruption budget. A null selector will match no pods, while an empty ({}) selector will select all pods within the namespace. +patchStrategy=replace +optional
+---@field unhealthyPodEvictionPolicy string unhealthyPodEvictionPolicy defines the criteria for when unhealthy pods should be considered for eviction. Current implementation considers healthy pods, as pods that have status.conditions item with type="Ready",status="True". Valid policies are IfHealthyBudget and AlwaysAllow. If no policy is specified, the default behavior will be used, which corresponds to the IfHealthyBudget policy. IfHealthyBudget policy means that running pods (status.phase="Running"), but not yet healthy can be evicted only if the guarded application is not disrupted (status.currentHealthy is at least equal to status.desiredHealthy). Healthy pods will be subject to the PDB for eviction. AlwaysAllow policy means that all running pods (status.phase="Running"), but not yet healthy are considered disrupted and can be evicted regardless of whether the criteria in a PDB is met. This means perspective running pods of a disrupted application might not get a chance to become healthy. Healthy pods will be subject to the PDB for eviction. Additional policies may be added in the future. Clients making eviction decisions should disallow eviction of unhealthy pods if they encounter an unrecognized policy in this field. +optional
 
 ---@class policyv1.PodDisruptionBudgetStatus
----@field conditions v1.Condition[] Conditions contain conditions for PDB. The disruption controller sets the DisruptionAllowed condition. The following are known values for the reason field (additional reasons could be added in the future): - SyncFailed: The controller encountered an error and wasn't able to compute the number of allowed disruptions. Therefore no disruptions are allowed and the status of the condition will be False. - InsufficientPods: The number of pods are either at or below the number required by the PodDisruptionBudget. No disruptions are allowed and the status of the condition will be False. - SufficientPods: There are more pods than required by the PodDisruptionBudget. The condition will be True, and the number of allowed disruptions are provided by the disruptionsAllowed property. +optional +patchMergeKey=type +patchStrategy=merge +listType=map +listMapKey=type
----@field currentHealthy number current number of healthy pods
----@field desiredHealthy number minimum desired number of healthy pods
+---@field conditions v1.Condition[] Conditions contain conditions for PDB. The disruption controller sets the DisruptionAllowed condition. The following are known values for the reason field (additional reasons could be added in the future): - SyncFailed: The controller encountered an error and wasn't able to compute the number of allowed disruptions. Therefore no disruptions are allowed and the status of the condition will be False. - InsufficientPods: The number of pods are either at or below the number required by the PodDisruptionBudget. No disruptions are allowed and the status of the condition will be False. - SufficientPods: There are more pods than required by the PodDisruptionBudget. The condition will be True, and the number of allowed disruptions are provided by the disruptionsAllowed property. +optional +patchMergeKey=type +patchStrategy=merge +listType=map +listMapKey=type +k8s:alpha(since: "1.37")=+k8s:optional +k8s:alpha(since: "1.37")=+k8s:listType=map +k8s:alpha(since: "1.37")=+k8s:listMapKey=type
+---@field currentHealthy number current number of healthy pods +optional
+---@field desiredHealthy number minimum desired number of healthy pods +optional
 ---@field disruptedPods table<string, v1.Time> DisruptedPods contains information about pods whose eviction was processed by the API server eviction subresource handler but has not yet been observed by the PodDisruptionBudget controller. A pod will be in this map from the time when the API server processed the eviction request to the time when the pod is seen by PDB controller as having been marked for deletion (or after a timeout). The key in the map is the name of the pod and the value is the time when the API server processed the eviction request. If the deletion didn't occur and a pod is still there it will be removed from the list automatically by PodDisruptionBudget controller after some time. If everything goes smooth this map should be empty for the most of the time. Large number of entries in the map may indicate problems with pod deletions. +optional
----@field disruptionsAllowed number Number of pod disruptions that are currently allowed.
----@field expectedPods number total number of pods counted by this disruption budget
+---@field disruptionsAllowed number Number of pod disruptions that are currently allowed. +optional
+---@field expectedPods number total number of pods counted by this disruption budget +optional
 ---@field observedGeneration number Most recent generation observed when updating this PDB status. DisruptionsAllowed and other status information is valid only if observedGeneration equals to PDB's object generation. +optional
 
 ---@class rbacv1.AggregationRule
----@field clusterRoleSelectors v1.LabelSelector[] ClusterRoleSelectors holds a list of selectors which will be used to find ClusterRoles and create the rules. If any of the selectors match, then the ClusterRole's permissions will be added +optional +listType=atomic
+---@field clusterRoleSelectors v1.LabelSelector[] clusterRoleSelectors holds a list of selectors which will be used to find ClusterRoles and create the rules. If any of the selectors match, then the ClusterRole's permissions will be added +optional +listType=atomic
 
 ---@class rbacv1.ClusterRole
----@field TypeMeta v1.TypeMeta
----@field aggregationRule rbacv1.AggregationRule AggregationRule is an optional field that describes how to build the Rules for this ClusterRole. If AggregationRule is set, then the Rules are controller managed and direct changes to Rules will be stomped by the controller. +optional
----@field metadata v1.ObjectMeta Standard object's metadata. +optional
----@field rules rbacv1.PolicyRule[] Rules holds all the PolicyRules for this ClusterRole +optional +listType=atomic
+---@field aggregationRule rbacv1.AggregationRule aggregationRule is an optional field that describes how to build the Rules for this ClusterRole. If AggregationRule is set, then the Rules are controller managed and direct changes to Rules will be stomped by the controller. +optional
+---@field metadata v1.ObjectMeta metadata is the standard object's metadata. +optional
+---@field rules rbacv1.PolicyRule[] rules holds all the PolicyRules for this ClusterRole +optional +listType=atomic +k8s:beta(since: "1.37")=+k8s:optional
 
 ---@class rbacv1.ClusterRoleBinding
----@field TypeMeta v1.TypeMeta
----@field metadata v1.ObjectMeta Standard object's metadata. +optional
----@field roleRef rbacv1.RoleRef RoleRef can only reference a ClusterRole in the global namespace. If the RoleRef cannot be resolved, the Authorizer must return an error. This field is immutable.
----@field subjects rbacv1.Subject[] Subjects holds references to the objects the role applies to. +optional +listType=atomic
+---@field metadata v1.ObjectMeta metadata is the standard object's metadata. +optional
+---@field roleRef rbacv1.RoleRef roleRef can only reference a ClusterRole in the global namespace. If the RoleRef cannot be resolved, the Authorizer must return an error. This field is immutable. +required +k8s:alpha(since:"1.37")=+k8s:immutable
+---@field subjects rbacv1.Subject[] subjects holds references to the objects the role applies to. +optional +listType=atomic +k8s:beta(since: "1.37")=+k8s:optional
 
 ---@class rbacv1.ClusterRoleBindingList
----@field TypeMeta v1.TypeMeta
 ---@field items rbacv1.ClusterRoleBinding[] Items is a list of ClusterRoleBindings
 ---@field metadata v1.ListMeta Standard object's metadata. +optional
 
 ---@class rbacv1.ClusterRoleList
----@field TypeMeta v1.TypeMeta
 ---@field items rbacv1.ClusterRole[] Items is a list of ClusterRoles
 ---@field metadata v1.ListMeta Standard object's metadata. +optional
 
 ---@class rbacv1.PolicyRule
----@field apiGroups string[] APIGroups is the name of the APIGroup that contains the resources. If multiple API groups are specified, any action requested against one of the enumerated resources in any API group will be allowed. "" represents the core API group and "*" represents all API groups. +optional +listType=atomic
----@field nonResourceURLs string[] NonResourceURLs is a set of partial urls that a user should have access to. *s are allowed, but only as the full, final step in the path Since non-resource URLs are not namespaced, this field is only applicable for ClusterRoles referenced from a ClusterRoleBinding. Rules can either apply to API resources (such as "pods" or "secrets") or non-resource URL paths (such as "/api"), but not both. +optional +listType=atomic
----@field resourceNames string[] ResourceNames is an optional white list of names that the rule applies to. An empty set means that everything is allowed. +optional +listType=atomic
----@field resources string[] Resources is a list of resources this rule applies to. '*' represents all resources. +optional +listType=atomic
----@field verbs string[] Verbs is a list of Verbs that apply to ALL the ResourceKinds contained in this rule. '*' represents all verbs. +listType=atomic
+---@field apiGroups string[] apiGroups is the name of the APIGroup that contains the resources. If multiple API groups are specified, any action requested against one of the enumerated resources in any API group will be allowed. "" represents the core API group and "*" represents all API groups. +optional +listType=atomic
+---@field nonResourceURLs string[] nonResourceURLs is a set of partial urls that a user should have access to. *s are allowed, but only as the full, final step in the path Since non-resource URLs are not namespaced, this field is only applicable for ClusterRoles referenced from a ClusterRoleBinding. Rules can either apply to API resources (such as "pods" or "secrets") or non-resource URL paths (such as "/api"), but not both. +optional +listType=atomic
+---@field resourceNames string[] resourceNames is an optional white list of names that the rule applies to. An empty set means that everything is allowed. +optional +listType=atomic
+---@field resources string[] resources is a list of resources this rule applies to. '*' represents all resources. +optional +listType=atomic
+---@field verbs string[] verbs is a list of Verbs that apply to ALL the ResourceKinds contained in this rule. '*' represents all verbs. +listType=atomic +required +k8s:beta(since: "1.37")=+k8s:required
 
 ---@class rbacv1.Role
----@field TypeMeta v1.TypeMeta
----@field metadata v1.ObjectMeta Standard object's metadata. +optional
----@field rules rbacv1.PolicyRule[] Rules holds all the PolicyRules for this Role +optional +listType=atomic
+---@field metadata v1.ObjectMeta metadata is the standard object's metadata. +optional
+---@field rules rbacv1.PolicyRule[] rules holds all the PolicyRules for this Role +optional +listType=atomic +k8s:beta(since: "1.37")=+k8s:optional
 
 ---@class rbacv1.RoleBinding
----@field TypeMeta v1.TypeMeta
----@field metadata v1.ObjectMeta Standard object's metadata. +optional
----@field roleRef rbacv1.RoleRef RoleRef can reference a Role in the current namespace or a ClusterRole in the global namespace. If the RoleRef cannot be resolved, the Authorizer must return an error. This field is immutable.
----@field subjects rbacv1.Subject[] Subjects holds references to the objects the role applies to. +optional +listType=atomic
+---@field metadata v1.ObjectMeta metadata is the standard object's metadata. +optional
+---@field roleRef rbacv1.RoleRef roleRef can reference a Role in the current namespace or a ClusterRole in the global namespace. If the RoleRef cannot be resolved, the Authorizer must return an error. This field is immutable. +required +k8s:alpha(since:"1.37")=+k8s:immutable
+---@field subjects rbacv1.Subject[] subjects holds references to the objects the role applies to. +optional +listType=atomic +k8s:beta(since: "1.37")=+k8s:optional
 
 ---@class rbacv1.RoleBindingList
----@field TypeMeta v1.TypeMeta
 ---@field items rbacv1.RoleBinding[] Items is a list of RoleBindings
 ---@field metadata v1.ListMeta Standard object's metadata. +optional
 
 ---@class rbacv1.RoleList
----@field TypeMeta v1.TypeMeta
 ---@field items rbacv1.Role[] Items is a list of Roles
 ---@field metadata v1.ListMeta Standard object's metadata. +optional
 
 ---@class rbacv1.RoleRef
----@field apiGroup string APIGroup is the group for the resource being referenced
----@field kind string Kind is the type of resource being referenced
----@field name string Name is the name of resource being referenced
+---@field apiGroup string apiGroup is the group for the resource being referenced +optional
+---@field kind string kind is the type of resource being referenced +required
+---@field name string name is the name of resource being referenced +required +k8s:beta(since: "1.37")=+k8s:required
 
 ---@class rbacv1.Subject
----@field apiGroup string APIGroup holds the API group of the referenced subject. Defaults to "" for ServiceAccount subjects. Defaults to "rbac.authorization.k8s.io" for User and Group subjects. +optional
----@field kind string Kind of object being referenced. Values defined by this API group are "User", "Group", and "ServiceAccount". If the Authorizer does not recognized the kind value, the Authorizer should report an error.
----@field name string Name of the object being referenced.
----@field namespace string Namespace of the referenced object. If the object kind is non-namespace, such as "User" or "Group", and this value is not empty the Authorizer should report an error. +optional
+---@field apiGroup string apiGroup holds the API group of the referenced subject. Defaults to "" for ServiceAccount subjects. Defaults to "rbac.authorization.k8s.io" for User and Group subjects. +optional
+---@field kind string kind of object being referenced. Values defined by this API group are "User", "Group", and "ServiceAccount". If the Authorizer does not recognized the kind value, the Authorizer should report an error. +required
+---@field name string name of the object being referenced. +required +k8s:beta(since: "1.37")=+k8s:required
+---@field namespace string namespace of the referenced object. If the object kind is non-namespace, such as "User" or "Group", and this value is not empty the Authorizer should report an error. +optional
+
+---@class schedulingv1alpha3.TopologyConstraint
+---@field key string key specifies the key of the node label representing the topology domain. All pods within the PodGroup must be colocated within the same domain instance. Different PodGroups can land on different domain instances even if they derive from the same PodGroupTemplate. Examples: "topology.kubernetes.io/rack" +required +k8s:required +k8s:format=k8s-label-key
+
+---@class schedulingv1alpha3.WorkloadPodGroupDisruptionMode
+---@field all schedulingv1alpha3.WorkloadPodGroupAllDisruptionMode all specifies that all pods in the group must be disrupted together. +optional +k8s:optional +k8s:unionMember
+---@field single schedulingv1alpha3.WorkloadPodGroupSingleDisruptionMode single specifies that pods can be disrupted independently from each other. +optional +k8s:optional +k8s:unionMember
+
+---@class schedulingv1alpha3.WorkloadPodGroupGangSchedulingPolicy
+---@field minCount number minCount is the minimum number of pods that must be scheduled at the same time for the scheduler to admit the entire group. This field is optional. If it is not specified, the controller should inject a context-specific sane default (e.g., parallelism for a Job). If set, it must be a positive integer. +optional +k8s:optional +k8s:minimum=1
+
+---@class schedulingv1alpha3.WorkloadPodGroupResourceClaim
+---@field name string name uniquely identifies this resource claim inside the group. This field is required. It must be a DNS_LABEL. +required +k8s:required +k8s:format=k8s-short-name
+---@field resourceClaimName string resourceClaimName is the name of a ResourceClaim object in the same namespace. This field is optional. If it is not specified, no resource claim is used. If set, it must be a DNS subdomain. +optional +k8s:optional +k8s:unionMember +k8s:format=k8s-long-name
+---@field resourceClaimTemplateName string resourceClaimTemplateName is the name of a ResourceClaimTemplate object in the same namespace. This field is optional. If it is not specified, no resource claim template is used. If set, it must be a DNS subdomain. +optional +k8s:optional +k8s:unionMember +k8s:format=k8s-long-name
+
+---@class schedulingv1alpha3.WorkloadPodGroupSchedulingConstraints
+---@field topology schedulingv1alpha3.TopologyConstraint[] topology specifies desired topological placements for all pods within the pod group. If unset, no topology placement is requested. +optional +k8s:optional +k8s:maxItems=1 +listType=atomic +k8s:listType=atomic
+
+---@class schedulingv1alpha3.WorkloadPodGroupSchedulingPolicy
+---@field basic schedulingv1alpha3.WorkloadPodGroupBasicSchedulingPolicy basic specifies that standard, pod-by-pod Kubernetes scheduling behavior should be used. +optional +k8s:optional +k8s:unionMember
+---@field gang schedulingv1alpha3.WorkloadPodGroupGangSchedulingPolicy gang specifies all-or-nothing scheduling semantics. +optional +k8s:optional +k8s:unionMember
 
 ---@class storagev1.StorageClass
----@field TypeMeta v1.TypeMeta
 ---@field allowVolumeExpansion boolean allowVolumeExpansion shows whether the storage class allow volume expand. +optional
 ---@field allowedTopologies corev1.TopologySelectorTerm[] allowedTopologies restrict the node topologies where volumes can be dynamically provisioned. Each volume plugin defines its own supported topology specifications. An empty TopologySelectorTerm list means there is no topology restriction. This field is only honored by servers that enable the VolumeScheduling feature. +optional +listType=atomic
----@field metadata v1.ObjectMeta Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
+---@field metadata v1.ObjectMeta metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 ---@field mountOptions string[] mountOptions controls the mountOptions for dynamically provisioned PersistentVolumes of this storage class. e.g. ["ro", "soft"]. Not validated - mount of the PVs will simply fail if one is invalid. +optional +listType=atomic
----@field parameters table<string, string> parameters holds the parameters for the provisioner that should create volumes of this storage class. +optional
----@field provisioner string provisioner indicates the type of the provisioner.
----@field reclaimPolicy string reclaimPolicy controls the reclaimPolicy for dynamically provisioned PersistentVolumes of this storage class. Defaults to Delete. +optional
----@field volumeBindingMode string volumeBindingMode indicates how PersistentVolumeClaims should be provisioned and bound. When unset, VolumeBindingImmediate is used. This field is only honored by servers that enable the VolumeScheduling feature. +optional
+---@field parameters table<string, string> parameters holds the parameters for the provisioner that should create volumes of this storage class. +optional +k8s:beta(since: "1.37")=+k8s:immutable +k8s:beta(since: "1.37")=+k8s:optional
+---@field provisioner string provisioner indicates the type of the provisioner. +required +k8s:beta(since: "1.37")=+k8s:required +k8s:beta(since: "1.37")=+k8s:immutable
+---@field reclaimPolicy string reclaimPolicy controls the reclaimPolicy for dynamically provisioned PersistentVolumes of this storage class. Defaults to Delete. +optional +k8s:beta(since: "1.37")=+k8s:immutable +k8s:beta(since: "1.37")=+k8s:optional
+---@field volumeBindingMode string volumeBindingMode indicates how PersistentVolumeClaims should be provisioned and bound. When unset, VolumeBindingImmediate is used. This field is only honored by servers that enable the VolumeScheduling feature. +optional +k8s:beta(since: "1.37")=+k8s:immutable +k8s:beta(since: "1.37")=+k8s:optional
 
 ---@class storagev1.StorageClassList
----@field TypeMeta v1.TypeMeta
 ---@field items storagev1.StorageClass[] items is the list of StorageClasses
 ---@field metadata v1.ListMeta Standard list metadata More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 
 ---@class storagev1.VolumeAttachment
----@field TypeMeta v1.TypeMeta
----@field metadata v1.ObjectMeta Standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
----@field spec storagev1.VolumeAttachmentSpec spec represents specification of the desired attach/detach volume behavior. Populated by the Kubernetes system.
+---@field metadata v1.ObjectMeta metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
+---@field spec storagev1.VolumeAttachmentSpec spec represents specification of the desired attach/detach volume behavior. Populated by the Kubernetes system. +k8s:beta(since: "1.37")=+k8s:immutable +required
 ---@field status storagev1.VolumeAttachmentStatus status represents status of the VolumeAttachment request. Populated by the entity completing the attach or detach operation, i.e. the external-attacher. +optional
 
 ---@class storagev1.VolumeAttachmentList
----@field TypeMeta v1.TypeMeta
 ---@field items storagev1.VolumeAttachment[] items is the list of VolumeAttachments
 ---@field metadata v1.ListMeta Standard list metadata More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
 
@@ -2073,7 +1648,7 @@
 ---@field persistentVolumeName string persistentVolumeName represents the name of the persistent volume to attach. +optional
 
 ---@class storagev1.VolumeAttachmentSpec
----@field attacher string attacher indicates the name of the volume driver that MUST handle this request. This is the name returned by GetPluginName().
+---@field attacher string attacher indicates the name of the volume driver that MUST handle this request. This is the name returned by GetPluginName(). +required +k8s:beta(since: "1.37")=+k8s:required +k8s:beta(since: "1.37")=+k8s:format="k8s-long-name-caseless" +k8s:beta(since: "1.37")=+k8s:maxLength=63
 ---@field nodeName string nodeName represents the node that the volume should be attached to.
 ---@field source storagev1.VolumeAttachmentSource source represents the volume that should be attached.
 
@@ -2084,17 +1659,17 @@
 ---@field detachError storagev1.VolumeError detachError represents the last error encountered during detach operation, if any. This field must only be set by the entity completing the detach operation, i.e. the external-attacher. +optional
 
 ---@class storagev1.VolumeError
----@field errorCode number errorCode is a numeric gRPC code representing the error encountered during Attach or Detach operations. This is an optional, beta field that requires the MutableCSINodeAllocatableCount feature gate being enabled to be set. +featureGate=MutableCSINodeAllocatableCount +optional
+---@field errorCode number errorCode is a numeric gRPC code representing the error encountered during Attach or Detach operations. This field requires the MutableCSINodeAllocatableCount feature gate being enabled to be set. +featureGate=MutableCSINodeAllocatableCount +optional
 ---@field message string message represents the error encountered during Attach or Detach operation. This string may be logged, so it should not contain sensitive information. +optional
 ---@field time v1.Time time represents the time the error was encountered. +optional
 
 ---@class v1.Condition
----@field lastTransitionTime v1.Time lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed. If that is not known, then using the time when the API field changed is acceptable. +required +kubebuilder:validation:Required +kubebuilder:validation:Type=string +kubebuilder:validation:Format=date-time
+---@field lastTransitionTime v1.Time lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed. If that is not known, then using the time when the API field changed is acceptable. +required +kubebuilder:validation:Required +kubebuilder:validation:Type=string +kubebuilder:validation:Format=date-time +k8s:alpha(since: "1.37")=+k8s:customValidation
 ---@field message string message is a human readable message indicating details about the transition. This may be an empty string. +required +kubebuilder:validation:Required +kubebuilder:validation:MaxLength=32768
----@field observedGeneration number observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance. +optional +kubebuilder:validation:Minimum=0
----@field reason string reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty. +required +kubebuilder:validation:Required +kubebuilder:validation:MaxLength=1024 +kubebuilder:validation:MinLength=1 +kubebuilder:validation:Pattern=`^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$`
----@field status string status of the condition, one of True, False, Unknown. +required +kubebuilder:validation:Required +kubebuilder:validation:Enum=True;False;Unknown
----@field type string type of condition in CamelCase or in foo.example.com/CamelCase. --- Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be useful (see .node.status.conditions), the ability to deconflict is important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt) +required +kubebuilder:validation:Required +kubebuilder:validation:Pattern=`^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$` +kubebuilder:validation:MaxLength=316
+---@field observedGeneration number observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance. +optional +kubebuilder:validation:Minimum=0 +k8s:alpha(since: "1.37")=+k8s:optional +k8s:alpha(since: "1.37")=+k8s:minimum=0
+---@field reason string reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty. +required +kubebuilder:validation:Required +kubebuilder:validation:MaxLength=1024 +kubebuilder:validation:MinLength=1 +kubebuilder:validation:Pattern=`^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$` +k8s:alpha(since: "1.37")=+k8s:required +k8s:alpha(since: "1.37")=+k8s:maxBytes=1024
+---@field status string status of the condition, one of True, False, Unknown. +required +kubebuilder:validation:Required +kubebuilder:validation:Enum=True;False;Unknown +k8s:alpha(since: "1.37")=+k8s:required
+---@field type string type of condition in CamelCase or in foo.example.com/CamelCase. --- Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be useful (see .node.status.conditions), the ability to deconflict is important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt) +required +kubebuilder:validation:Required +kubebuilder:validation:Pattern=`^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$` +kubebuilder:validation:MaxLength=316 +k8s:alpha(since: "1.37")=+k8s:required
 
 ---@class v1.LabelSelector
 ---@field matchExpressions v1.LabelSelectorRequirement[] matchExpressions is a list of label selector requirements. The requirements are ANDed. +optional +listType=atomic
@@ -2110,45 +1685,48 @@
 ---@field remainingItemCount number remainingItemCount is the number of subsequent items in the list which are not included in this list response. If the list request contained label or field selectors, then the number of remaining items is unknown and the field will be left unset and omitted during serialization. If the list is complete (either because it is not chunking or because this is the last chunk), then there are no more remaining items and this field will be left unset and omitted during serialization. Servers older than v1.15 do not set this field. The intended use of the remainingItemCount is *estimating* the size of a collection. Clients should not rely on the remainingItemCount to be set or to be exact. +optional
 ---@field resourceVersion string String that identifies the server's internal version of this object that can be used by clients to determine when objects have changed. Value must be treated as opaque by clients and passed unmodified back to the server. Populated by the system. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency +optional
 ---@field selfLink string Deprecated: selfLink is a legacy read-only field that is no longer populated by the system. +optional
+---@field shardInfo v1.ShardInfo shardInfo is set when the list is a filtered subset of the full collection, as selected by a shard selector on the request. It echoes back the selector so clients can verify which shard they received and merge sharded responses. Clients should not cache sharded list responses as a full representation of the collection. This is an alpha field and requires enabling the ShardedListAndWatch feature gate. +featureGate=ShardedListAndWatch +optional
 
 ---@class v1.ManagedFieldsEntry
 ---@field apiVersion string APIVersion defines the version of this resource that this field set applies to. The format is "group/version" just like the top-level APIVersion field. It is necessary to track the version of a field set because it cannot be automatically converted.
 ---@field fieldsType string FieldsType is the discriminator for the different fields format and version. There is currently only one possible value: "FieldsV1"
 ---@field fieldsV1 v1.FieldsV1 FieldsV1 holds the first JSON version format as described in the "FieldsV1" type. +optional
 ---@field manager string Manager is an identifier of the workflow managing these fields.
----@field operation string Operation is the type of operation which lead to this ManagedFieldsEntry being created. The only valid values for this field are 'Apply' and 'Update'.
+---@field operation string Operation is the type of operation which lead to this ManagedFieldsEntry being created. The only valid values for this field are 'Apply' and 'Update'. +k8s:alpha(since: "1.37")=+k8s:required
 ---@field subresource string Subresource is the name of the subresource used to update that object, or empty string if the object was updated through the main resource. The value of this field is used to distinguish between managers, even if they share the same name. For example, a status update will be distinct from a regular update using the same manager name. Note that the APIVersion field is not related to the Subresource field and it always corresponds to the version of the main resource.
 ---@field time v1.Time Time is the timestamp of when the ManagedFields entry was added. The timestamp will also be updated if a field is added, the manager changes any of the owned fields value or removes a field. The timestamp does not update when a field is removed from the entry because another manager took it over. +optional
 
 ---@class v1.ObjectMeta
 ---@field annotations table<string, string> Annotations is an unstructured key value map stored with a resource that may be set by external tools to store and retrieve arbitrary metadata. They are not queryable and should be preserved when modifying objects. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations +optional
----@field creationTimestamp v1.Time CreationTimestamp is a timestamp representing the server time when this object was created. It is not guaranteed to be set in happens-before order across separate operations. Clients may not set this value. It is represented in RFC3339 form and is in UTC. Populated by the system. Read-only. Null for lists. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
----@field deletionGracePeriodSeconds number Number of seconds allowed for this object to gracefully terminate before it will be removed from the system. Only set when deletionTimestamp is also set. May only be shortened. Read-only. +optional
----@field deletionTimestamp v1.Time DeletionTimestamp is RFC 3339 date and time at which this resource will be deleted. This field is set by the server when a graceful deletion is requested by the user, and is not directly settable by a client. The resource is expected to be deleted (no longer visible from resource lists, and not reachable by name) after the time in this field, once the finalizers list is empty. As long as the finalizers list contains items, deletion is blocked. Once the deletionTimestamp is set, this value may not be unset or be set further into the future, although it may be shortened or the resource may be deleted prior to this time. For example, a user may request that a pod is deleted in 30 seconds. The Kubelet will react by sending a graceful termination signal to the containers in the pod. After that 30 seconds, the Kubelet will send a hard termination signal (SIGKILL) to the container and after cleanup, remove the pod from the API. In the presence of network partitions, this object may still exist after this timestamp, until an administrator or automated process can determine the resource is fully terminated. If not set, graceful deletion of the object has not been requested. Populated by the system when a graceful deletion is requested. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional
+---@field creationTimestamp v1.Time CreationTimestamp is a timestamp representing the server time when this object was created. It is not guaranteed to be set in happens-before order across separate operations. Clients may not set this value. It is represented in RFC3339 form and is in UTC. Populated by the system. Read-only. Null for lists. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional +k8s:alpha(since: "1.37")=+k8s:immutable
+---@field deletionGracePeriodSeconds number Number of seconds allowed for this object to gracefully terminate before it will be removed from the system. Only set when deletionTimestamp is also set. May only be shortened. Read-only. +optional +k8s:alpha(since: "1.37")=+k8s:optional +k8s:alpha(since: "1.37")=+k8s:immutable
+---@field deletionTimestamp v1.Time DeletionTimestamp is RFC 3339 date and time at which this resource will be deleted. This field is set by the server when a graceful deletion is requested by the user, and is not directly settable by a client. The resource is expected to be deleted (no longer visible from resource lists, and not reachable by name) after the time in this field, once the finalizers list is empty. As long as the finalizers list contains items, deletion is blocked. Once the deletionTimestamp is set, this value may not be unset or be set further into the future, although it may be shortened or the resource may be deleted prior to this time. For example, a user may request that a pod is deleted in 30 seconds. The Kubelet will react by sending a graceful termination signal to the containers in the pod. After that 30 seconds, the Kubelet will send a hard termination signal (SIGKILL) to the container and after cleanup, remove the pod from the API. In the presence of network partitions, this object may still exist after this timestamp, until an administrator or automated process can determine the resource is fully terminated. If not set, graceful deletion of the object has not been requested. Populated by the system when a graceful deletion is requested. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata +optional +k8s:alpha(since: "1.37")=+k8s:optional +k8s:alpha(since: "1.37")=+k8s:immutable
 ---@field finalizers string[] Must be empty before the object is deleted from the registry. Each entry is an identifier for the responsible component that will remove the entry from the list. If the deletionTimestamp of the object is non-nil, entries in this list can only be removed. Finalizers may be processed and removed in any order. Order is NOT enforced because it introduces significant risk of stuck finalizers. finalizers is a shared field, any actor with permission can reorder it. If the finalizer list is processed in order, then this can lead to a situation in which the component responsible for the first finalizer in the list is waiting for a signal (field value, external system, or other) produced by a component responsible for a finalizer later in the list, resulting in a deadlock. Without enforced ordering finalizers are free to order amongst themselves and are not vulnerable to ordering changes in the list. +optional +patchStrategy=merge +listType=set
 ---@field generateName string GenerateName is an optional prefix, used by the server, to generate a unique name ONLY IF the Name field has not been provided. If this field is used, the name returned to the client will be different than the name passed. This value will also be combined with a unique suffix. The provided value has the same validation rules as the Name field, and may be truncated by the length of the suffix required to make the value unique on the server. If this field is specified and the generated name exists, the server will return a 409. Applied only if Name is not specified. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#idempotency +optional
----@field generation number A sequence number representing a specific generation of the desired state. Populated by the system. Read-only. +optional
+---@field generation number A sequence number representing a specific generation of the desired state. Populated by the system. Read-only. +optional +k8s:alpha(since: "1.37")=+k8s:optional +k8s:alpha(since: "1.37")=+k8s:minimum=0
 ---@field labels table<string, string> Map of string keys and values that can be used to organize and categorize (scope and select) objects. May match selectors of replication controllers and services. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels +optional
----@field managedFields v1.ManagedFieldsEntry[] ManagedFields maps workflow-id and version to the set of fields that are managed by that workflow. This is mostly for internal housekeeping, and users typically shouldn't need to set or understand this field. A workflow can be the user's name, a controller's name, or the name of a specific apply path like "ci-cd". The set of fields is always in the version that the workflow used when modifying the object. +optional +listType=atomic
+---@field managedFields v1.ManagedFieldsEntry[] ManagedFields maps workflow-id and version to the set of fields that are managed by that workflow. This is mostly for internal housekeeping, and users typically shouldn't need to set or understand this field. A workflow can be the user's name, a controller's name, or the name of a specific apply path like "ci-cd". The set of fields is always in the version that the workflow used when modifying the object. +optional +listType=atomic +k8s:alpha(since: "1.37")=+k8s:optional
 ---@field name string Name must be unique within a namespace. Is required when creating resources, although some resources may allow a client to request the generation of an appropriate name automatically. Name is primarily intended for creation idempotence and configuration definition. Cannot be updated. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names#names +optional
 ---@field namespace string Namespace defines the space within which each name must be unique. An empty namespace is equivalent to the "default" namespace, but "default" is the canonical representation. Not all objects are required to be scoped to a namespace - the value of this field for those objects will be empty. Must be a DNS_LABEL. Cannot be updated. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces +optional
----@field ownerReferences v1.OwnerReference[] List of objects depended by this object. If ALL objects in the list have been deleted, this object will be garbage collected. If this object is managed by a controller, then an entry in this list will point to this controller, with the controller field set to true. There cannot be more than one managing controller. +optional +patchMergeKey=uid +patchStrategy=merge +listType=map +listMapKey=uid
+---@field ownerReferences v1.OwnerReference[] List of objects depended by this object. If ALL objects in the list have been deleted, this object will be garbage collected. If this object is managed by a controller, then an entry in this list will point to this controller, with the controller field set to true. There cannot be more than one managing controller. +optional +patchMergeKey=uid +patchStrategy=merge +listType=map +listMapKey=uid +k8s:alpha(since:"1.37")=+k8s:optional
 ---@field resourceVersion string An opaque value that represents the internal version of this object that can be used by clients to determine when objects have changed. May be used for optimistic concurrency, change detection, and the watch operation on a resource or set of resources. Clients must treat these values as opaque and passed unmodified back to the server. They may only be valid for a particular resource or set of resources. Populated by the system. Read-only. Value must be treated as opaque by clients and . More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency +optional
 ---@field selfLink string Deprecated: selfLink is a legacy read-only field that is no longer populated by the system. +optional
----@field uid string UID is the unique in time and space value for this object. It is typically generated by the server on successful creation of a resource and is not allowed to change on PUT operations. Populated by the system. Read-only. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names#uids +optional
+---@field uid string UID is the unique in time and space value for this object. It is typically generated by the server on successful creation of a resource and is not allowed to change on PUT operations. Populated by the system. Read-only. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names#uids +optional +k8s:alpha(since: "1.37")=+k8s:optional +k8s:alpha(since: "1.37")=+k8s:immutable
 
 ---@class v1.OwnerReference
----@field apiVersion string API version of the referent.
+---@field apiVersion string API version of the referent. +k8s:alpha(since:"1.37")=+k8s:required
 ---@field blockOwnerDeletion boolean If true, AND if the owner has the "foregroundDeletion" finalizer, then the owner cannot be deleted from the key-value store until this reference is removed. See https://kubernetes.io/docs/concepts/architecture/garbage-collection/#foreground-deletion for how the garbage collector interacts with this field and enforces the foreground deletion. Defaults to false. To set this field, a user needs "delete" permission of the owner, otherwise 422 (Unprocessable Entity) will be returned. +optional
 ---@field controller boolean If true, this reference points to the managing controller. +optional
----@field kind string Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
----@field name string Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names#names
----@field uid string UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names#uids
+---@field kind string Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +k8s:alpha(since:"1.37")=+k8s:required
+---@field name string Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names#names +k8s:alpha(since:"1.37")=+k8s:required
+---@field uid string UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names#uids +k8s:alpha(since:"1.37")=+k8s:required
+
+---@class v1.ShardInfo
+---@field selector string selector is the shard selector string from the request, echoed back so clients can verify which shard they received and merge responses from multiple shards. +required
 
 ---@class v1.Status
----@field TypeMeta v1.TypeMeta
 ---@field code number Suggested HTTP return code for this status, 0 if not set. +optional
----@field details v1.StatusDetails Extended data associated with the reason. Each reason may define its own extended details. This field is optional and the data returned is not guaranteed to conform to any schema except that defined by the reason type. +optional +listType=atomic
+---@field details v1.StatusDetails Extended data associated with the reason. Each reason may define its own extended details. This field is optional and the data returned is not guaranteed to conform to any schema except that defined by the reason type. +optional
 ---@field message string A human-readable description of the status of this operation. +optional
 ---@field metadata v1.ListMeta Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +optional
 ---@field reason string A machine-readable description of why this operation is in the "Failure" status. If this value is empty there is no information available. A Reason clarifies an HTTP status code but does not override it. +optional
@@ -2175,126 +1753,126 @@
 local kubernetes = {}
 
 --- parse a Kubernetes memory quantity, returns bytes
----@param quantity string
----@return number
+---@param quantity string a K8s resource.Quantity string, e.g. "1024Mi" or "1Gi"
+---@return number bytes the quantity's value in bytes
 function kubernetes.parse_memory(quantity) end
 
 --- parse a Kubernetes CPU quantity, returns millicores
----@param quantity string
----@return number
+---@param quantity string a K8s resource.Quantity string, e.g. "100m" or "1"
+---@return number millicores the quantity's value in millicores (1000m = 1 core)
 function kubernetes.parse_cpu(quantity) end
 
 --- format a byte count as a canonical K8s memory string (BinarySI: Ki/Mi/Gi/Ti)
----@param bytes number
----@return string
+---@param bytes number the memory amount in bytes
+---@return string quantity the binary-SI quantity string, e.g. "2Gi"
 function kubernetes.format_memory(bytes) end
 
 --- format a byte count as a canonical K8s memory string (DecimalSI: k/M/G/T)
----@param bytes number
----@return string
+---@param bytes number the memory amount in bytes
+---@return string quantity the decimal-SI quantity string, e.g. "2G"
 function kubernetes.format_memory_si(bytes) end
 
 --- format a millicore count as a canonical K8s CPU string (DecimalSI)
----@param millicores number
----@return string
+---@param millicores number the CPU amount in millicores (1000m = 1 core)
+---@return string quantity the decimal-SI CPU quantity string, e.g. "500m" or "1"
 function kubernetes.format_cpu(millicores) end
 
 --- parse an RFC3339 time string, returns Unix timestamp
----@param timestr string
----@return number
+---@param timestr string an RFC3339-formatted timestamp, e.g. "2025-10-03T16:39:00Z"
+---@return number timestamp seconds since the Unix epoch (UTC)
 function kubernetes.parse_time(timestr) end
 
 --- convert a Unix timestamp to RFC3339 string
----@param timestamp number
----@return string
+---@param timestamp number seconds since the Unix epoch (UTC)
+---@return string timestr the RFC3339-formatted timestamp
 function kubernetes.format_time(timestamp) end
 
 --- parse a duration string, returns seconds
----@param duration string
----@return number
+---@param duration string a Go-style duration string, e.g. "5m" or "1h30m"
+---@return number seconds the duration's length in seconds
 function kubernetes.parse_duration(duration) end
 
 --- convert seconds to a duration string
----@param seconds number
----@return string
+---@param seconds number a duration length in seconds
+---@return string duration the Go-style duration string, e.g. "5m0s"
 function kubernetes.format_duration(seconds) end
 
 --- check if a Kubernetes object matches a GVK matcher
----@param obj table<string, any>
----@param matcher kubernetes.GVKMatcher
----@return boolean
+---@param obj table<string, any> the object to check; must have apiVersion and kind keys
+---@param matcher kubernetes.GVKMatcher GVK matcher table with group, version and kind fields
+---@return boolean matches true if obj's apiVersion and kind match matcher
 function kubernetes.match_gvk(obj, matcher) end
 
 --- ensure metadata.labels and annotations exist, returns updated obj
----@param obj table<string, any>
----@return table<string, any>
+---@param obj table<string, any> the object whose metadata.labels and metadata.annotations should exist
+---@return table<string, any> obj the object with metadata.labels and metadata.annotations guaranteed present
 function kubernetes.ensure_metadata(obj) end
 
 --- ensure metadata.labels and annotations exist, returns updated obj
----@param obj table<string, any>
----@return table<string, any>
+---@param obj table<string, any> the object whose metadata.labels and metadata.annotations should exist
+---@return table<string, any> obj the object with metadata.labels and metadata.annotations guaranteed present
 function kubernetes.init_defaults(obj) end
 
 --- add a label and return the updated obj
----@param obj table<string, any>
----@param key string
----@param value string
----@return table<string, any>
+---@param obj table<string, any> the object to modify
+---@param key string the label key to set
+---@param value string the label value to set
+---@return table<string, any> obj the object with the label set
 function kubernetes.add_label(obj, key, value) end
 
 --- add multiple labels and return the updated obj
----@param obj table<string, any>
----@param labels table<string, any>
----@return table<string, any>
+---@param obj table<string, any> the object to modify
+---@param labels table<string, any> table of label key to value to merge into obj.metadata.labels
+---@return table<string, any> obj the object with the labels set
 function kubernetes.add_labels(obj, labels) end
 
 --- remove a label and return the updated obj
----@param obj table<string, any>
----@param key string
----@return table<string, any>
+---@param obj table<string, any> the object to modify
+---@param key string the label key to remove; a no-op if absent
+---@return table<string, any> obj the object with the label removed
 function kubernetes.remove_label(obj, key) end
 
 --- return true if the label exists
----@param obj table<string, any>
----@param key string
----@return boolean
+---@param obj table<string, any> the object to check
+---@param key string the label key to look for
+---@return boolean ok true if obj.metadata.labels contains key
 function kubernetes.has_label(obj, key) end
 
 --- return the value of a label, or empty string if absent
----@param obj table<string, any>
----@param key string
----@return string
+---@param obj table<string, any> the object to read from
+---@param key string the label key to look up
+---@return string value the label value, or empty string if absent
 function kubernetes.get_label(obj, key) end
 
 --- add an annotation and return the updated obj
----@param obj table<string, any>
----@param key string
----@param value string
----@return table<string, any>
+---@param obj table<string, any> the object to modify
+---@param key string the annotation key to set
+---@param value string the annotation value to set
+---@return table<string, any> obj the object with the annotation set
 function kubernetes.add_annotation(obj, key, value) end
 
 --- add multiple annotations and return the updated obj
----@param obj table<string, any>
----@param annotations table<string, any>
----@return table<string, any>
+---@param obj table<string, any> the object to modify
+---@param annotations table<string, any> table of annotation key to value to merge into obj.metadata.annotations
+---@return table<string, any> obj the object with the annotations set
 function kubernetes.add_annotations(obj, annotations) end
 
 --- remove an annotation and return the updated obj
----@param obj table<string, any>
----@param key string
----@return table<string, any>
+---@param obj table<string, any> the object to modify
+---@param key string the annotation key to remove; a no-op if absent
+---@return table<string, any> obj the object with the annotation removed
 function kubernetes.remove_annotation(obj, key) end
 
 --- return true if the annotation exists
----@param obj table<string, any>
----@param key string
----@return boolean
+---@param obj table<string, any> the object to check
+---@param key string the annotation key to look for
+---@return boolean ok true if obj.metadata.annotations contains key
 function kubernetes.has_annotation(obj, key) end
 
 --- return the value of an annotation, or empty string if absent
----@param obj table<string, any>
----@param key string
----@return string
+---@param obj table<string, any> the object to read from
+---@param key string the annotation key to look up
+---@return string value the annotation value, or empty string if absent
 function kubernetes.get_annotation(obj, key) end
 
 return kubernetes

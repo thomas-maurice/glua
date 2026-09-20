@@ -18,6 +18,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package log provides a structured logger for Lua scripts, backed by
+// charmbracelet/log. Exposes module-level shorthand functions (log.info,
+// etc.) on a shared default/injected logger, plus a log.Logger class for
+// per-instance loggers created via with().
 package log
 
 import (
@@ -105,19 +109,25 @@ func newLoggerClass() *luareg.Class[*log.Logger] {
 	// allows reading extra variadic key-value fields beyond msg, while keeping
 	// msg visible to reflection for stub generation.
 	cls.Method("debug", loggerDebugMethod, "log at debug level",
-		luareg.Args("msg"))
+		luareg.Args("msg"),
+		luareg.ArgDoc("msg", "the message to log; optional trailing key-value pairs or a single table add structured fields"))
 	cls.Method("info", loggerInfoMethod, "log at info level",
-		luareg.Args("msg"))
+		luareg.Args("msg"),
+		luareg.ArgDoc("msg", "the message to log; optional trailing key-value pairs or a single table add structured fields"))
 	cls.Method("warn", loggerWarnMethod, "log at warn level",
-		luareg.Args("msg"))
+		luareg.Args("msg"),
+		luareg.ArgDoc("msg", "the message to log; optional trailing key-value pairs or a single table add structured fields"))
 	cls.Method("error", loggerErrorMethod, "log at error level",
-		luareg.Args("msg"))
+		luareg.Args("msg"),
+		luareg.ArgDoc("msg", "the message to log; optional trailing key-value pairs or a single table add structured fields"))
 	cls.Method("fatal", loggerFatalMethod, "log at fatal level",
-		luareg.Args("msg"))
+		luareg.Args("msg"),
+		luareg.ArgDoc("msg", "the message to log; optional trailing key-value pairs or a single table add structured fields. Terminates the process after logging"))
 	// with is fully variadic (key-value pairs only, no fixed params) — keep the
 	// *lua.LState-only escape hatch; stub shows Logger:with() with no params,
 	// which is the acceptable degradation documented below.
-	cls.Method("with", loggerWithMethod, "return a child logger with extra fields")
+	cls.Method("with", loggerWithMethod, "return a child logger with extra fields",
+		luareg.ReturnDoc(0, "logger", "a new Logger that always includes the given key-value fields"))
 	return cls
 }
 
@@ -311,17 +321,23 @@ func build() *luareg.Module {
 	// visible to reflection for stub generation, and L is the escape hatch for
 	// reading extra variadic key-value fields beyond msg.
 	m.Fn("debug", moduleLuaDebug, "log on the default logger at debug level",
-		luareg.Args("msg"))
+		luareg.Args("msg"),
+		luareg.ArgDoc("msg", "the message to log; optional trailing key-value pairs or a single table add structured fields"))
 	m.Fn("info", moduleLuaInfo, "log on the default logger at info level",
-		luareg.Args("msg"))
+		luareg.Args("msg"),
+		luareg.ArgDoc("msg", "the message to log; optional trailing key-value pairs or a single table add structured fields"))
 	m.Fn("warn", moduleLuaWarn, "log on the default logger at warn level",
-		luareg.Args("msg"))
+		luareg.Args("msg"),
+		luareg.ArgDoc("msg", "the message to log; optional trailing key-value pairs or a single table add structured fields"))
 	m.Fn("error", moduleLuaError, "log on the default logger at error level",
-		luareg.Args("msg"))
+		luareg.Args("msg"),
+		luareg.ArgDoc("msg", "the message to log; optional trailing key-value pairs or a single table add structured fields"))
 	m.Fn("fatal", moduleLuaFatal, "log on the default logger at fatal level",
-		luareg.Args("msg"))
+		luareg.Args("msg"),
+		luareg.ArgDoc("msg", "the message to log; optional trailing key-value pairs or a single table add structured fields. Terminates the process after logging"))
 	// logger returns the active *log.Logger; return type is auto-wrapped by luareg.
-	m.Fn("logger", moduleLuaLogger, "return the default logger")
+	m.Fn("logger", moduleLuaLogger, "return the default logger",
+		luareg.ReturnDoc(0, "logger", "the active Logger: the one injected via InjectLogger, or the package default"))
 	return m
 }
 

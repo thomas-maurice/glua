@@ -9,32 +9,32 @@
 local Client = {}
 
 --- get a resource by GVK, namespace, and name
----@param gvk kubernetes.GVKMatcher
----@param namespace string
----@param name string
----@return table<string, any>
+---@param gvk kubernetes.GVKMatcher GVK matcher table with group, version and kind fields, e.g. k8sclient.POD
+---@param namespace string namespace to look in; pass an empty string for cluster-scoped resources such as nodes or cluster roles
+---@param name string name of the resource to fetch
+---@return table<string, any> obj the resource as a table, in the same shape as `kubectl get -o json`
 function Client:get(gvk, namespace, name) end
 
 --- create a resource from a Lua table
----@param obj table<string, any>
----@return table<string, any>
+---@param obj table<string, any> the resource to create; must have apiVersion and kind set. If metadata.namespace is unset, it defaults to "default"
+---@return table<string, any> created the created resource as returned by the apiserver, including server-set fields
 function Client:create(obj) end
 
 --- update a resource from a Lua table
----@param obj table<string, any>
----@return table<string, any>
+---@param obj table<string, any> the resource to update; must have apiVersion and kind set. If metadata.namespace is unset, it defaults to "default"
+---@return table<string, any> updated the updated resource as returned by the apiserver
 function Client:update(obj) end
 
 --- delete a resource by GVK, namespace, and name
----@param gvk kubernetes.GVKMatcher
----@param namespace string
----@param name string
+---@param gvk kubernetes.GVKMatcher GVK matcher table with group, version and kind fields, e.g. k8sclient.POD
+---@param namespace string namespace to delete from; pass an empty string for cluster-scoped resources such as nodes or cluster roles
+---@param name string name of the resource to delete
 function Client:delete(gvk, namespace, name) end
 
 --- list resources by GVK and namespace
----@param gvk kubernetes.GVKMatcher
----@param namespace string
----@return table<string, any>[]
+---@param gvk kubernetes.GVKMatcher GVK matcher table with group, version and kind fields, e.g. k8sclient.POD
+---@param namespace string namespace to list in; pass an empty string for cluster-scoped resources, or to list across all namespaces
+---@return table<string, any>[] items table (array) of matching resources, each in the same shape as `kubectl get -o json`
 function Client:list(gvk, namespace) end
 
 ---@class k8sclient

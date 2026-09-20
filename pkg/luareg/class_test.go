@@ -222,15 +222,16 @@ func TestClassWrongTypeReceiver(t *testing.T) {
 	L.SetGlobal("mod", L.Get(-1))
 	L.Pop(1)
 
-	// Reach into Counter's metatable to call its :get method with a Chainer
-	// userdata as the receiver. The method wrapper's Check(L, 1) must surface
-	// a Lua error naming the expected class.
+	// Invoke counter's "get" method directly with chainer_ud as self, to
+	// verify the method wrapper's Check(L, 1) surfaces a Lua error naming the
+	// expected class. The get function is fetched via plain indexing
+	// (counter_ud.get), which still dispatches through __index regardless of
+	// the class's protected metatable — only getmetatable/setmetatable are
+	// blocked (see TestClassMetatableProtected), not normal field access.
 	err := L.DoString(`
 		local counter_ud = mod.new_counter()
 		local chainer_ud = mod.new_chainer()
-		-- invoke counter's "get" method directly with chainer_ud as self
-		local mt = getmetatable(counter_ud)
-		local getfn = mt.__index.get
+		local getfn = counter_ud.get
 		local ok, msg = pcall(getfn, chainer_ud)
 		assert(ok == false, "expected error")
 		assert(string.find(msg, "mod.Counter") ~= nil, "expected class name in error, got: " .. msg)
@@ -248,11 +249,12 @@ func TestClassBareTableRaisesError(t *testing.T) {
 
 	err := L.DoString(`
 		local ok, msg = pcall(function()
-			-- Get the increment method from a real counter's metatable,
+			-- Get the increment method off a real counter via plain indexing
+			-- (still dispatches through __index even though the metatable
+			-- itself is now protected — see TestClassMetatableProtected),
 			-- then call it with a plain table instead of userdata.
 			local real = counter.new()
-			local mt = getmetatable(real)
-			local inc = mt.__index.increment
+			local inc = real.increment
 			inc({}, 1)  -- {} is a plain table, not userdata
 		end)
 		assert(ok == false, "expected error")
@@ -430,10 +432,11 @@ func TestClassWrapAndCheck(t *testing.T) {
 	// Check extracts the same pointer.
 	require.NoError(t, L.DoString(`assert(type(ud) == "userdata")`))
 
-	// Use Check via the method dispatch path.
+	// Use Check via the method dispatch path — plain indexing still resolves
+	// through __index even though the metatable is protected (see
+	// TestClassMetatableProtected).
 	require.NoError(t, L.DoString(`
-		local mt = getmetatable(ud)
-		local v = mt.__index.get(ud)
+		local v = ud.get(ud)
 		assert(v == 42, "expected 42, got " .. tostring(v))
 	`))
 }
@@ -817,5 +820,235 @@ func TestClassMethodVariadic(t *testing.T) {
 		assert(c:add_many() == 0, "empty tail should keep value at 0")
 		assert(c:add_many(5) == 5, "single arg should give 5")
 		assert(c:add_many(1, 2, 3) == 11, "1+2+3 over 5 should give 11")
+	`))
+}
+
+// ---------------------------------------------------------------------------
+// 23. Class name collision across modules on the same LState panics
+// ---------------------------------------------------------------------------
+
+// TestClassNameCollisionAcrossModulesPanics: L.NewTypeMetatable is keyed
+// globally by Lua name in the LState registry, but uniqueness of a class name
+// is only enforced within a single Module. Two different modules registering
+// two different Go types under the same Lua class name, both pushed to the
+// same LState, must panic loudly (not silently repoint the first class's
+// instances at the second class's methods).
+func TestClassNameCollisionAcrossModulesPanics(t *testing.T) {
+	type OtherType struct{ X int }
+
+	m1 := luareg.NewModule("m1", "test")
+	c1 := luareg.NewClass[*Counter]("shared.Thing", "counter flavored")
+	c1.Method("get", (*Counter).Get, "get")
+	m1.RegisterClass(c1)
+
+	m2 := luareg.NewModule("m2", "test")
+	c2 := luareg.NewClass[*OtherType]("shared.Thing", "other flavored")
+	c2.Method("noop", func(o *OtherType) int { return o.X }, "noop")
+	m2.RegisterClass(c2)
+
+	L := lua.NewState()
+	defer L.Close()
+
+	m1.PushTo(L)
+
+	func() {
+		defer func() {
+			r := recover()
+			require.NotNil(t, r, "expected panic on class name collision")
+			msg, ok := r.(string)
+			require.True(t, ok, "expected string panic value, got %T", r)
+			assert.Contains(t, msg, "shared.Thing")
+			assert.Contains(t, msg, "Counter")
+			assert.Contains(t, msg, "OtherType")
+		}()
+		m2.PushTo(L)
+	}()
+}
+
+// TestClassNameSameTypeReregistrationIsIdempotent: registering the exact same
+// (name, Go type) pair more than once on the same LState — e.g. Module.PushTo
+// called twice, which module.go documents as safe — must not panic.
+func TestClassNameSameTypeReregistrationIsIdempotent(t *testing.T) {
+	m := luareg.NewModule("m", "test")
+	c := luareg.NewClass[*Counter]("idem.Counter", "counter")
+	c.Method("get", (*Counter).Get, "get")
+	m.RegisterClass(c)
+	m.Fn("new", NewCounter, "new counter")
+
+	L := lua.NewState()
+	defer L.Close()
+
+	assert.NotPanics(t, func() {
+		m.PushTo(L)
+		m.PushTo(L)
+	})
+
+	L.SetGlobal("m", L.Get(-1))
+	L.Pop(1)
+	require.NoError(t, L.DoString(`
+		local c = m.new()
+		assert(c:get() == 0)
+	`))
+}
+
+// ---------------------------------------------------------------------------
+// 24. __metatable protects instances from setmetatable/getmetatable tampering
+// ---------------------------------------------------------------------------
+
+// TestClassMetatableProtected: gopher-lua's baseSetMetatable only type-checks
+// the NEW metatable argument, not the target — unlike stock Lua 5.1, which
+// requires arg 1 to be a table and so protects userdata for free. Setting
+// __metatable closes that gap: setmetatable on an instance must raise, and
+// getmetatable must return the class-name string rather than the real
+// methods table. Method dispatch must still work afterwards.
+func TestClassMetatableProtected(t *testing.T) {
+	L := newCounterState(t)
+	defer L.Close()
+
+	require.NoError(t, L.DoString(`
+		local c = counter.new()
+		c:increment(5)
+
+		local ok, err = pcall(setmetatable, c, {})
+		assert(ok == false, "expected setmetatable to raise on a protected metatable")
+		assert(string.find(tostring(err), "protected metatable") ~= nil,
+			"expected 'protected metatable' in: " .. tostring(err))
+
+		local mt = getmetatable(c)
+		assert(type(mt) == "string", "expected string, got " .. type(mt))
+		assert(mt == "counter.Counter", "expected class name, got " .. mt)
+
+		-- Normal method calls still work after the attempted tamper.
+		assert(c:get() == 5, "expected 5 after failed tamper, got " .. tostring(c:get()))
+	`))
+}
+
+// ---------------------------------------------------------------------------
+// 25. __tostring
+// ---------------------------------------------------------------------------
+
+// TestClassToString: tostring(instance) must be stable and mention the class
+// name, instead of gopher-lua's opaque default userdata text.
+func TestClassToString(t *testing.T) {
+	L := newCounterState(t)
+	defer L.Close()
+
+	require.NoError(t, L.DoString(`
+		local c = counter.new()
+		local s = tostring(c)
+		assert(string.find(s, "counter.Counter: ") == 1, "expected prefix 'counter.Counter: ', got " .. s)
+	`))
+}
+
+// ---------------------------------------------------------------------------
+// 26. __eq
+// ---------------------------------------------------------------------------
+
+// TestClassEqSameAndDifferentValue: two userdata wrapping the SAME pointer
+// must compare equal (the wrapped Go value is what matters, not the
+// *lua.LUserData wrapper identity); two userdata wrapping different pointers
+// — even with identical field values — must compare unequal, since pointer
+// types compare by pointer per the documented __eq design.
+func TestClassEqSameAndDifferentValue(t *testing.T) {
+	m := luareg.NewModule("m", "test")
+	c := luareg.NewClass[*Counter]("m.Counter", "counter")
+	c.Method("get", (*Counter).Get, "get")
+	m.RegisterClass(c)
+
+	L := lua.NewState()
+	defer L.Close()
+	m.PushTo(L)
+	L.Pop(1)
+
+	instance := &Counter{value: 1}
+	ud1 := c.Wrap(L, instance)
+	ud2 := c.Wrap(L, instance) // same pointer, distinct userdata wrapper
+	other := &Counter{value: 1}
+	ud3 := c.Wrap(L, other) // different pointer, equal field values
+
+	L.SetGlobal("a", ud1)
+	L.SetGlobal("b", ud2)
+	L.SetGlobal("c", ud3)
+
+	require.NoError(t, L.DoString(`
+		assert(a == b, "same underlying pointer must compare equal")
+		assert(a ~= c, "different pointer must compare unequal, even with equal field values")
+	`))
+}
+
+// UncomparableBag: a class backed by a slice type, which Go's == cannot
+// compare without panicking.
+type UncomparableBag []int
+
+// TestClassEqUncomparableTypeDoesNotPanic: __eq on a class backed by an
+// uncomparable Go type (slice, map, func, ...) must not panic. Per the
+// documented design in classValuesEqual, such values are defined to never
+// compare equal via __eq — even two wrappers around the exact same slice
+// value — rather than falling back to userdata-wrapper identity (which the
+// __eq contract explicitly avoids) or risking a panic from Go's ==.
+func TestClassEqUncomparableTypeDoesNotPanic(t *testing.T) {
+	m := luareg.NewModule("m", "test")
+	c := luareg.NewClass[UncomparableBag]("m.Bag", "bag")
+	c.Method("length", func(b UncomparableBag) int { return len(b) }, "length")
+	m.RegisterClass(c)
+
+	L := lua.NewState()
+	defer L.Close()
+	m.PushTo(L)
+	L.Pop(1)
+
+	bag := UncomparableBag{1, 2, 3}
+	ud1 := c.Wrap(L, bag)
+	ud2 := c.Wrap(L, bag)
+	L.SetGlobal("a", ud1)
+	L.SetGlobal("b", ud2)
+
+	require.NoError(t, L.DoString(`
+		local ok, res = pcall(function() return a == b end)
+		assert(ok == true, "== must not panic for an uncomparable wrapped type")
+		assert(res == false, "uncomparable wrapped values are defined to never compare equal")
+	`))
+}
+
+// ---------------------------------------------------------------------------
+// 27. __len — opt-in only
+// ---------------------------------------------------------------------------
+
+// Queue: a fixture type with a meaningful length, used to test the opt-in
+// Class.Len metamethod.
+type Queue struct{ items []int }
+
+// TestClassLenOptIn: a class that opts in via Class.Len exposes # on its
+// instances.
+func TestClassLenOptIn(t *testing.T) {
+	m := luareg.NewModule("m", "test")
+	c := luareg.NewClass[*Queue]("m.Queue", "queue")
+	c.Len(func(q *Queue) int { return len(q.items) })
+	m.RegisterClass(c)
+	m.Fn("new_queue", func() *Queue { return &Queue{items: []int{1, 2, 3}} }, "")
+
+	L := lua.NewState()
+	defer L.Close()
+	m.PushTo(L)
+	L.SetGlobal("m", L.Get(-1))
+	L.Pop(1)
+
+	require.NoError(t, L.DoString(`
+		local q = m.new_queue()
+		assert(#q == 3, "expected length 3, got " .. tostring(#q))
+	`))
+}
+
+// TestClassLenNotSetByDefault: a class that does NOT call Class.Len must not
+// have a meaningless __len bolted on — applying # to such an instance must
+// fail rather than silently returning an invented value.
+func TestClassLenNotSetByDefault(t *testing.T) {
+	L := newCounterState(t)
+	defer L.Close()
+
+	require.NoError(t, L.DoString(`
+		local c = counter.new()
+		local ok = pcall(function() return #c end)
+		assert(ok == false, "expected # to fail when __len is not opted in")
 	`))
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	lua "github.com/yuin/gopher-lua"
@@ -14,7 +15,7 @@ import (
 
 func TestGet(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
+		if r.Method != http.MethodGet {
 			t.Errorf("Expected GET request, got %s", r.Method)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -38,7 +39,7 @@ func TestGet(t *testing.T) {
 
 func TestPost(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
+		if r.Method != http.MethodPost {
 			t.Errorf("Expected POST request, got %s", r.Method)
 		}
 		w.WriteHeader(http.StatusCreated)
@@ -83,7 +84,7 @@ func TestHeaders(t *testing.T) {
 
 func TestRequest(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "PATCH" {
+		if r.Method != http.MethodPatch {
 			t.Errorf("Expected PATCH request, got %s", r.Method)
 		}
 		w.WriteHeader(http.StatusOK)
@@ -112,6 +113,40 @@ func TestInvalidURL(t *testing.T) {
 		local http = require("http")
 		local ok, err = pcall(http.get, "not-a-valid-url", nil)
 		assert(not ok, "Expected error for invalid URL")
+		assert(type(err) == "string", "Error should be a string")
+	`
+	require.NoError(t, L.DoString(code))
+}
+
+// TestRequestTimesOut: a slow/hanging server must not block the calling
+// goroutine forever. This is the regression test for the missing
+// http.Client timeout: without defaultTimeout bounding the request context,
+// this test would hang until the test binary's own deadline killed it.
+// defaultTimeout is shrunk for the duration of the test so the assertion
+// itself completes quickly rather than waiting out the real 30s default.
+func TestRequestTimesOut(t *testing.T) {
+	origTimeout := defaultTimeout
+	defaultTimeout = 20 * time.Millisecond
+	defer func() { defaultTimeout = origTimeout }()
+
+	unblock := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-unblock // hang until the test explicitly releases the handler
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer func() {
+		close(unblock)
+		server.Close()
+	}()
+
+	L := lua.NewState()
+	defer L.Close()
+	L.PreloadModule("http", Loader)
+
+	code := `
+		local http = require("http")
+		local ok, err = pcall(http.get, "` + server.URL + `", nil)
+		assert(not ok, "Expected timeout error, request succeeded")
 		assert(type(err) == "string", "Error should be a string")
 	`
 	require.NoError(t, L.DoString(code))

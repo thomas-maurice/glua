@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package base64 provides base64 encoding and decoding utilities for Lua
+// scripts (standard and URL-safe alphabets).
 package base64
 
 import (
@@ -60,13 +62,21 @@ func decodeURL(s string) (string, error) {
 func build() *luareg.Module {
 	m := luareg.NewModule("base64", "base64 encoding and decoding utilities")
 	m.Fn("encode", encode, "encodes a string to standard base64",
-		luareg.Args("s"))
+		luareg.Args("s"),
+		luareg.ArgDoc("s", "the raw string to encode"),
+		luareg.ReturnDoc(0, "encoded", "the standard-alphabet base64 encoding of s"))
 	m.Fn("decode", decode, "decodes a standard base64 string, raises on invalid input",
-		luareg.Args("encoded"))
+		luareg.Args("encoded"),
+		luareg.ArgDoc("encoded", "a standard-alphabet base64 string to decode"),
+		luareg.ReturnDoc(0, "s", "the decoded raw string"))
 	m.Fn("encode_url", encodeURL, "encodes a string to URL-safe base64",
-		luareg.Args("s"))
+		luareg.Args("s"),
+		luareg.ArgDoc("s", "the raw string to encode"),
+		luareg.ReturnDoc(0, "encoded", "the URL-safe base64 encoding of s"))
 	m.Fn("decode_url", decodeURL, "decodes a URL-safe base64 string, raises on invalid input",
-		luareg.Args("encoded"))
+		luareg.Args("encoded"),
+		luareg.ArgDoc("encoded", "a URL-safe base64 string to decode"),
+		luareg.ReturnDoc(0, "s", "the decoded raw string"))
 	return m
 }
 

@@ -30,20 +30,23 @@ Add glua to your `go.mod`:
 go get github.com/thomas-maurice/glua@latest
 ```
 
-Or manually add to `go.mod` and run `go mod tidy`:
-
-```go
-require github.com/thomas-maurice/glua v0.0.12 // or latest version
-```
+Or import the package in your code and run `go mod tidy`, which will add the
+latest version to `go.mod` for you.
 
 ### Installing Lua Stubs for IDE Autocomplete
 
 Download the latest Lua stubs for IDE autocomplete support:
 
 ```bash
-# Download and extract to your project
-VERSION=v0.0.12  # Replace with the latest version
-curl -sL https://github.com/thomas-maurice/glua/releases/download/${VERSION}/glua-stubs_${VERSION}.tar.gz | tar xz
+# Resolve the newest release's stub tarball and extract it to your project.
+# (The asset name is versioned, e.g. glua-stubs_0.0.12.tar.gz, so we ask the
+# GitHub API for whatever the latest release actually published instead of
+# hardcoding a tag.)
+ASSET_URL=$(curl -sL https://api.github.com/repos/thomas-maurice/glua/releases/latest \
+  | grep browser_download_url \
+  | grep glua-stubs \
+  | cut -d '"' -f4)
+curl -sL "$ASSET_URL" | tar xz
 
 # This extracts to library/*.gen.lua
 # Configure your IDE to recognize the library/ directory
@@ -229,6 +232,13 @@ Features:
 - Preserves resource quantities (CPU/memory strings like "100m", "256Mi")
 - Handles nested structures, arrays, and maps
 - Converts via JSON for robustness
+- A `[]byte` field nested inside a struct or map (e.g. a Kubernetes
+  `Secret.Data`) is JSON's own base64 encoding of `[]byte`, so it round-trips
+  as a base64 Lua string — matching what `kubectl get -o yaml` already shows
+  for the same field. This is unrelated to the raw-string `[]byte` handling
+  used by `luareg.Fn`/`Class.Method` top-level arguments and returns (see
+  "Register with `luareg`" below) — the Translator's JSON path is not
+  involved there.
 
 ### Lua to Go Conversion
 
@@ -677,6 +687,14 @@ Notes:
 
   generates `---@param handler fun(evt: core.Event)` instead of
   `---@param handler any`. It has no runtime effect — stub generation only.
+- A top-level `[]byte` argument or return value (directly in a function or
+  method signature, not nested inside a struct/map field) maps to a raw Lua
+  string, not base64 and not a table of numbers — Lua strings are 8-bit
+  clean, so this is a lossless, zero-copy representation, and stubs emit
+  `string` accordingly. Arguments also still accept a table of numbers for
+  backwards compatibility. This is the opposite of `[]byte` nested inside a
+  struct field, which goes through `Translator.ToLua`/`FromLua` (JSON) and is
+  base64-encoded — see "Go to Lua Conversion" above.
 
 ### 3. Use from Lua
 
@@ -1269,7 +1287,10 @@ spew.dump({name="John", age=30})
 
 #### http
 
-HTTP client for making requests.
+HTTP client for making requests. Every request (get/post/put/delete/request)
+is bounded by a 30-second timeout so a slow or unresponsive endpoint cannot
+block the calling goroutine forever; a timed-out request raises a Lua error
+like any other network failure.
 
 **Load in Go:**
 
@@ -1289,10 +1310,15 @@ response = http.get("https://api.example.com/data")
 -- response = {status=200, body="...", headers={...}}
 
 -- POST request (raises on network/HTTP error)
-response = http.post("https://api.example.com/data", {
-    body = '{"key":"value"}',
-    headers = {["Content-Type"] = "application/json"}
-})
+-- Arguments are positional: (url, body, headers)
+response = http.post(
+    "https://api.example.com/data",
+    '{"key":"value"}',
+    {["Content-Type"] = "application/json"}
+)
+
+-- Body is required (pass "" for none); headers may be nil
+response = http.post("https://api.example.com/ping", "")
 
 -- Other methods: put, patch, delete
 ```
@@ -1359,7 +1385,8 @@ files = fs.list("/path/to/dir")
 
 -- Get file info (raises on error)
 info = fs.stat("/path/to/file")
--- info = {size=1234, mode="0644", mod_time=1234567890, is_dir=false}
+-- info = {size=1234, mode=420, mod_time=1234567890, is_dir=false}
+-- mode is the raw Go FileMode as a number (420 == 0644), not an octal string
 ```
 
 #### time
@@ -1383,7 +1410,8 @@ local time = require("time")
 now = time.now()
 
 -- Parse date string (raises on parse error)
-timestamp = time.parse("2006-01-02 15:04:05", "2025-10-21 14:30:00")
+-- Arguments are (timestr, layout) - the value first, the Go layout second
+timestamp = time.parse("2025-10-21 14:30:00", "2006-01-02 15:04:05")
 
 -- Format timestamp
 datestr = time.format(timestamp, "2006-01-02 15:04:05")
@@ -1464,6 +1492,11 @@ Structured logging with fields (similar to logrus).
 import "github.com/thomas-maurice/glua/pkg/modules/log"
 
 L.PreloadModule("log", log.Loader)
+
+// Level and output format are configured on the Go side: build a
+// *charmbracelet/log.Logger the way you want it and inject it, and every
+// Lua-side call logs through it. There is no Lua-facing level/format setter.
+log.InjectLogger(L, myLogger)
 ```
 
 **Lua API:**
@@ -1480,16 +1513,14 @@ log.debug("Debug information")
 -- Structured logging with fields
 log.info("User logged in", {user_id=123, ip="1.2.3.4"})
 
--- Logger with preset fields
-logger = log.with_fields({component="api", version="1.0"})
+-- Logger with preset fields: get the default logger, then derive a child
+logger = log.logger():with({component="api", version="1.0"})
 logger:info("Request received", {path="/api/users"})
 -- Output includes: component=api version=1.0 path=/api/users
 
--- Set log level
-log.set_level("debug")  -- "debug", "info", "warn", "error"
-
--- Set output format
-log.set_format("json")  -- "json" or "text"
+-- Logger objects expose the same levels as the module
+logger:debug("Debug information")
+logger:warn("Deprecated feature used")
 ```
 
 #### osmod
@@ -1588,7 +1619,7 @@ matches = regexp.find_all("([0-9]+)", "version 123 build 456", -1)
 -- matches = {"123", "456"}
 
 -- Replace occurrences (raises on invalid pattern)
-result = regexp.replace("([0-9]+)", "version 123", "999", 1)
+result = regexp.replace("([0-9]+)", "version 123", "999")
 -- result = "version 999"
 
 result = regexp.replace_all("([0-9]+)", "version 123 build 456", "X")

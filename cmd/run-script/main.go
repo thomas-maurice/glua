@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package main runs a Lua script against a sample Kubernetes Pod, demonstrating
+// glua's kubernetes, json, and spew modules.
 package main
 
 import (

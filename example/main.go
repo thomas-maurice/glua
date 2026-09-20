@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package main demonstrates glua's core features, including Go/Lua struct
+// conversion and the json and spew modules.
 package main
 
 import (
@@ -148,7 +150,7 @@ func generateStubs() error {
 }
 
 // demonstrateJSONModule: showcases the json module functionality
-func demonstrateJSONModule(L *lua.LState, pod *corev1.Pod) {
+func demonstrateJSONModule(L *lua.LState, _ *corev1.Pod) {
 	script := `
 		local json = require("json")
 
@@ -193,7 +195,7 @@ func demonstrateJSONModule(L *lua.LState, pod *corev1.Pod) {
 }
 
 // demonstrateSpewModule: showcases the spew module functionality
-func demonstrateSpewModule(L *lua.LState, pod *corev1.Pod) {
+func demonstrateSpewModule(L *lua.LState, _ *corev1.Pod) {
 	script := `
 		local spew = require("spew")
 

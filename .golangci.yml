@@ -1,0 +1,86 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - ineffassign
+    - unused
+    - misspell
+    - revive
+    - gocritic
+    - copyloopvar
+    - usestdlibvars
+  settings:
+    gocritic:
+      disabled-checks:
+        # captLocal flags any capitalised local/parameter name. This codebase
+        # (and gopher-lua itself, which this project wraps) uses `L` for the
+        # *lua.LState parameter throughout, mirroring the Lua C API's
+        # `lua_State *L`. That's a deliberate, pervasive convention here, not
+        # a mistake, so the check is disabled rather than generating ~90
+        # permanent, unactionable findings (CLAUDE.md rule 7).
+        - captLocal
+        # exitAfterDefer flags os.Exit calls after a defer in the same
+        # function. Every CLI entry point in this repo follows the standard
+        # "defer cleanup(); os.Exit(1) on fatal error" idiom in main() – the
+        # process is terminating either way, so the skipped defer has no
+        # observable effect. Disabled for the same reason as captLocal.
+        - exitAfterDefer
+    revive:
+      # revive's default rule set is replaced wholesale as soon as any rule
+      # is listed here, so the full default set is spelled out below with
+      # only "exported" turned off. The project's mandated Go doc-comment
+      # style (CLAUDE.md: "<funcName>: <description>") is used throughout
+      # the codebase and directly conflicts with revive's "exported" rule,
+      # which requires comments of the form "FuncName ...". Enforcing
+      # "exported" would put the linter permanently at odds with the
+      # project's own documented convention, so it is disabled rather than
+      # silently blended with revive's expectation (see CLAUDE.md rule 7).
+      rules:
+        - name: var-declaration
+        - name: package-comments
+        - name: dot-imports
+        - name: blank-imports
+        - name: exported
+          disabled: true
+        - name: var-naming
+        - name: indent-error-flow
+        - name: range
+        - name: errorf
+        - name: error-naming
+        - name: error-strings
+        - name: receiver-naming
+        - name: increment-decrement
+        - name: error-return
+        - name: unexported-return
+        - name: time-naming
+        - name: context-keys-type
+        - name: context-as-argument
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+        - name: unreachable-code
+        - name: redefines-builtin-id
+  exclusions:
+    rules:
+      # Test files churn a lot on style linters (revive/gocritic) without
+      # adding much signal; keep the correctness linters (errcheck, govet,
+      # staticcheck, unused) active everywhere.
+      - path: _test\.go
+        linters:
+          - revive
+          - gocritic
+
+formatters:
+  enable:
+    - gofmt
+
+issues:
+  # Surface every finding instead of capping at N-per-linter/N-identical:
+  # this repo is small enough that the defaults just hide findings behind
+  # non-deterministic per-run truncation.
+  max-issues-per-linter: 0
+  max-same-issues: 0

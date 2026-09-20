@@ -367,13 +367,14 @@ func writeMethodStub(sb *strings.Builder, fn *luareg.FnMeta, localName string, c
 		}
 	}
 	for _, r := range rets {
-		if r.name != "" && r.doc != "" {
+		switch {
+		case r.name != "" && r.doc != "":
 			fmt.Fprintf(sb, "---@return %s %s %s\n", r.luaType, r.name, r.doc)
-		} else if r.name != "" {
+		case r.name != "":
 			fmt.Fprintf(sb, "---@return %s %s\n", r.luaType, r.name)
-		} else if r.doc != "" {
+		case r.doc != "":
 			fmt.Fprintf(sb, "---@return %s %s\n", r.luaType, r.doc)
-		} else {
+		default:
 			fmt.Fprintf(sb, "---@return %s\n", r.luaType)
 		}
 	}
@@ -408,13 +409,14 @@ func writeFuncStub(sb *strings.Builder, fn *luareg.FnMeta, modName string, class
 		}
 	}
 	for _, r := range rets {
-		if r.name != "" && r.doc != "" {
+		switch {
+		case r.name != "" && r.doc != "":
 			fmt.Fprintf(sb, "---@return %s %s %s\n", r.luaType, r.name, r.doc)
-		} else if r.name != "" {
+		case r.name != "":
 			fmt.Fprintf(sb, "---@return %s %s\n", r.luaType, r.name)
-		} else if r.doc != "" {
+		case r.doc != "":
 			fmt.Fprintf(sb, "---@return %s %s\n", r.luaType, r.doc)
-		} else {
+		default:
 			fmt.Fprintf(sb, "---@return %s\n", r.luaType)
 		}
 	}
@@ -568,6 +570,12 @@ func goTypeToLua(t reflect.Type, classLookup map[reflect.Type]luareg.AnyClass) s
 		reflect.Float32, reflect.Float64:
 		return "number"
 	case reflect.Slice:
+		// []byte maps to a raw Lua string at the top level (see
+		// pkg/luareg's luaToGo/goToLua []byte special case), not a table of
+		// numbers, so the stub must say "string" rather than "number[]".
+		if t.Elem().Kind() == reflect.Uint8 {
+			return "string"
+		}
 		elemLua := goTypeToLua(t.Elem(), classLookup)
 		return elemLua + "[]"
 	case reflect.Map:

@@ -18,6 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package k8sclient provides a Kubernetes dynamic client for Lua scripts:
+// get, create, update, delete and list arbitrary resources by GVK, plus GVK
+// constants for common built-in resource types.
 package k8sclient
 
 import (
@@ -194,15 +197,29 @@ func (c *Client) List(gvk kubernetes.GVKMatcher, namespace string) ([]map[string
 func newClientClass() *luareg.Class[*Client] {
 	cls := luareg.NewClass[*Client]("k8sclient.Client", "Kubernetes dynamic client")
 	cls.Method("get", (*Client).Get, "get a resource by GVK, namespace, and name",
-		luareg.Args("gvk", "namespace", "name"))
+		luareg.Args("gvk", "namespace", "name"),
+		luareg.ArgDoc("gvk", "GVK matcher table with group, version and kind fields, e.g. k8sclient.POD"),
+		luareg.ArgDoc("namespace", "namespace to look in; pass an empty string for cluster-scoped resources such as nodes or cluster roles"),
+		luareg.ArgDoc("name", "name of the resource to fetch"),
+		luareg.ReturnDoc(0, "obj", "the resource as a table, in the same shape as `kubectl get -o json`"))
 	cls.Method("create", (*Client).Create, "create a resource from a Lua table",
-		luareg.Args("obj"))
+		luareg.Args("obj"),
+		luareg.ArgDoc("obj", "the resource to create; must have apiVersion and kind set. If metadata.namespace is unset, it defaults to \"default\""),
+		luareg.ReturnDoc(0, "created", "the created resource as returned by the apiserver, including server-set fields"))
 	cls.Method("update", (*Client).Update, "update a resource from a Lua table",
-		luareg.Args("obj"))
+		luareg.Args("obj"),
+		luareg.ArgDoc("obj", "the resource to update; must have apiVersion and kind set. If metadata.namespace is unset, it defaults to \"default\""),
+		luareg.ReturnDoc(0, "updated", "the updated resource as returned by the apiserver"))
 	cls.Method("delete", (*Client).Delete, "delete a resource by GVK, namespace, and name",
-		luareg.Args("gvk", "namespace", "name"))
+		luareg.Args("gvk", "namespace", "name"),
+		luareg.ArgDoc("gvk", "GVK matcher table with group, version and kind fields, e.g. k8sclient.POD"),
+		luareg.ArgDoc("namespace", "namespace to delete from; pass an empty string for cluster-scoped resources such as nodes or cluster roles"),
+		luareg.ArgDoc("name", "name of the resource to delete"))
 	cls.Method("list", (*Client).List, "list resources by GVK and namespace",
-		luareg.Args("gvk", "namespace"))
+		luareg.Args("gvk", "namespace"),
+		luareg.ArgDoc("gvk", "GVK matcher table with group, version and kind fields, e.g. k8sclient.POD"),
+		luareg.ArgDoc("namespace", "namespace to list in; pass an empty string for cluster-scoped resources, or to list across all namespaces"),
+		luareg.ReturnDoc(0, "items", "table (array) of matching resources, each in the same shape as `kubectl get -o json`"))
 	return cls
 }
 
@@ -220,42 +237,6 @@ func newClientLua(L *lua.LState, config *rest.Config) int {
 	L.SetMetatable(ud, L.GetTypeMetatable("k8sclient.Client"))
 	L.Push(ud)
 	return 1
-}
-
-// createGVKTable: creates a Lua table representing a GVK
-func createGVKTable(L *lua.LState, group, version, kind string) *lua.LTable {
-	gvk := L.NewTable()
-	L.SetField(gvk, "group", lua.LString(group))
-	L.SetField(gvk, "version", lua.LString(version))
-	L.SetField(gvk, "kind", lua.LString(kind))
-	return gvk
-}
-
-// addGVKConstants: adds GVK constants for common Kubernetes resources to the module table.
-// These constants cannot be expressed as luareg.Fn calls (they are table values, not
-// functions), so they are set directly on the module table after PushTo.
-func addGVKConstants(L *lua.LState, mod *lua.LTable) {
-	L.SetField(mod, "POD", createGVKTable(L, "", "v1", "Pod"))
-	L.SetField(mod, "NAMESPACE", createGVKTable(L, "", "v1", "Namespace"))
-	L.SetField(mod, "NODE", createGVKTable(L, "", "v1", "Node"))
-	L.SetField(mod, "CONFIGMAP", createGVKTable(L, "", "v1", "ConfigMap"))
-	L.SetField(mod, "SECRET", createGVKTable(L, "", "v1", "Secret"))
-	L.SetField(mod, "SERVICE", createGVKTable(L, "", "v1", "Service"))
-	L.SetField(mod, "SERVICEACCOUNT", createGVKTable(L, "", "v1", "ServiceAccount"))
-	L.SetField(mod, "PERSISTENTVOLUME", createGVKTable(L, "", "v1", "PersistentVolume"))
-	L.SetField(mod, "PERSISTENTVOLUMECLAIM", createGVKTable(L, "", "v1", "PersistentVolumeClaim"))
-	L.SetField(mod, "DEPLOYMENT", createGVKTable(L, "apps", "v1", "Deployment"))
-	L.SetField(mod, "STATEFULSET", createGVKTable(L, "apps", "v1", "StatefulSet"))
-	L.SetField(mod, "DAEMONSET", createGVKTable(L, "apps", "v1", "DaemonSet"))
-	L.SetField(mod, "REPLICASET", createGVKTable(L, "apps", "v1", "ReplicaSet"))
-	L.SetField(mod, "JOB", createGVKTable(L, "batch", "v1", "Job"))
-	L.SetField(mod, "CRONJOB", createGVKTable(L, "batch", "v1", "CronJob"))
-	L.SetField(mod, "INGRESS", createGVKTable(L, "networking.k8s.io", "v1", "Ingress"))
-	L.SetField(mod, "NETWORKPOLICY", createGVKTable(L, "networking.k8s.io", "v1", "NetworkPolicy"))
-	L.SetField(mod, "ROLE", createGVKTable(L, "rbac.authorization.k8s.io", "v1", "Role"))
-	L.SetField(mod, "CLUSTERROLE", createGVKTable(L, "rbac.authorization.k8s.io", "v1", "ClusterRole"))
-	L.SetField(mod, "ROLEBINDING", createGVKTable(L, "rbac.authorization.k8s.io", "v1", "RoleBinding"))
-	L.SetField(mod, "CLUSTERROLEBINDING", createGVKTable(L, "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"))
 }
 
 // gvkConst: convenience wrapper to create a kubernetes.GVKMatcher constant.

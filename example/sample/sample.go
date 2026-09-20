@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package sample provides sample Kubernetes objects shared by glua's example
+// programs.
 package sample
 
 import (
@@ -30,7 +32,7 @@ import (
 func GetPod() *corev1.Pod {
 	var pod corev1.Pod
 
-	err := json.Unmarshal([]byte(podJson), &pod)
+	err := json.Unmarshal([]byte(podJSON), &pod)
 	if err != nil {
 		panic(err)
 	}
@@ -38,8 +40,8 @@ func GetPod() *corev1.Pod {
 	return &pod
 }
 
-// podJson: contains a sample Kubernetes Pod JSON representation
-var podJson = `
+// podJSON: contains a sample Kubernetes Pod JSON representation
+var podJSON = `
 {
     "apiVersion": "v1",
     "kind": "Pod",

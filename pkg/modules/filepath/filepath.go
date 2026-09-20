@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package filepath provides file path manipulation utilities for Lua scripts,
+// wrapping Go's stdlib path/filepath.
 package filepath
 
 import (
@@ -42,19 +44,34 @@ func splitPath(path string) (string, string) {
 func build() *luareg.Module {
 	m := luareg.NewModule("filepath", "file path manipulation utilities")
 	m.Fn("join", join, "joins a table of path elements into a single path",
-		luareg.Args("elem"))
+		luareg.Args("elem"),
+		luareg.ArgDoc("elem", "table (array) of path segments to join with the OS path separator"),
+		luareg.ReturnDoc(0, "path", "the joined and Clean-ed path"))
 	m.Fn("split", splitPath, "splits a path into directory and file components",
-		luareg.Args("path"))
+		luareg.Args("path"),
+		luareg.ArgDoc("path", "the path to split, e.g. \"/a/b/c.txt\""),
+		luareg.ReturnDoc(0, "dir", "everything up to and including the final separator, e.g. \"/a/b/\""),
+		luareg.ReturnDoc(1, "file", "everything after the final separator, e.g. \"c.txt\""))
 	m.Fn("abs", filepath.Abs, "returns the absolute form of the path, raises on error",
-		luareg.Args("path"))
+		luareg.Args("path"),
+		luareg.ArgDoc("path", "relative or absolute path to resolve against the process working directory"),
+		luareg.ReturnDoc(0, "path", "the absolute, Clean-ed form of path"))
 	m.Fn("ext", filepath.Ext, "returns the file extension including the dot",
-		luareg.Args("path"))
+		luareg.Args("path"),
+		luareg.ArgDoc("path", "the path whose extension to extract"),
+		luareg.ReturnDoc(0, "ext", "the file extension including the leading dot, or empty string if none"))
 	m.Fn("base", filepath.Base, "returns the last element of the path",
-		luareg.Args("path"))
+		luareg.Args("path"),
+		luareg.ArgDoc("path", "the path whose last element to extract"),
+		luareg.ReturnDoc(0, "name", "the last path element, with trailing separators removed"))
 	m.Fn("dir", filepath.Dir, "returns all but the last element of the path",
-		luareg.Args("path"))
+		luareg.Args("path"),
+		luareg.ArgDoc("path", "the path whose parent directory to extract"),
+		luareg.ReturnDoc(0, "dir", "all but the last element of path"))
 	m.Fn("clean", filepath.Clean, "returns the shortest path equivalent to path",
-		luareg.Args("path"))
+		luareg.Args("path"),
+		luareg.ArgDoc("path", "the path to simplify, e.g. containing \"..\" or repeated separators"),
+		luareg.ReturnDoc(0, "path", "the shortest path lexically equivalent to path"))
 	return m
 }
 

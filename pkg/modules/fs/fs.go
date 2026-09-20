@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package fs provides file system utilities for Lua scripts: reading,
+// writing, stat-ing, and directory operations.
 package fs
 
 import (
@@ -122,23 +124,37 @@ func stat(path string) (FileInfo, error) {
 func build() *luareg.Module {
 	m := luareg.NewModule("fs", "file system utilities")
 	m.Fn("read_file", readFile, "reads the entire contents of a file, raises on error",
-		luareg.Args("path"))
+		luareg.Args("path"),
+		luareg.ArgDoc("path", "path to the file to read, absolute or relative to the process working directory"),
+		luareg.ReturnDoc(0, "content", "the full file contents"))
 	m.Fn("write_file", writeFile, "writes content to a file, raises on error",
-		luareg.Args("path", "content"))
+		luareg.Args("path", "content"),
+		luareg.ArgDoc("path", "path to the file to write; created if missing, truncated if it exists"),
+		luareg.ArgDoc("content", "the data to write, overwriting any existing content"))
 	m.Fn("exists", exists, "reports whether a path exists",
-		luareg.Args("path"))
+		luareg.Args("path"),
+		luareg.ArgDoc("path", "the path to check"),
+		luareg.ReturnDoc(0, "ok", "true if a file or directory exists at path"))
 	m.Fn("mkdir", mkdir, "creates a directory, raises on error",
-		luareg.Args("path"))
+		luareg.Args("path"),
+		luareg.ArgDoc("path", "path of the directory to create; the parent directory must already exist"))
 	m.Fn("mkdir_all", mkdirAll, "creates a directory and all parents, raises on error",
-		luareg.Args("path"))
+		luareg.Args("path"),
+		luareg.ArgDoc("path", "path of the directory to create, along with any missing parent directories"))
 	m.Fn("remove", remove, "removes a file or empty directory, raises on error",
-		luareg.Args("path"))
+		luareg.Args("path"),
+		luareg.ArgDoc("path", "path to the file or empty directory to remove"))
 	m.Fn("remove_all", removeAll, "removes a path and all its contents, raises on error",
-		luareg.Args("path"))
+		luareg.Args("path"),
+		luareg.ArgDoc("path", "path to remove recursively, including all files and subdirectories"))
 	m.Fn("list", list, "lists all entries in a directory, raises on error",
-		luareg.Args("path"))
+		luareg.Args("path"),
+		luareg.ArgDoc("path", "path of the directory to list"),
+		luareg.ReturnDoc(0, "names", "table (array) of entry names directly inside path, not recursive"))
 	m.Fn("stat", stat, "returns file information, raises on error",
-		luareg.Args("path"))
+		luareg.Args("path"),
+		luareg.ArgDoc("path", "path of the file or directory to stat"),
+		luareg.ReturnDoc(0, "info", "FileInfo table describing name, size, is_dir, mode and mod_time"))
 	return m
 }
 

@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package spew provides debug dump utilities for Lua values, rendering them
+// as indented (optionally colored) JSON.
 package spew
 
 import (
@@ -98,7 +100,7 @@ func convertLuaTable(L *lua.LState, table *lua.LTable) interface{} {
 // analyzeTableStructure: determines if a Lua table is an array or map.
 func analyzeTableStructure(table *lua.LTable) (maxN int, isArray bool, hasElements bool) {
 	isArray = true
-	table.ForEach(func(key lua.LValue, val lua.LValue) {
+	table.ForEach(func(key, _ lua.LValue) {
 		hasElements = true
 		if keyNum, ok := key.(lua.LNumber); ok {
 			if n := int(keyNum); n > 0 && float64(n) == float64(keyNum) {
@@ -143,9 +145,12 @@ func convertTableToMap(L *lua.LState, table *lua.LTable) map[string]interface{} 
 func build() *luareg.Module {
 	m := luareg.NewModule("spew", "debug dump utilities for Lua values")
 	m.Fn("dump", dump, "prints a Lua value to stdout as colored indented JSON",
-		luareg.Args("value"))
+		luareg.Args("value"),
+		luareg.ArgDoc("value", "the Lua value to dump; tables are walked recursively"))
 	m.Fn("sdump", sdump, "returns a JSON string representation of a Lua value",
-		luareg.Args("value"))
+		luareg.Args("value"),
+		luareg.ArgDoc("value", "the Lua value to dump; tables are walked recursively"),
+		luareg.ReturnDoc(0, "s", "the indented JSON representation of value"))
 	return m
 }
 
