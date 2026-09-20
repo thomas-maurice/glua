@@ -5,10 +5,13 @@ package jwt
 
 import (
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -77,6 +80,56 @@ func genECKeyPEMs(t *testing.T) (privPEM, pubPEM string) {
 	return privPEM, pubPEM
 }
 
+// genEd25519KeyPEMs: PKCS#8 (private) / PKIX (public) PEM, the only
+// encodings this package accepts for EdDSA -- see the package doc's
+// "Accepted key encodings" section.
+func genEd25519KeyPEMs(t *testing.T) (privPEM, pubPEM string) {
+	t.Helper()
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	privDER, err := x509.MarshalPKCS8PrivateKey(priv)
+	require.NoError(t, err)
+	privPEM = string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privDER}))
+
+	pubDER, err := x509.MarshalPKIXPublicKey(pub)
+	require.NoError(t, err)
+	pubPEM = string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubDER}))
+	return privPEM, pubPEM
+}
+
+// fakeEd448PKCS8PEM: hand-builds a syntactically valid PKCS#8 structure
+// declaring the Ed448 OID (1.3.101.113, RFC 8410) as its algorithm. Go's
+// standard library implements no Ed448 support at all (crypto/ed25519 is
+// Ed25519-only, and crypto/x509 has no Ed448 case), so an Ed448 key cannot
+// be generated with stdlib -- this builds only the ASN.1 shape needed to
+// prove parseSignKey/parseVerifyKey reject the OID cleanly, not that
+// signing/verification with Ed448 works (which stdlib cannot do at all).
+func fakeEd448PKCS8PEM(t *testing.T) string {
+	t.Helper()
+	// Mirrors the private crypto/x509 "pkcs8" struct shape (version, algo,
+	// opaque private key octet string) closely enough for asn1.Marshal to
+	// produce something ParsePKCS8PrivateKey's outer unmarshal accepts; the
+	// actual key bytes are never read because the OID switch rejects the
+	// algorithm before getting that far.
+	type pkcs8 struct {
+		Version    int
+		Algo       pkix.AlgorithmIdentifier
+		PrivateKey []byte
+	}
+	der, err := asn1.Marshal(pkcs8{
+		Version: 0,
+		Algo:    pkix.AlgorithmIdentifier{Algorithm: asn1.ObjectIdentifier{1, 3, 101, 113}},
+		PrivateKey: func() []byte {
+			b, err := asn1.Marshal(make([]byte, 57)) // Ed448 seed size, irrelevant to the outcome
+			require.NoError(t, err)
+			return b
+		}(),
+	})
+	require.NoError(t, err)
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
+}
+
 func TestSignVerify_RS256_RoundTrip(t *testing.T) {
 	privPEM, pubPEM := genRSAKeyPEMs(t)
 
@@ -106,6 +159,17 @@ func TestSignVerify_HS256_RoundTrip(t *testing.T) {
 	claims, err := verifyFn(token, "secret", VerifyOptions{Algorithms: []string{"HS256"}})
 	require.NoError(t, err)
 	assert.Equal(t, "svc-c", claims["sub"])
+}
+
+func TestSignVerify_EdDSA_RoundTrip(t *testing.T) {
+	privPEM, pubPEM := genEd25519KeyPEMs(t)
+
+	token, err := signFn(map[string]interface{}{"sub": "svc-d", "exp": float64(time.Now().Add(time.Hour).Unix())}, privPEM, SignOptions{Algorithm: "EdDSA"})
+	require.NoError(t, err)
+
+	claims, err := verifyFn(token, pubPEM, VerifyOptions{Algorithms: []string{"EdDSA"}})
+	require.NoError(t, err)
+	assert.Equal(t, "svc-d", claims["sub"])
 }
 
 // TestAlgorithmConfusion_ForgedHS256UsingRSAPublicKey is the single most
@@ -147,6 +211,40 @@ func TestAlgorithmConfusion_ForgedHS256UsingRSAPublicKey(t *testing.T) {
 	// assertion, require.Error only, passed whether or not the defence
 	// existed, because the RSA-public-key-as-HMAC-secret type mismatch
 	// alone was enough to fail verification).
+	require.ErrorIs(t, err, jwt.ErrTokenSignatureInvalid)
+	assert.Contains(t, err.Error(), "signing method HS256 is invalid",
+		"error must show WithValidMethods rejected the token's declared alg, not merely that some later step failed")
+}
+
+// TestAlgorithmConfusion_ForgedHS256UsingEd25519PublicKey mirrors
+// TestAlgorithmConfusion_ForgedHS256UsingRSAPublicKey for the new EdDSA
+// family: an attacker who only has the server's Ed25519 PUBLIC key must not
+// be able to forge a token by signing it with HS256 using that public key's
+// PEM bytes as the HMAC secret.
+func TestAlgorithmConfusion_ForgedHS256UsingEd25519PublicKey(t *testing.T) {
+	_, pubPEM := genEd25519KeyPEMs(t)
+
+	forged, err := jwtNewWithClaimsHS256(map[string]interface{}{
+		"sub": "admin",
+		"exp": float64(time.Now().Add(time.Hour).Unix()),
+	}, []byte(pubPEM))
+	require.NoError(t, err)
+
+	_, err = verifyFn(forged, pubPEM, VerifyOptions{Algorithms: []string{"EdDSA"}})
+	require.Error(t, err, "forged HS256 token must be rejected when the server only accepts EdDSA")
+
+	// As with the RSA analogue: assert on the SPECIFIC WithValidMethods
+	// error, not merely "an error occurred" -- confirmed fail-capable by
+	// temporarily removing jwt.WithValidMethods(opts.Algorithms) from
+	// verifyFn and re-running this test locally: with the defence removed,
+	// this assertion fails, because the forged token's declared HS256 alg is
+	// dispatched to SigningMethodHS256.Verify with the resolved EdDSA key
+	// (an ed25519.PublicKey), which produces jwt/v5's "key is of invalid
+	// type: HMAC verify expects []byte" -- the same message and same
+	// ErrTokenSignatureInvalid sentinel as the RSA analogue's regression
+	// case, and equally NOT proof the algorithm-family defence fired. This
+	// test would correctly catch that regression rather than passing either
+	// way.
 	require.ErrorIs(t, err, jwt.ErrTokenSignatureInvalid)
 	assert.Contains(t, err.Error(), "signing method HS256 is invalid",
 		"error must show WithValidMethods rejected the token's declared alg, not merely that some later step failed")
@@ -255,6 +353,51 @@ func TestSign_KeyDoesNotMatchAlgorithm_Raises(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestSign_KeyDoesNotMatchAlgorithm_EdDSA_Raises: the EdDSA-specific
+// wrong-key-type cases in both directions -- an RSA key under EdDSA, and an
+// Ed25519 key under RS256.
+func TestSign_KeyDoesNotMatchAlgorithm_EdDSA_Raises(t *testing.T) {
+	rsaPrivPEM, rsaPubPEM := genRSAKeyPEMs(t)
+	edPrivPEM, edPubPEM := genEd25519KeyPEMs(t)
+
+	// Signing with EdDSA but supplying an RSA private key must fail clearly.
+	_, err := signFn(map[string]interface{}{"sub": "x"}, rsaPrivPEM, SignOptions{Algorithm: "EdDSA"})
+	require.Error(t, err, "an RSA private key must not be accepted for EdDSA")
+
+	// Verifying EdDSA with an RSA public key must fail the same way.
+	_, err = verifyFn("irrelevant.token.here", rsaPubPEM, VerifyOptions{Algorithms: []string{"EdDSA"}})
+	require.Error(t, err, "an RSA public key must not be accepted for EdDSA")
+
+	// Signing with RS256 but supplying an Ed25519 private key must fail
+	// clearly -- the reverse direction of the confusion.
+	_, err = signFn(map[string]interface{}{"sub": "x"}, edPrivPEM, SignOptions{Algorithm: "RS256"})
+	require.Error(t, err, "an Ed25519 private key must not be accepted for RS256")
+
+	// Verifying RS256 with an Ed25519 public key must fail the same way.
+	_, err = verifyFn("irrelevant.token.here", edPubPEM, VerifyOptions{Algorithms: []string{"RS256"}})
+	require.Error(t, err, "an Ed25519 public key must not be accepted for RS256")
+}
+
+// TestParseKey_Ed448Rejected_AtParseTime: Ed448 shares the JOSE alg name
+// "EdDSA" with Ed25519 (the alg string alone cannot disambiguate the
+// curve), but Go's stdlib crypto/x509 has no Ed448 case at all -- so an
+// Ed448 key fails to parse with a clear x509 error rather than being
+// silently accepted and misread as Ed25519. Go's stdlib cannot generate a
+// real Ed448 key (crypto/ed25519 is Ed25519-only), so this test hand-builds
+// only the ASN.1 shape needed to reach the OID switch inside
+// x509.ParsePKCS8PrivateKey -- see fakeEd448PKCS8PEM's comment. This proves
+// the rejection happens at PEM-parse time (inside parseSignKey, before any
+// type switch on the parsed key), which is the "comprehensible error"
+// requirement for a curve stdlib cannot even represent.
+func TestParseKey_Ed448Rejected_AtParseTime(t *testing.T) {
+	fakeEd448PEM := fakeEd448PKCS8PEM(t)
+
+	_, err := signFn(map[string]interface{}{"sub": "x"}, fakeEd448PEM, SignOptions{Algorithm: "EdDSA"})
+	require.Error(t, err, "an Ed448 key must be rejected, not silently misread as Ed25519")
+	assert.Contains(t, err.Error(), "unknown algorithm",
+		"the error must come from x509's OID switch rejecting Ed448 at parse time, not a later, more confusing failure")
+}
+
 func TestSign_ClaimsNotEncodable_Raises(t *testing.T) {
 	_, err := signFn(map[string]interface{}{"bad": math.NaN()}, "secret", SignOptions{Algorithm: "HS256"})
 	require.Error(t, err, "a NaN claim value cannot be JSON-encoded and must raise, not produce a broken token")
@@ -287,6 +430,24 @@ func TestValidateAlgorithms_MixedRSAAndECRaises(t *testing.T) {
 	// line at three buckets rather than only forbidding HMAC+asymmetric.
 	_, err := validateAlgorithms([]string{"RS256", "ES256"}, "jwt.verify")
 	require.Error(t, err)
+}
+
+// TestValidateAlgorithms_MixedEdDSAAndECRaises and
+// TestValidateAlgorithms_MixedEdDSAAndHMACRaises: EdDSA is its own family
+// (Ed25519 keys are neither RSA nor EC keys), so it must raise on mixing
+// with any other family exactly like the pre-existing pairs above -- in the
+// same shape as TestAlgorithmConfusion_ForgedHS256UsingRSAPublicKey's
+// sibling validation tests.
+func TestValidateAlgorithms_MixedEdDSAAndECRaises(t *testing.T) {
+	_, err := validateAlgorithms([]string{"EdDSA", "ES256"}, "jwt.verify")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mixes")
+}
+
+func TestValidateAlgorithms_MixedEdDSAAndHMACRaises(t *testing.T) {
+	_, err := validateAlgorithms([]string{"EdDSA", "HS256"}, "jwt.verify")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mixes")
 }
 
 func TestValidateAlgorithms_UnsupportedNameRaises(t *testing.T) {
