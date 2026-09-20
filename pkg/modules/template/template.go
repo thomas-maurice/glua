@@ -29,14 +29,19 @@ import (
 	"os"
 	"text/template"
 
+	glua "github.com/thomas-maurice/glua/pkg/glua"
 	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
 )
 
 // render: renders a Go text/template with the provided data table; raises on
-// parse or execution failure. Uses *lua.LTable escape hatch for the data arg.
+// parse or execution failure, or on a cyclic/pathologically deep data table
+// (see luaValueToGo). Uses *lua.LTable escape hatch for the data arg.
 func render(L *lua.LState, tmplStr string, data *lua.LTable) (string, error) {
-	goData := luaTableToGoMap(L, data)
+	goData, err := luaTableToGoMap(L, data, glua.NewTableGuard())
+	if err != nil {
+		return "", fmt.Errorf("failed to convert template data: %w", err)
+	}
 	tmpl, err := template.New("tmpl").Parse(tmplStr)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
@@ -49,13 +54,17 @@ func render(L *lua.LState, tmplStr string, data *lua.LTable) (string, error) {
 }
 
 // renderFile: renders a Go text/template from a file with the provided data
-// table; raises on read, parse, or execution failure.
+// table; raises on read, parse, or execution failure, or on a
+// cyclic/pathologically deep data table (see luaValueToGo).
 func renderFile(L *lua.LState, path string, data *lua.LTable) (string, error) {
 	tmplBytes, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("failed to read template file: %w", err)
 	}
-	goData := luaTableToGoMap(L, data)
+	goData, err := luaTableToGoMap(L, data, glua.NewTableGuard())
+	if err != nil {
+		return "", fmt.Errorf("failed to convert template data: %w", err)
+	}
 	tmpl, err := template.New("tmpl").Parse(string(tmplBytes))
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
@@ -68,32 +77,60 @@ func renderFile(L *lua.LState, path string, data *lua.LTable) (string, error) {
 }
 
 // luaTableToGoMap: converts a Lua table to a Go map for template rendering.
-func luaTableToGoMap(L *lua.LState, tbl *lua.LTable) map[string]interface{} {
+//
+// guard bounds the recursion below against a cyclic or pathologically deep
+// table — see glua.TableGuard's doc comment. Callers at the top of a
+// conversion pass glua.NewTableGuard(); recursive calls (via luaValueToGo)
+// MUST pass the same instance through, not a fresh one, or the guard cannot
+// see the whole path.
+func luaTableToGoMap(L *lua.LState, tbl *lua.LTable, guard *glua.TableGuard) (map[string]interface{}, error) {
+	if err := guard.Enter(tbl); err != nil {
+		return nil, err
+	}
+	defer guard.Leave(tbl)
+
 	result := make(map[string]interface{})
+	var forEachErr error
 	tbl.ForEach(func(key lua.LValue, val lua.LValue) {
+		if forEachErr != nil {
+			return
+		}
 		var keyStr string
 		if k, ok := key.(lua.LString); ok {
 			keyStr = string(k)
 		} else {
 			keyStr = fmt.Sprintf("%v", key)
 		}
-		result[keyStr] = luaValueToGo(L, val)
+		item, err := luaValueToGo(L, val, guard)
+		if err != nil {
+			forEachErr = err
+			return
+		}
+		result[keyStr] = item
 	})
-	return result
+	if forEachErr != nil {
+		return nil, forEachErr
+	}
+	return result, nil
 }
 
-// luaValueToGo: converts a Lua value to a Go value for template data.
-func luaValueToGo(L *lua.LState, val lua.LValue) interface{} {
+// luaValueToGo: converts a Lua value to a Go value for template data. guard
+// is documented on luaTableToGoMap.
+func luaValueToGo(L *lua.LState, val lua.LValue, guard *glua.TableGuard) (interface{}, error) {
 	switch v := val.(type) {
 	case *lua.LNilType:
-		return nil
+		return nil, nil
 	case lua.LBool:
-		return bool(v)
+		return bool(v), nil
 	case lua.LNumber:
-		return float64(v)
+		return float64(v), nil
 	case lua.LString:
-		return string(v)
+		return string(v), nil
 	case *lua.LTable:
+		// analyzeAsArray inspects v without opening it in the guard again;
+		// only the actual recursion below (via RawGetInt/luaTableToGoMap)
+		// enters the guard, so a table is only counted once per level
+		// whether it turns out to be an array or a map.
 		maxN := 0
 		isArray := true
 		v.ForEach(func(key, _ lua.LValue) {
@@ -110,15 +147,24 @@ func luaValueToGo(L *lua.LState, val lua.LValue) interface{} {
 			}
 		})
 		if isArray && maxN > 0 {
+			if err := guard.Enter(v); err != nil {
+				return nil, err
+			}
+			defer guard.Leave(v)
+
 			arr := make([]interface{}, maxN)
 			for i := 1; i <= maxN; i++ {
-				arr[i-1] = luaValueToGo(L, v.RawGetInt(i))
+				item, err := luaValueToGo(L, v.RawGetInt(i), guard)
+				if err != nil {
+					return nil, err
+				}
+				arr[i-1] = item
 			}
-			return arr
+			return arr, nil
 		}
-		return luaTableToGoMap(L, v)
+		return luaTableToGoMap(L, v, guard)
 	default:
-		return fmt.Sprintf("%v", v)
+		return fmt.Sprintf("%v", v), nil
 	}
 }
 

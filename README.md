@@ -1058,6 +1058,20 @@ func (t *Translator) ToLua(L *lua.LState, o interface{}) (lua.LValue, error)
 func (t *Translator) FromLua(L *lua.LState, lv lua.LValue, output interface{}) error
 ```
 
+**Table nesting limit:** `FromLua` rejects a Lua table nested more than 100
+levels deep, or one that references itself (directly or through
+intermediates), with a normal Go error instead of converting it. This
+protects against a script handing back a self-referential table (e.g.
+`t.self = t`), which would otherwise recurse until the process crashes with
+an unrecoverable stack overflow. 100 levels is far beyond any realistic
+Kubernetes object or config tree, so this should never be hit by legitimate
+data; a table that legitimately references the same sub-table twice via two
+different fields (not a cycle) is unaffected. The same 100-level limit and
+cycle detection apply to `json.stringify`, `yaml.stringify`,
+`template.render`/`render_file`, and `spew.dump`/`sdump`, which take a table
+directly rather than going through `FromLua` but share the same underlying
+guard.
+
 **Usage:**
 
 ```go

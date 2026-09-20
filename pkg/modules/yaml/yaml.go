@@ -25,6 +25,7 @@ package yaml
 import (
 	"fmt"
 
+	glua "github.com/thomas-maurice/glua/pkg/glua"
 	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
 	"gopkg.in/yaml.v3"
@@ -39,9 +40,13 @@ func parse(L *lua.LState, yamlStr string) (lua.LValue, error) {
 	return goToLua(L, data), nil
 }
 
-// stringify: converts a Lua value to a YAML string; raises on marshal failure.
+// stringify: converts a Lua value to a YAML string; raises on marshal failure
+// or on a cyclic/pathologically deep table (see luaToGo).
 func stringify(L *lua.LState, value lua.LValue) (string, error) {
-	goValue := luaToGo(L, value)
+	goValue, err := luaToGo(L, value, glua.NewTableGuard())
+	if err != nil {
+		return "", fmt.Errorf("failed to convert Lua value: %w", err)
+	}
 	b, err := yaml.Marshal(goValue)
 	if err != nil {
 		return "", fmt.Errorf("failed to stringify to YAML: %w", err)
@@ -90,17 +95,28 @@ func goToLua(L *lua.LState, value interface{}) lua.LValue {
 }
 
 // luaToGo: converts a Lua value to a Go value for yaml.Marshal.
-func luaToGo(L *lua.LState, value lua.LValue) interface{} {
+//
+// guard bounds the *lua.LTable recursion below against a cyclic or
+// pathologically deep table — see glua.TableGuard's doc comment. Callers at
+// the top of a conversion pass glua.NewTableGuard(); recursive calls MUST
+// pass the same instance through, not a fresh one, or the guard cannot see
+// the whole path.
+func luaToGo(L *lua.LState, value lua.LValue, guard *glua.TableGuard) (interface{}, error) {
 	switch v := value.(type) {
 	case *lua.LNilType:
-		return nil
+		return nil, nil
 	case lua.LBool:
-		return bool(v)
+		return bool(v), nil
 	case lua.LNumber:
-		return float64(v)
+		return float64(v), nil
 	case lua.LString:
-		return string(v)
+		return string(v), nil
 	case *lua.LTable:
+		if err := guard.Enter(v); err != nil {
+			return nil, err
+		}
+		defer guard.Leave(v)
+
 		maxN := 0
 		isArray := true
 		v.ForEach(func(key, _ lua.LValue) {
@@ -119,21 +135,37 @@ func luaToGo(L *lua.LState, value lua.LValue) interface{} {
 		if isArray && maxN > 0 {
 			arr := make([]interface{}, maxN)
 			for i := 1; i <= maxN; i++ {
-				arr[i-1] = luaToGo(L, v.RawGetInt(i))
+				item, err := luaToGo(L, v.RawGetInt(i), guard)
+				if err != nil {
+					return nil, err
+				}
+				arr[i-1] = item
 			}
-			return arr
+			return arr, nil
 		}
 		obj := make(map[string]interface{})
+		var forEachErr error
 		v.ForEach(func(key lua.LValue, val lua.LValue) {
+			if forEachErr != nil {
+				return
+			}
+			item, err := luaToGo(L, val, guard)
+			if err != nil {
+				forEachErr = err
+				return
+			}
 			if keyStr, ok := key.(lua.LString); ok {
-				obj[string(keyStr)] = luaToGo(L, val)
+				obj[string(keyStr)] = item
 			} else {
-				obj[fmt.Sprintf("%v", key)] = luaToGo(L, val)
+				obj[fmt.Sprintf("%v", key)] = item
 			}
 		})
-		return obj
+		if forEachErr != nil {
+			return nil, forEachErr
+		}
+		return obj, nil
 	default:
-		return fmt.Sprintf("%v", v)
+		return fmt.Sprintf("%v", v), nil
 	}
 }
 

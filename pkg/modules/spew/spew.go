@@ -28,18 +28,24 @@ import (
 	"os"
 
 	"github.com/neilotoole/jsoncolor"
+	glua "github.com/thomas-maurice/glua/pkg/glua"
 	"github.com/thomas-maurice/glua/pkg/luareg"
 	lua "github.com/yuin/gopher-lua"
 )
 
-// dump: prints a Lua value to stdout as colored indented JSON.
-// Uses *lua.LState escape hatch to accept any Lua value type.
-func dump(L *lua.LState, value lua.LValue) {
-	goValue := luaToGo(L, value)
+// dump: prints a Lua value to stdout as colored indented JSON; raises on a
+// cyclic/pathologically deep table (see luaToGo). A JSON marshal/encode
+// failure is reported to stderr and swallowed, matching this function's
+// pre-existing behaviour for those unrelated failure modes.
+func dump(L *lua.LState, value lua.LValue) error {
+	goValue, err := luaToGo(L, value, glua.NewTableGuard())
+	if err != nil {
+		return fmt.Errorf("failed to convert Lua value: %w", err)
+	}
 	jsonBytes, err := json.MarshalIndent(goValue, "", "  ")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error marshaling to JSON: %v\n", err)
-		return
+		return nil
 	}
 
 	enc := jsoncolor.NewEncoder(os.Stdout)
@@ -49,52 +55,71 @@ func dump(L *lua.LState, value lua.LValue) {
 	var v interface{}
 	if err := json.Unmarshal(jsonBytes, &v); err != nil {
 		fmt.Fprintf(os.Stderr, "Error unmarshaling JSON: %v\n", err)
-		return
+		return nil
 	}
 	if err := enc.Encode(v); err != nil {
 		fmt.Fprintf(os.Stderr, "Error encoding colored JSON: %v\n", err)
 	}
+	return nil
 }
 
-// sdump: returns a JSON string representation of a Lua value with indentation.
-func sdump(L *lua.LState, value lua.LValue) string {
-	goValue := luaToGo(L, value)
+// sdump: returns a JSON string representation of a Lua value with
+// indentation; raises on a cyclic/pathologically deep table (see luaToGo). A
+// JSON marshal failure is embedded in the returned string, matching this
+// function's pre-existing behaviour for that unrelated failure mode.
+func sdump(L *lua.LState, value lua.LValue) (string, error) {
+	goValue, err := luaToGo(L, value, glua.NewTableGuard())
+	if err != nil {
+		return "", fmt.Errorf("failed to convert Lua value: %w", err)
+	}
 	jsonBytes, err := json.MarshalIndent(goValue, "", "  ")
 	if err != nil {
-		return fmt.Sprintf("Error: %v", err)
+		return fmt.Sprintf("Error: %v", err), nil
 	}
-	return string(jsonBytes)
+	return string(jsonBytes), nil
 }
 
 // luaToGo: converts a Lua value to a Go value for JSON marshalling.
-func luaToGo(L *lua.LState, value lua.LValue) interface{} {
+//
+// guard bounds the *lua.LTable recursion below against a cyclic or
+// pathologically deep table — see glua.TableGuard's doc comment. Callers at
+// the top of a conversion pass glua.NewTableGuard(); recursive calls MUST
+// pass the same instance through, not a fresh one, or the guard cannot see
+// the whole path.
+func luaToGo(L *lua.LState, value lua.LValue, guard *glua.TableGuard) (interface{}, error) {
 	switch v := value.(type) {
 	case *lua.LNilType:
-		return nil
+		return nil, nil
 	case lua.LBool:
-		return bool(v)
+		return bool(v), nil
 	case lua.LNumber:
-		return float64(v)
+		return float64(v), nil
 	case lua.LString:
-		return string(v)
+		return string(v), nil
 	case *lua.LTable:
-		return convertLuaTable(L, v)
+		return convertLuaTable(L, v, guard)
 	case *lua.LFunction:
-		return "<function>"
+		return "<function>", nil
 	case *lua.LUserData:
-		return fmt.Sprintf("<userdata: %v>", v.Value)
+		return fmt.Sprintf("<userdata: %v>", v.Value), nil
 	default:
-		return fmt.Sprintf("<%v>", v.Type().String())
+		return fmt.Sprintf("<%v>", v.Type().String()), nil
 	}
 }
 
-// convertLuaTable: converts a Lua table to a Go slice or map.
-func convertLuaTable(L *lua.LState, table *lua.LTable) interface{} {
+// convertLuaTable: converts a Lua table to a Go slice or map. guard is
+// documented on luaToGo.
+func convertLuaTable(L *lua.LState, table *lua.LTable, guard *glua.TableGuard) (interface{}, error) {
+	if err := guard.Enter(table); err != nil {
+		return nil, err
+	}
+	defer guard.Leave(table)
+
 	maxN, isArray, hasElements := analyzeTableStructure(table)
 	if isArray && maxN > 0 && hasElements {
-		return convertTableToArray(L, table, maxN)
+		return convertTableToArray(L, table, maxN, guard)
 	}
-	return convertTableToMap(L, table)
+	return convertTableToMap(L, table, guard)
 }
 
 // analyzeTableStructure: determines if a Lua table is an array or map.
@@ -117,28 +142,53 @@ func analyzeTableStructure(table *lua.LTable) (maxN int, isArray bool, hasElemen
 	return
 }
 
-// convertTableToArray: converts an array-like Lua table to a Go slice.
-func convertTableToArray(L *lua.LState, table *lua.LTable, maxN int) []interface{} {
+// convertTableToArray: converts an array-like Lua table to a Go slice. guard
+// is documented on luaToGo; table has already been entered into it by
+// convertLuaTable.
+func convertTableToArray(L *lua.LState, table *lua.LTable, maxN int, guard *glua.TableGuard) ([]interface{}, error) {
 	arr := make([]interface{}, maxN)
 	for i := 1; i <= maxN; i++ {
-		arr[i-1] = luaToGo(L, table.RawGetInt(i))
+		item, err := luaToGo(L, table.RawGetInt(i), guard)
+		if err != nil {
+			return nil, err
+		}
+		arr[i-1] = item
 	}
-	return arr
+	return arr, nil
 }
 
-// convertTableToMap: converts a map-like Lua table to a Go map.
-func convertTableToMap(L *lua.LState, table *lua.LTable) map[string]interface{} {
+// convertTableToMap: converts a map-like Lua table to a Go map. guard is
+// documented on luaToGo; table has already been entered into it by
+// convertLuaTable.
+func convertTableToMap(L *lua.LState, table *lua.LTable, guard *glua.TableGuard) (map[string]interface{}, error) {
 	obj := make(map[string]interface{})
+	var forEachErr error
 	table.ForEach(func(key lua.LValue, val lua.LValue) {
+		if forEachErr != nil {
+			return
+		}
+		item, err := luaToGo(L, val, guard)
+		if err != nil {
+			forEachErr = err
+			return
+		}
 		var keyStr string
 		if ks, ok := key.(lua.LString); ok {
 			keyStr = string(ks)
 		} else {
-			keyStr = fmt.Sprintf("%v", luaToGo(L, key))
+			keyGo, err := luaToGo(L, key, guard)
+			if err != nil {
+				forEachErr = err
+				return
+			}
+			keyStr = fmt.Sprintf("%v", keyGo)
 		}
-		obj[keyStr] = luaToGo(L, val)
+		obj[keyStr] = item
 	})
-	return obj
+	if forEachErr != nil {
+		return nil, forEachErr
+	}
+	return obj, nil
 }
 
 // build: constructs the module definition. Reused by Loader and Register.

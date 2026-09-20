@@ -70,6 +70,40 @@ into an `*lua.LTable`. `FromLua` reverses it. Consequences:
 - All numbers become `lua.LNumber` (float64) — int64 precision is lost above 2^53.
 - Arrays vs maps on the way back are discriminated by `LTable.MaxN()`, so an
   empty table is a map and a table with a gap in its integer keys degrades.
+- Every hand-written Lua→Go table walk in this codebase is guarded against a
+  self-referential or pathologically deep Lua table via `pkg/glua.TableGuard`
+  (`table_guard.go`): create one with `glua.NewTableGuard()` per top-level
+  conversion call, then at every `*lua.LTable` node call `guard.Enter(tbl)`
+  before recursing into its children and `defer guard.Leave(tbl)` right
+  after checking the error. `Enter` tracks a *path-scoped* ancestor set (so a
+  true cycle errors immediately, but a non-cyclic diamond reference — the
+  same table reachable via two different fields — still converts, matching
+  `encoding/json`) plus a hard `maxTableDepth` (100, defined once in
+  `table_guard.go`) cap as defense-in-depth against non-cyclic runaway
+  nesting. `Translator.FromLua` (`fromLuaValue`/`fromLuaValueGuarded`) uses
+  this internally; so do `json.stringify`, `yaml.stringify`,
+  `template.render`/`render_file`, and `spew.dump`/`sdump` — each of those
+  hand-rolls its own Lua→Go conversion (different array/map-detection
+  details, different marshal target) but threads a shared `*glua.TableGuard`
+  through its own recursion rather than reimplementing the bookkeeping.
+  Without this, a script doing `t.self = t` and handing `t` to ANY
+  table-walking module function recursed forever and killed the whole
+  process with an unrecoverable `fatal error: stack overflow` — not a
+  catchable panic, gopher-lua's `pcall` cannot catch it and neither can
+  `recover()`.
+  **Enter/Leave, not a closure-returning API:** `Enter` returns only an
+  `error`; it deliberately does NOT return a `func()` to call on exit. A
+  closure captured per table node and returned up the stack has to escape to
+  the heap, which showed up as a real, measured allocation regression on
+  this hot path (recursion depth × extra allocs) during benchmarking. Do not
+  "simplify" this back into a closure-returning form.
+  **Do not hand-roll a new unguarded `*lua.LTable` recursion.** If you add a
+  module function that walks a Lua table itself instead of relying on
+  `Translator.FromLua`/`ToLua`, it MUST thread a `*glua.TableGuard` through
+  that recursion the same way. Copying an old conversion loop as a starting
+  point for a new module is exactly how this bug shipped in four places at
+  once — grep for `TableGuard` usage in `pkg/modules/{json,yaml,template,spew}`
+  for the pattern to copy instead.
 
 **2. Handle path — userdata + metatables** (`pkg/luareg/class.go`):
 a registered `Class[T]` stores the Go value intact in an `*lua.LUserData` with a
