@@ -9,19 +9,19 @@ goos: darwin
 goarch: arm64
 pkg: github.com/thomas-maurice/glua/benchmarks
 cpu: Apple M5
-BenchmarkGoToLuaSimple-10              879066       1377 ns/op     4216 B/op       43 allocs/op
-BenchmarkGoToLuaComplex-10             152691       7864 ns/op    23982 B/op      233 allocs/op
-BenchmarkGoToLuaPod-10                  65482      18569 ns/op    59081 B/op      478 allocs/op
-BenchmarkLuaToGoSimple-10             1514328        800.2 ns/op      666 B/op       19 allocs/op
-BenchmarkLuaToGoComplex-10             320875       3765 ns/op     3640 B/op       82 allocs/op
-BenchmarkRoundTripSimple-10            504601       2348 ns/op     4889 B/op       62 allocs/op
-BenchmarkRoundTripPod-10                75952      16032 ns/op    41252 B/op      339 allocs/op
-BenchmarkLuaFieldAccess-10             202062       6060 ns/op    33904 B/op      112 allocs/op
-BenchmarkLuaNestedFieldAccess-10       118362      10129 ns/op    37712 B/op      269 allocs/op
-BenchmarkLuaArrayIteration-10          103377      11684 ns/op    36576 B/op      332 allocs/op
-BenchmarkLuaMapIteration-10            170642       7191 ns/op    34776 B/op      122 allocs/op
-BenchmarkLuaFieldModification-10       176596       6826 ns/op    34672 B/op      152 allocs/op
-BenchmarkLuaComplexOperation-10         42712      54218 ns/op   360944 B/op      453 allocs/op
+BenchmarkGoToLuaSimple-10              862110       1400 ns/op     4215 B/op       43 allocs/op
+BenchmarkGoToLuaComplex-10             150016       8010 ns/op    23979 B/op      233 allocs/op
+BenchmarkGoToLuaPod-10                  65001      20126 ns/op    59066 B/op      478 allocs/op
+BenchmarkLuaToGoSimple-10             1448500        837.2 ns/op      666 B/op       19 allocs/op
+BenchmarkLuaToGoComplex-10             302770       3978 ns/op     3641 B/op       82 allocs/op
+BenchmarkRoundTripSimple-10            499888       2423 ns/op     4889 B/op       62 allocs/op
+BenchmarkRoundTripPod-10                74859      16444 ns/op    41245 B/op      339 allocs/op
+BenchmarkLuaFieldAccess-10             206894       5874 ns/op    33904 B/op      112 allocs/op
+BenchmarkLuaNestedFieldAccess-10       120674      10016 ns/op    37712 B/op      269 allocs/op
+BenchmarkLuaArrayIteration-10          105726      11608 ns/op    36576 B/op      332 allocs/op
+BenchmarkLuaMapIteration-10            172785       7112 ns/op    34776 B/op      122 allocs/op
+BenchmarkLuaFieldModification-10       184108       6643 ns/op    34672 B/op      152 allocs/op
+BenchmarkLuaComplexOperation-10         44010      53299 ns/op   370047 B/op      453 allocs/op
 PASS
 ```
 
